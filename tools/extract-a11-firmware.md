@@ -110,6 +110,13 @@ Arch repos; build from `github.com/sgan81/apfs-fuse`). Without it we can't reach
 `usr/share/firmware/multitouch/D21.mtprops`, `usr/share/firmware/wifi/C-4357…/`, or
 `usr/sbin/BlueTool`.
 
+Build notes (started 2026-10-25): needs `cmake` + `fuse3` (do **not** install `zlib` on
+CachyOS — it conflicts with the `zlib-ng-compat` drop-in; zlib is already provided). CMake 4.x
+needs `-DCMAKE_POLICY_VERSION_MINIMUM=3.5`. Then it still fails under **GCC 16**:
+`ApfsLib/PList.cpp:359: request for member 'push_back' in 'bin', which is of non-class type 'int'`
+(a shadowing/type bug — likely a trivial upstream patch, e.g. renaming a shadowing local). TODO:
+patch and finish the build.
+
 ### SmartIO firmware — SOLVED
 The SmartIO firmware is a raw ARM64 image embedded in `__PRELINK_DATA` of the (decompressed)
 prelinked kernelcache; its first 32 bytes are the boot vector table, **unique** in the
