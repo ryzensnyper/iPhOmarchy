@@ -110,14 +110,27 @@ Arch repos; build from `github.com/sgan81/apfs-fuse`). Without it we can't reach
 `usr/share/firmware/multitouch/D21.mtprops`, `usr/share/firmware/wifi/C-4357…/`, or
 `usr/sbin/BlueTool`.
 
-### SmartIO firmware (TBD)
-`grep -i smartio` in the A11 kernelcache finds the `AppleSmartIO` kext, but the SmartIO *firmware
-blob* offset for T8015 is not yet located (the A10 guide used a fixed kernelcache offset,
-`0x02705000`/`0x88060`). TODO: locate the A11 image (scan / segment dump) and assert a SHA-256.
+### SmartIO firmware — SOLVED
+The SmartIO firmware is a raw ARM64 image embedded in `__PRELINK_DATA` of the (decompressed)
+prelinked kernelcache; its first 32 bytes are the boot vector table, **unique** in the
+kernelcache. Its length comes from the kext's `{address,length}` descriptor.
+
+[`extract-smartio.py`](extract-smartio.py) automates this. A11 result:
+
+```
+python3 extract-smartio.py kernelcache.release.iPhone10,2_5 t8015-smartio.bin
+→ __PRELINK_DATA, file 0x2ccf000, runtime 0xfffffff007b0b000, size 616336 (0x96790)
+→ sha256 8c3bbf8ffa1eb7d8864e9bdaa2242ba8fdbc953dca8ccb367bbbf5b0b3717517
+```
+
+The same tool reproduces the A10 image exactly (`0x88060`, sha256 `408adbb0…`), which validates
+the method. (No `apfs-fuse` needed — the kernelcache is a top-level IPSW ZIP entry, fetchable by
+HTTP range.) Install as `apple/t8015-smartio.bin` (regenerate/verify per device; not committed).
 
 ### Extracted so far (kept locally, not committed)
-`a11-fw/kc/…/kernelcache.release.iPhone10,2_5` (51 MB), `a11-fw/out/D21_Multitouch.bin`,
-`a11-fw/out/D211_Multitouch.bin`.
+`a11-fw/kc/…/kernelcache.release.iPhone10,2_5` (51 MB, from `kernelcache.release.iPhone10,2`),
+`a11-fw/out/D21_Multitouch.bin`, `a11-fw/out/D211_Multitouch.bin`,
+`a11-fw/out/dfrmtfw-d21-c1f5e-3.bin`, `a11-fw/out/t8015-smartio.bin`.
 
 ## 5. Private calibration (never commit)
 
