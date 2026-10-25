@@ -75,6 +75,38 @@ hcdpack bt/.../BlueTool 'C-4357__s-C0' <module> 'M-PRNL_V-m__m-5.7' BCM.apple,d2
 and the Patchram profile; the OTP-selected vendor (Murata/USI) may need a first-boot `dmesg | grep
 'OTP: module='` to disambiguate (as the D11 guide does).
 
+## Findings — 2026-10-25 (iPhone10,2, iOS 16.7.16 / 20H392)
+
+Input IPSW downloaded and verified: 6,158,048,697 bytes.
+
+### Touch source located, personality confirmed
+- The IPSW ships **`Firmware/D21_Multitouch.im4p`** (and `D211_Multitouch.im4p`) — extract the DER
+  `IM4P` payload (no LZFSE here) to get the MTFW. Both are 226,175 bytes and **identical** on disk.
+- The payload is an XML **eplist** (starts `<dict><key>C1F5E,3</key>…`), i.e. personality
+  **`C1F5E,3`** — matching the ADT `hid-merge-personality`. It contains `HBPP` firmware items,
+  a Z2/SPI config, and calibration items.
+- **Build blocker:** in `--dynamic-calibration` mode `makez2fw` fails — the D21 MTFW's calibration
+  items use `<key>Property</key>` (name-based) where the A10-era tool looks for
+  `<key>Provider</key>`, and one item (`0x10009000`) is a `SysConfigKey` with no `MTFW Payload`.
+  Result: `HBPP payload at 0x10009000 is empty` / `failed loading MTFW sequence`.
+  Fixes: (a) supply the device SysCfg (private), or (b) patch `makez2fw` to treat
+  `Property`-named calibration items as dynamic providers, or (c) obtain a newer makez2fw.
+
+### `.mtprops`, Wi-Fi and BlueTool need `apfs-fuse`
+`ipsw extract --files` mounts the iOS filesystem (APFS) and requires **`apfs-fuse`** (not in the
+Arch repos; build from `github.com/sgan81/apfs-fuse`). Without it we can't reach
+`usr/share/firmware/multitouch/D21.mtprops`, `usr/share/firmware/wifi/C-4357…/`, or
+`usr/sbin/BlueTool`.
+
+### SmartIO firmware (TBD)
+`grep -i smartio` in the A11 kernelcache finds the `AppleSmartIO` kext, but the SmartIO *firmware
+blob* offset for T8015 is not yet located (the A10 guide used a fixed kernelcache offset,
+`0x02705000`/`0x88060`). TODO: locate the A11 image (scan / segment dump) and assert a SHA-256.
+
+### Extracted so far (kept locally, not committed)
+`a11-fw/kc/…/kernelcache.release.iPhone10,2_5` (51 MB), `a11-fw/out/D21_Multitouch.bin`,
+`a11-fw/out/D211_Multitouch.bin`.
+
 ## 5. Private calibration (never commit)
 
 `WMac`, `WCAL`, `BMac` (and A11 touch calibrations) come from **the specific phone's** SysCfg and
