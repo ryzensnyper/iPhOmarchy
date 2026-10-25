@@ -85,12 +85,24 @@ Input IPSW downloaded and verified: 6,158,048,697 bytes.
 - The payload is an XML **eplist** (starts `<dict><key>C1F5E,3</key>…`), i.e. personality
   **`C1F5E,3`** — matching the ADT `hid-merge-personality`. It contains `HBPP` firmware items,
   a Z2/SPI config, and calibration items.
-- **Build blocker:** in `--dynamic-calibration` mode `makez2fw` fails — the D21 MTFW's calibration
-  items use `<key>Property</key>` (name-based) where the A10-era tool looks for
-  `<key>Provider</key>`, and one item (`0x10009000`) is a `SysConfigKey` with no `MTFW Payload`.
-  Result: `HBPP payload at 0x10009000 is empty` / `failed loading MTFW sequence`.
-  Fixes: (a) supply the device SysCfg (private), or (b) patch `makez2fw` to treat
-  `Property`-named calibration items as dynamic providers, or (c) obtain a newer makez2fw.
+- **Build — SOLVED.** The A11 MTFW schema differs from the A10-era tool in two ways:
+  1. dynamic-calibration placeholders name the provider in **`<key>Property</key>`** (e.g.
+     `multi-touch-calibration`) with the bound in **`<key>MaxSize</key>`**, where the tool looks
+     for `Provider`/`Max Size`;
+  2. a **`RequestCalibration`** action (no address) appears inside the HBPP sequence.
+
+  [`../patches/0003-makez2fw-a11-mtfw-schema.patch`](../patches/0003-makez2fw-a11-mtfw-schema.patch)
+  handles both. Result:
+
+  ```
+  makez2fw --dynamic-calibration 'C1F5E,3' D21_Multitouch.bin dfrmtfw-d21-c1f5e-3.bin
+  → configs=0 init=1 blobs=9 rmw=6 calibrations=4 waits=1 skipped=1 payload=81038 bytes
+  → 81,220 bytes, sha256 e2ff6d1c49e9d02df5de1bc74c804e1b80ab2025ba9c38636f67d8d8fa38a312
+  ```
+
+  The four dynamic calibrations (`multi-touch`, `orb-gap`, `orb-force`, `shape-dynamic-accel`)
+  match the A10 guide exactly; their values are supplied at boot by m1n1 from the live ADT.
+  Install as `apple/dfrmtfw-d21-c1f5e-3.bin` (do not commit — regenerate per device/SysCfg).
 
 ### `.mtprops`, Wi-Fi and BlueTool need `apfs-fuse`
 `ipsw extract --files` mounts the iOS filesystem (APFS) and requires **`apfs-fuse`** (not in the

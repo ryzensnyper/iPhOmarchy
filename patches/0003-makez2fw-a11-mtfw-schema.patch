@@ -1,0 +1,92 @@
+diff --git a/makez2fw/mtfw.c b/makez2fw/mtfw.c
+index e0bbab6..4521e9a 100644
+--- a/makez2fw/mtfw.c
++++ b/makez2fw/mtfw.c
+@@ -852,6 +852,16 @@ static mtfw_item_t *mtfw_load_hbpp_firmware(epelem_t seq, const char *syscfg,
+             continue;
+         }
+ 
++        /* A11-era MTFW places a calibration request action inside the HBPP
++         * sequence; it carries no address. Same encoding as the boot
++         * sequence handler uses for "RequestCalibration". */
++        if(!strcmp(type, "RequestCalibration")) {
++            if(!mtfw_item_add(&ptail, MTFW_WRITE_ACK, "\x1F\x01", 2, 1))
++                goto fail;
++            seql = eplist_next(seql);
++            continue;
++        }
++
+         elem = eplist_dict_find(seql, "Address", EPLIST_INTEGER);
+         if(!elem) {
+             fprintf(stderr, "HBPP item has no address (%s).\n", desc ? desc : type);
+@@ -867,24 +877,57 @@ static mtfw_item_t *mtfw_load_hbpp_firmware(epelem_t seq, const char *syscfg,
+             if(!mtfw_item_add_regwr(&ptail, addr, mask, val))
+                 goto fail;
+         } else if(!strcmp(type, "Binary") || !strcmp(type, "Property")) {
++            const char *prov_name = NULL;
++            unsigned prov = 0;
++            int is_dyn = 0;
++
+             bits = NULL;
+             len = 0;
+             syscfg_key = eplist_get_string(eplist_dict_find(seql, "SysConfigKey", EPLIST_STRING));
+-            if(syscfg_key && *syscfg_key) {
+-                bits = syscfg_get(syscfg, syscfg_key, &len);
+-                if(bits)
+-                    fprintf(stderr, "HBPP property: %s from SysCfg %s (%lu bytes).\n",
+-                            desc ? desc : "(unnamed)", syscfg_key, len);
++
++            /*
++             * A11-era MTFW encodes a dynamic-calibration placeholder with the
++             * provider name in "Property" (bound in "MaxSize"), where the
++             * A10-era tool expects "Provider"/"Max Size". In
++             * --dynamic-calibration mode emit a calibration request so the
++             * loader (m1n1) can fill it in from the live Apple Device Tree.
++             */
++            if(options->dynamic_calibration && !strcmp(type, "Property")) {
++                prov_name = eplist_get_string(eplist_dict_find(seql, "Property", EPLIST_STRING));
++                if(prov_name && mtfw_dynamic_calibration_provider(prov_name, &prov))
++                    is_dyn = 1;
+             }
+-            if(!bits) {
+-                elem = eplist_dict_find(seql, "Payload", EPLIST_DATA);
+-                bits = eplist_get_data(elem, &len);
+-                if(bits)
+-                    fprintf(stderr, "HBPP payload: %s from MTFW (%lu bytes).\n",
+-                            desc ? desc : "(unnamed)", len);
++
++            if(is_dyn) {
++                epelem_t mse = eplist_dict_find(seql, "MaxSize", EPLIST_INTEGER);
++                mtfw_calibration_t calibration;
++
++                calibration.address = addr;
++                calibration.max_size = mse ? (uint32_t)eplist_get_integer(mse) : 0;
++                calibration.provider = prov;
++                if(!mtfw_item_add(&ptail, MTFW_SEND_CALIBRATION,
++                                  &calibration, sizeof(calibration), 1))
++                    goto fail;
++                fprintf(stderr,
++                        "Dynamic calibration: %s provider=%u address=0x%x max=%u.\n",
++                        prov_name, prov, calibration.address, calibration.max_size);
++            } else {
++                if(syscfg_key && *syscfg_key) {
++                    bits = syscfg_get(syscfg, syscfg_key, &len);
++                    if(bits)
++                        fprintf(stderr, "HBPP property: %s from SysCfg %s (%lu bytes).\n",
++                                desc ? desc : "(unnamed)", syscfg_key, len);
++                }
++                if(!bits) {
++                    elem = eplist_dict_find(seql, "Payload", EPLIST_DATA);
++                    bits = eplist_get_data(elem, &len);
++                    if(bits)
++                        fprintf(stderr, "HBPP payload: %s from MTFW (%lu bytes).\n",
++                                desc ? desc : "(unnamed)", len);
++                }
++                if(!mtfw_item_add_payload(&ptail, addr, bits, len))
++                    goto fail;
+             }
+-            if(!mtfw_item_add_payload(&ptail, addr, bits, len))
+-                goto fail;
+         } else {
+             fprintf(stderr, "Unsupported HBPP item type '%s' (%s).\n",
+                     type, desc ? desc : "no description");
