@@ -48,32 +48,62 @@ ipsw extract --files --flat --pattern '(^|/)usr/share/firmware/multitouch/D21\.m
 makez2fw --dynamic-calibration 'C1F5E,3' touch/.../D21.mtprops dfrmtfw-d21-c1f5e-3.bin
 ```
 
-**A11 TODO:** confirm the exact `.mtprops` filename/path and the personality string by inspecting
-the extracted file (`grep '<key>C1F5E'`). `--dynamic-calibration` keeps per-device calibration out
-of the firmware; the matching m1n1 work publishes it from the live ADT at boot.
+**A11 — CONFIRMED (2026-10-26).** `usr/share/firmware/multitouch/D21.mtprops` extracts cleanly
+(264,559 bytes); `grep '<key>C1F5E'` shows **`C1F5E,3`** (and a `C1F5E,4`), matching the ADT
+`hid-merge-personality`. `--dynamic-calibration` keeps per-device calibration out of the firmware;
+the matching m1n1 work publishes it from the live ADT at boot.
 
 ## 3. Wi-Fi firmware (BCM4357)
 
 A10 used `usr/share/firmware/wifi/C-4355__s-C0/…` (`sven`/`olaf` families) staged as
 `brcmfmac4355-pcie.apple,<board>.bin/.clm_blob/.txcap_blob` + `…-PRNL-*.txt`.
 
-**A11 TODO:** the A11 Wi-Fi is **BCM4357** (ADT `wlan-pcie,bcm4357`), so the source dir is a
-`C-4357…` family with its own module-instance name. Extract the `.trx`/`.clmb`/`.txcb` + PRNL
-files and stage them under `brcm/brcmfmac4357-pcie.apple,<board>.*`. Determine `<board>` from the
-A11 DT `brcm,board-type`.
+**A11 — FOUND (2026-10-26).** On A11 the Wi-Fi blobs are **not** under `usr/share/firmware/wifi/`
+(that is the A10 layout). They live in the DriverKit Wi-Fi driver:
+
+```
+System/Library/DriverExtensions/com.apple.DriverKit-AppleBCMWLAN.dext/Firmware/C-4357__s-B1/
+```
+
+Module-instance family **`C-4357__s-B1`**, chip name **`pegasus`** (matches ADT `wlan-pcie,bcm4357`).
+Contents:
+
+```
+pegasuse[-JP].{trx,clmb,txcb}   # e = kernel/OS image
+pegasusk.{trx,clmb,txcb}        # k = variant image
+P-pegasus{e,k}[-JP]_M-GINS_V-{m,u}__m-{5.1,5.3,6.1}.txt   # 12 PRNL profiles
+```
+
+Extract with:
+
+```
+ipsw extract --files --flat \
+  --pattern 'System/Library/DriverExtensions/com.apple.DriverKit-AppleBCMWLAN.dext/Firmware/' \
+  --output wifi <IPSW>
+```
+
+Stage as `brcm/brcmfmac4357-pcie.apple,<board>.{bin,clm_blob,txcap_blob}` (+ `…-PRNL-*.txt`);
+derive `<board>` from the A11 DT `brcm,board-type` and pick the `pegasus{e,k}` + PRNL profile to
+match the OTP-selected module.
 
 ## 4. Bluetooth HCD → `brcm/BCM.apple,d21.hcd`
 
 A10 extracts `usr/sbin/BlueTool` and uses `hcdpack` to pull the BCM4355C0 Patchram:
 
 ```
-ipsw extract --files --pattern '^usr/sbin/BlueTool$' --output bt <IPSW>
-hcdpack bt/.../BlueTool 'C-4357__s-C0' <module> 'M-PRNL_V-m__m-5.7' BCM.apple,d21.hcd
+ipsw extract --files --pattern 'BlueTool' --output bt <IPSW>
+# -> .../usr/sbin/BlueTool (9,760,944 bytes) + com.apple.BlueTool.plist
+hcdpack bt/.../BlueTool 'C-4357__s-B1' <module> 'P-pegasus*_M-GINS_V-*__m-*' BCM.apple,d21.hcd
 ```
 
-**A11 TODO:** ADT BT is `bluetooth,n88` (product 4768). Identify the Wi-Fi/BT combo module string
-and the Patchram profile; the OTP-selected vendor (Murata/USI) may need a first-boot `dmesg | grep
-'OTP: module='` to disambiguate (as the D11 guide does).
+**Gotcha:** `ipsw --pattern` anchoring with `^…$` does **not** match — the paths it tests carry a
+prefix, so the anchored `'^usr/sbin/BlueTool$'` finds nothing. Use a substring like `'BlueTool'`.
+
+**A11 TODO:** ADT BT is `bluetooth,n88` (product 4768). BlueTool is extracted; the Wi-Fi/BT combo
+module string / Patchram profile still need picking. The A11 Wi-Fi module is `pegasus` under
+`C-4357__s-B1` (see §3), so the PRNL profiles `P-pegasus*_M-GINS_V-{m,u}__m-{5.1,5.3,6.1}.txt` are
+the candidates; the OTP-selected vendor (Murata/USI) may need a first-boot `dmesg | grep 'OTP:
+module='` to disambiguate (as the D11 guide does).
 
 ## Findings — 2026-10-25 (iPhone10,2, iOS 16.7.16 / 20H392)
 
@@ -104,18 +134,31 @@ Input IPSW downloaded and verified: 6,158,048,697 bytes.
   match the A10 guide exactly; their values are supplied at boot by m1n1 from the live ADT.
   Install as `apple/dfrmtfw-d21-c1f5e-3.bin` (do not commit — regenerate per device/SysCfg).
 
-### `.mtprops`, Wi-Fi and BlueTool need `apfs-fuse`
-`ipsw extract --files` mounts the iOS filesystem (APFS) and requires **`apfs-fuse`** (not in the
-Arch repos; build from `github.com/sgan81/apfs-fuse`). Without it we can't reach
-`usr/share/firmware/multitouch/D21.mtprops`, `usr/share/firmware/wifi/C-4357…/`, or
-`usr/sbin/BlueTool`.
+### `apfs-fuse` — BUILD SOLVED (2026-10-26)
+`ipsw extract --files` mounts the iOS filesystem (APFS) and shells out to **`apfs-fuse`** (not in
+the Arch repos; build from `github.com/sgan81/apfs-fuse`). With it built and on `PATH`,
+`ipsw extract --files` reached all three targets.
 
-Build notes (started 2026-10-25): needs `cmake` + `fuse3` (do **not** install `zlib` on
-CachyOS — it conflicts with the `zlib-ng-compat` drop-in; zlib is already provided). CMake 4.x
-needs `-DCMAKE_POLICY_VERSION_MINIMUM=3.5`. Then it still fails under **GCC 16**:
-`ApfsLib/PList.cpp:359: request for member 'push_back' in 'bin', which is of non-class type 'int'`
-(a shadowing/type bug — likely a trivial upstream patch, e.g. renaming a shadowing local). TODO:
-patch and finish the build.
+Build recipe (CachyOS / GCC 16):
+
+```
+git clone https://github.com/sgan81/apfs-fuse && cd apfs-fuse
+git submodule update --init 3rdparty/lzfse
+# CMake 4.x rejects the old policy version:
+cmake -S . -B build -DCMAKE_POLICY_VERSION_MINIMUM=3.5
+# GCC 16 failure: ApfsLib/PList.h uses uint8_t without <cstdint>
+#   (the 2026-10-25 note mis-diagnosed this as "PList.cpp:359 bin shadowed").
+#   Fix: add  #include <cstdint>  to ApfsLib/PList.h
+make -C build -j"$(nproc)"
+# make apfs-fuse discoverable by ipsw without sudo:
+ln -sf "$PWD/build/apfs-fuse" ~/.local/bin/apfs-fuse
+ln -sf "$PWD/build/apfsutil"  ~/.local/bin/apfsutil
+```
+
+Notes: needs `cmake` + `fuse3` (do **not** install `zlib` on CachyOS — it conflicts with the
+`zlib-ng-compat` drop-in; zlib is already provided). Point `TMPDIR` at real disk when extracting —
+`/tmp` is a RAM-backed tmpfs and `ipsw` stages the multi-GB fs DMG there. Only `PList.h` needed
+changing for GCC 16; no other missing-`<cstdint>` header actually failed to compile.
 
 ### SmartIO firmware — SOLVED
 The SmartIO firmware is a raw ARM64 image embedded in `__PRELINK_DATA` of the (decompressed)
@@ -138,6 +181,16 @@ HTTP range.) Install as `apple/t8015-smartio.bin` (regenerate/verify per device;
 `a11-fw/kc/…/kernelcache.release.iPhone10,2_5` (51 MB, from `kernelcache.release.iPhone10,2`),
 `a11-fw/out/D21_Multitouch.bin`, `a11-fw/out/D211_Multitouch.bin`,
 `a11-fw/out/dfrmtfw-d21-c1f5e-3.bin`, `a11-fw/out/t8015-smartio.bin`.
+
+Filesystem extraction via `ipsw extract --files` (2026-10-26), into `a11-fw/extracted/`:
+
+```
+touch/D21.mtprops                                             264,559 B
+bt/usr/sbin/BlueTool                                        9,760,944 B
+bt/…/com.apple.BlueTool.plist                                     269 B
+wifi/…/Firmware/C-4357__s-B1/pegasus{e,k}[-JP].{trx,clmb,txcb}  ~3 MB
+wifi/…/Firmware/C-4357__s-B1/P-pegasus*_M-GINS_V-*__m-*.txt
+```
 
 ## 5. Private calibration (never commit)
 

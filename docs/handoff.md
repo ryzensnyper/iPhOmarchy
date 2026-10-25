@@ -106,10 +106,13 @@ Recipes: `~/iPhOmarchy/tools/extract-a11-firmware.md`, `tools/README.md` (ADT de
 
 ## Where to continue (priority order)
 
-1. **Unblock filesystem extraction** (issue #7): finish building **`apfs-fuse`** so `ipsw extract
-   --files` can reach `usr/share/firmware/wifi/C-4357…/`, `usr/sbin/BlueTool`, `…/multitouch/`.
-   Status: `cmake -DCMAKE_POLICY_VERSION_MINIMUM=3.5 ..` gets past CMake 4; then **GCC 16** fails
-   at `ApfsLib/PList.cpp:359` (`bin` shadowed / non-class type). It's a small upstream patch.
+1. ~~**Unblock filesystem extraction** (issue #7)~~ — **DONE 2026-10-26.** `apfs-fuse` builds; the
+   GCC 16 failure was a missing `#include <cstdint>` in `ApfsLib/PList.h` (not the "`bin` shadowed"
+   guess). All targets extracted via `ipsw extract --files`: touch `D21.mtprops` (personality
+   `C1F5E,3`), `usr/sbin/BlueTool`, and Wi-Fi — which on A11 is **not** under
+   `usr/share/firmware/wifi/` but in
+   `…/DriverKit-AppleBCMWLAN.dext/Firmware/C-4357__s-B1/` (chip `pegasus`). Details:
+   `tools/extract-a11-firmware.md` §3–§4.
 2. **Driver port** (issues #1–#4), on a branch:
    - t8015 **touch clock** (`clk-apple-t8010-touch.c` → add t8015 PMGR offsets)
    - **SmartIO + SIO-DMA** for `iop,t8015` (ADT `sio@2EE00000`, IRQ 308–311) + `apple-sio-core.c`,
