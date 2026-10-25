@@ -1,0 +1,14 @@
+# Large / third-party / device-specific artifacts - never commit these
+*.bin
+*.img
+*.ipsw
+*.ext4
+*.dtb
+rootfs*
+palera1n
+checkra1n-*
+Pongo.bin
+*.log
+
+# OS noise
+.DS_Store

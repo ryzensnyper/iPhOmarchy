@@ -1,0 +1,24 @@
+Fix `push-rootfs-part.py --check` false MISMATCH on the phone
+
+The `--check` path streams 128 MiB and has the phone md5 it. BusyBox `md5sum` prints
+`<hash>  -` when reading from stdin (two fields), but the parser only accepted a
+single 32-char field, so `phone_md5` was always empty and the check reported MISMATCH
+even on a perfect transfer. Match on the first field instead.
+
+Tested against `BusyBox v1.38.0` on the phone; the write path was never affected.
+
+--- a/linux-kit/push-rootfs-part.py
++++ b/linux-kit/push-rootfs-part.py
+@@ -180,9 +180,12 @@ def main():
+         phone_md5 = ""
+         for line in res.get("out", "").splitlines():
+-            if len(line.split()) == 1 and len(line.strip()) == 32:
+-                phone_md5 = line.strip()
++            # BusyBox md5sum prints "hash  -" when reading stdin, so match the first token
++            toks = line.split()
++            if toks and len(toks[0]) == 32:
++                phone_md5 = toks[0]
++                break
+         say("host  md5: %s" % host_md5)
+         say("phone md5: %s" % phone_md5)
+         say("MATCH" if host_md5 == phone_md5 else "MISMATCH")

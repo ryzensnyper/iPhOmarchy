@@ -1,0 +1,305 @@
+# Apple Device Tree (ADT) peripheral excerpt — D21 / A11 (iPhone 8 Plus)
+# Source: DeviceTree.d21ap.im4p from the iPhone10,2 iOS 16.7.16 (20H392) IPSW,
+# decoded with m1n1's adt.py. This is the generic firmware template: identity
+# fields (serial/MLB/MAC/UID/keys) are syscfg references, not values, so nothing
+# device-specific is included here.
+# Shown: Bluetooth UART, touch SPI + multi-touch, SmartIO/SIO-DMA, PCIe (wlan), display.
+
+### /arm-io/uart1
+        uart1 {
+            compatible = [uart-1,samsung]
+            clock-ids = [300, 4]
+            interrupt-parent = 28
+            interrupts = [283]
+            dma-channels = 3f000000000000000000000024000000120000000000000000000000000000003e00000000000000000000002400000012000000000000000000000000000000
+            clock-gates = [81]
+            reg = [Container: 
+    addr = 0x000000002E604000
+    size = 0x0000000000004000]
+            AAPL,phandle = 81
+            device_type = uart
+            function-rts = 36:GPIO(0xd5, 0x2)
+            function-tx = 36:GPIO(0xd3, 0x102)
+            dma-types = 17179869186
+            dma-parent = 69
+            uart-version = 1
+
+            bluetooth {
+                function-bt_wake = 36:GPIO(0x2, 0x101)
+                compatible = [bluetooth,n88]
+                transport-speed = 3000000
+                AAPL,phandle = 82
+                bluetooth-tx-calibration = << syscfg/BTTx/320 >>
+                product-id = 4768
+                device_type = bluetooth
+                supported-profiles = 12283
+                coex = 2
+                vendor-id = 1452
+                function-power_enable = 75:pKW4('gP09', 0x0)
+                local-mac-address = << macaddr/btaddr,syscfg/BMac/6,zeroes/6 >>
+                transport-encoding = 3
+                voice-record = None
+                bluetooth-rx-calibration = << syscfg/BTRx/0xce >>
+                bluetooth-taurus-calibration = << syscfg/BCAL >>
+
+            }
+        }
+
+### /arm-io/spi1
+        spi1 {
+            compatible = [spi-1,samsung]
+            function-spi_cs0 = 36:GPIO(0x8a, 0x1)
+            interrupt-parent = 28
+            interrupts = [292]
+            dma-channels = 16000000000000000000000080000000400000000000000000000000000000001700000000000000000000008000000040000000000000000000000000000000
+            clock-gates = [75]
+            clock-ids = [333]
+            reg = [Container: 
+    addr = 0x000000002E404000
+    size = 0x0000000000004000]
+            device_type = spi
+            #size-cells = 7
+            AAPL,phandle = 89
+            #address-cells = 1
+            spi-version = 1
+            dma-parent = 69
+
+            multi-touch {
+                function-power_ldo = 75:pKW4('rBK3', 0x5020000)
+                hid-merge-personality = C1F5E,3
+                function-clock_enable = 30:TCLK(0x8, 0x64, 0x8000)
+                orb-gap-cal = << syscfg/OrbG >>
+                force-supported = None
+                sshb-force-cal = << syscfg/SFCl >>
+                hbpp-version = 259
+                otp-address = 4294967295
+                reg = 000000007c000000010301088813000010270000000000000000000000000000
+                poweroff-at-shutdown = None
+                AAPL,phandle = 90
+                orb-dynamic-accel-cal = << syscfg/FDAC >>
+                multi-touch-calibration = << syscfg/MtCl/0x400,zeroes/0x400 >>
+                reset-delays = 1680998400
+                sshb-2.75v-ungrouped-cal = << syscfg/uTSC >>
+                function-enable_cs = 36:GPIO(0x8a, 0x101)
+                interrupt-parent = 36
+                function-reset = 36:GPIO(0x21, 0x10001)
+                compatible = [hid-transport,k1]
+                shape-dynamic-accel-cal = << syscfg/SDAC >>
+                interrupts = [102, 100663296]
+                orb-offset-cal = << syscfg/OOCl >>
+                orb-force-cal = << syscfg/OFCl >>
+                power-sequence = 66756e6374696f6e2d706f7765725f616e6100000a010066756e6374696f6e2d706f7765725f6c646f000000010066756e6374696f6e2d636c6f636b5f656e61626c65000a000300
+                orb-accel-cal = << syscfg/OICo >>
+                prox-calibration = << syscfg/PxCl >>
+                sshb-2.75v-grouped-cal = << syscfg/gTSC >>
+                sshb-inverse-filter-cal = << syscfg/SIFC >>
+                device_type = multi-touch
+                function-power_ana = 98:dpLE(0x302)
+                sshb-5v-ungrouped-cal = << syscfg/uFSC >>
+
+            }
+        }
+
+### /arm-io/sio
+        sio {
+            compatible = [iop,t8015]
+            clock-ids = [299, 300]
+            interrupt-parent = 28
+            reg = [Container: 
+    addr = 0x000000002EE00000
+    size = 0x0000000000020000]
+            interrupts = [309, 308, 311, 310]
+            clock-gates = [90, 4]
+            force-timebase-sync = None
+            AAPL,phandle = 67
+            iop-version = 1
+            device_type = sio
+            power-gates = [90]
+            role = SIO
+            ignore-gating = None
+
+            iop-sio-nub {
+                compatible = [iop-nub,sio]
+                AAPL,phandle = 68
+
+                sio-dma {
+                    AAPL,phandle = 69
+                    compatible = [sio-dma-controller]
+                    device_type = sio-dma
+
+                }
+            }
+        }
+
+### /arm-io/apcie
+        apcie {
+            power-gates = [56]
+            reg = [Container: 
+    addr = 0x0000000610000000
+    size = 0x0000000001000000, Container: 
+    addr = 0x0000000601000000
+    size = 0x0000000000004000, Container: 
+    addr = 0x0000000601004000
+    size = 0x0000000000004000, Container: 
+    addr = 0x0000000602000000
+    size = 0x0000000000004000, Container: 
+    addr = 0x0000000602004000
+    size = 0x0000000000004000, Container: 
+    addr = 0x0000000603000000
+    size = 0x0000000000004000, Container: 
+    addr = 0x0000000603004000
+    size = 0x0000000000004000, Container: 
+    addr = 0x0000000604000000
+    size = 0x0000000000004000, Container: 
+    addr = 0x0000000604004000
+    size = 0x0000000000004000, Container: 
+    addr = 0x0000000600000000
+    size = 0x0000000000050000, Container: 
+    addr = 0x0000000600080000
+    size = 0x0000000000004000, Container: 
+    addr = 0x00000006000C0000
+    size = 0x0000000000040000]
+            clock-gates = [56, 57, 58]
+            #address-cells = 3
+            no-phy-power-gating = None
+            AAPL,phandle = 175
+            msi-vector-offset = 352
+            pci-aer-correctable = 0
+            bus-range = 34359738368
+            lane-cfg = 0
+            function-debug_gpio = 36:GPIO(0x2d, 0x101)
+            perst-to-refclk-delay-us = 60
+            interrupt-parent = 28
+            dev-range = 1095216660480
+            compatible = [apcie,t8015]
+            interrupts = [340, 343, 346, 349]
+            msi-address = 3221221376
+            pci-aer-uncorrectable = 1
+            ranges = [Container: 
+    bus_addr = ListContainer: 
+        0x43000000
+        0x20000000
+        0x00000006
+    parent_addr = 0x0000000620000000
+    size = 0x0000000020000000, Container: 
+    bus_addr = ListContainer: 
+        0x02000000
+        0x40000000
+        0x00000000
+    parent_addr = 0x0000000640000000
+    size = 0x0000000040000000]
+            #ports = 4
+            link-state-power = [0x0000000000000000, 0x0000000000000000]
+            device_type = pci
+            #size-cells = 2
+            msi-parent-controller = 28
+            #msi-vectors = 32
+
+            pci-bridge2 {
+                apcie-port = 2
+                function-dart_force_active = 180:Fact()
+                manual-enable-s2r = None
+                compatible = [apcie-bridge]
+                built-in = None
+                msi-vector-base = 16
+                AAPL,unit-string = 00020000
+                t-refclk-to-perst = 100
+                AAPL,phandle = 176
+                #size-cells = 0
+                function-clkreq = 36:GPIO(0xa2, 0x2)
+                maximum-link-speed = 1
+                #address-cells = 1
+                function-perst = 36:GPIO(0xa6, 0x0)
+                pci-l1pm-control = 1079312399
+                manual-enable = None
+                #msi-vectors = 8
+
+                baseband-pcie {
+                    pci-l1pm-control = 1079312399
+                    pci-aspm-default = 2
+                    AAPL,unit-string = 00000000
+                    pci-max-latency = 268963848
+                    AAPL,phandle = 177
+                    iommu-parent = 181
+                    #address-cells = 1
+                    #size-cells = 0
+                    device_type = pcie-device
+
+                }
+            }
+            pci-bridge3 {
+                apcie-port = 3
+                function-dart_force_active = 182:Fact()
+                msi-vector-base = 24
+                compatible = [apcie-bridge]
+                built-in = None
+                AAPL,unit-string = 00030000
+                t-refclk-to-perst = 100
+                AAPL,phandle = 178
+                function-device_wake = 36:GPIO(0x28, 0x101)
+                #size-cells = 0
+                function-clkreq = 36:GPIO(0xa3, 0x2)
+                maximum-link-speed = 2
+                #address-cells = 1
+                function-perst = 36:GPIO(0xa7, 0x0)
+                pci-l1pm-control = 69798789135
+                manual-enable = None
+                #msi-vectors = 8
+
+                wlan {
+                    cfg-io-timeout = 4c0000000400000050c30000
+                    pci-aspm-default = 2
+                    crash-terminate-self-only = None
+                    compatible = [wlan-pcie,bcm4357, wlan-pcie,bcm]
+                    built-in = None
+                    AAPL,unit-string = 00000000
+                    iommu-parent = 183
+                    AAPL,phandle = 179
+                    pci-max-latency = 268963848
+                    device_type = pcie-device
+                    #size-cells = 0
+                    #address-cells = 1
+                    pci-l1pm-control = 69798789135
+
+                }
+            }
+        }
+
+### /arm-io/disp0
+        disp0 {
+            display-carveout-inhibitcache = 1
+            max-avg-bpp = 779878
+            clock-gates = [254, 118, 116, 115]
+            dot-pitch = 0
+            subframe-interrupt-time-lines = 517
+            AAPL,phandle = 125
+            display-default-color = 0
+            function-bw_req_interrupt0 = 30:BIRQ(0x1c, 0x22, 0x1)
+            output-fifo-fill-time-nclks = 0
+            function-lcd_enable = 124:lcdE()
+            display-lead-time-nclks = 400055
+            max-scaling-ratio = 131072
+            iommu-parent = 127
+            subframe-duration-nclks = 400055
+            output-fifo-fill-time-lines = 0
+            interrupt-parent = 28
+            compatible = [disp0,t8015]
+            clock-ids = [317, 315]
+            function-gp-fast-gating = 30:10PG()
+            interrupts = [220, 226, 217, 218, 219, 221, 216, 227]
+            function-bw_req_interrupt1 = 30:BIRQ(0x1c, 0x23, 0x1)
+            device_type = display-subsystem
+            max-peak-bpp = 779878
+            power-gates = [254]
+            reg = [Container: 
+    addr = 0x0000000018000000
+    size = 0x00000000002A6000, Container: 
+    addr = 0x0000000018708000
+    size = 0x0000000000001000, Container: 
+    addr = 0x00000000320B8000
+    size = 0x0000000000001000, Container: 
+    addr = 0x000000003230C000
+    size = 0x0000000000001000]
+
+        }
+

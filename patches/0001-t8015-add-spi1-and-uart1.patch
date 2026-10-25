@@ -1,0 +1,53 @@
+diff --git a/arch/arm64/boot/dts/apple/t8015.dtsi b/arch/arm64/boot/dts/apple/t8015.dtsi
+index 85ab9bf0e..09b8e4a18 100644
+--- a/arch/arm64/boot/dts/apple/t8015.dtsi
++++ b/arch/arm64/boot/dts/apple/t8015.dtsi
+@@ -323,6 +323,18 @@ i2c3: i2c@22e20c000 {
+ 			status = "disabled";
+ 		};
+ 
++		spi1: spi@22e404000 {
++			compatible = "apple,t8015-spi", "apple,spi";
++			reg = <0x2 0x2e404000 0x0 0x4000>;
++			clocks = <&clkref>;
++			interrupt-parent = <&aic>;
++			interrupts = <AIC_IRQ 292 IRQ_TYPE_LEVEL_HIGH>;
++			power-domains = <&ps_spi1>;
++			#address-cells = <1>;
++			#size-cells = <0>;
++			status = "okay";
++		};
++
+ 		serial0: serial@22e600000 {
+ 			compatible = "apple,s5l-uart";
+ 			reg = <0x2 0x2e600000 0x0 0x4000>;
+@@ -336,6 +348,29 @@ serial0: serial@22e600000 {
+ 			status = "disabled";
+ 		};
+ 
++		/* uart1 = the Bluetooth H4 UART (ADT: /arm-io/uart1, IRQ 283) */
++		serial1: serial@22e604000 {
++			compatible = "apple,s5l-uart";
++			reg = <0x2 0x2e604000 0x0 0x4000>;
++			reg-io-width = <4>;
++			interrupt-parent = <&aic>;
++			interrupts = <AIC_IRQ 283 IRQ_TYPE_LEVEL_HIGH>;
++			/* Use the bootloader-enabled clocks for now. */
++			clocks = <&clkref>, <&clkref>;
++			clock-names = "uart", "clk_uart_baud0";
++			power-domains = <&ps_uart1>;
++			status = "okay";
++
++			/*
++			 * Bluetooth child (ADT compatible "bluetooth,n88",
++			 * transport-speed 3000000, Apple vid 0x5ac, product 4768).
++			 * Inert today: no kernel driver matches it, and
++			 * samsung_tty has no serdev support. Bring up from
++			 * userspace over this tty (btattach/hciattach) instead.
++			 */
++			/* bluetooth { compatible = "apple,bluetooth"; }; */
++		};
++
+ 		bus@230000000 {
+ 			compatible = "apple,t8015-usb-complex", "simple-pm-bus";
+ 			#address-cells = <2>;
