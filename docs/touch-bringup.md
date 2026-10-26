@@ -36,13 +36,35 @@ Port shape (see [bringup-plan.md](bringup-plan.md) for the full surface):
    → two firmware-ready IRQs → DeviceInfo → D9 surface descriptor → report init → runtime IRQ.
 2. We need A11 equivalents of: the touch clock (`clk-apple-t8015-touch`), SmartIO + SIO-DMA
    (`iop,t8015`, `sio@2EE00000`, IRQ 308-311), and an A11 touch firmware blob
-   (`apple/dfrmtfw-d21-k1....bin` plus `apple/t8015-smartio.bin`).
+   (`apple/dfrmtfw-d21-c1f5e-3.bin` plus `apple/t8015-smartio.bin`). Note the D21 touch firmware
+   personality is `c1f5e`, the **same as A10 D111** (`dfrmtfw-d111-c1f5e-2.bin`) — not the J172
+   iPad's `k1f19`.
 3. Calibration (multitouch/orb-gap/orb-force/shape-dynamic-accel) lives in the ADT as `syscfg`
    references; the A10 project's patched m1n1 copies these into the Linux DT. We need the A11
    equivalent.
 
 Their documented effort for A10 touch alone was ~11 days (with Codex assistance). Budget weeks,
 not hours.
+
+## Status (2026-10-26)
+
+Branch `a11-port` in the Hoolock kernel tree now carries the four software pieces:
+
+| Piece | State |
+|---|---|
+| Touch clock (`clk-apple-t8010-touch.c` + t8015) | driver + DT; PMGR offset `0x78000` **inferred from T8010, unverified** |
+| SmartIO + SIO-DMA | ported; DT `sio@22ee00000` **disabled** (probing boots the coprocessor) |
+| SPI (`spi-apple.c`) | merged with `apple,t8015-spi` → T8010 legacy path (D21 spi1 is `spi-version 1`) |
+| `apple_z2.c` | full Pauli driver ported; **no D21 board entry yet** |
+
+Remaining (all need a live device / m1n1):
+
+1. A `apple_z2_d21_info` variant: D21 firmware personality matches D111 (iPhone protocol path),
+   but the ADT power sequence is `power_ana → power_ldo → clock_enable` (ana/ldo GPIOs + the touch
+   clock) rather than A10's `hv`/`core` regulators — so the power path needs a D21-specific variant.
+2. The D21 multi-touch DT node (GPIOs: reset `pinctrl 36 GPIO(0x21)`, enable_cs `GPIO(0x8a)`,
+   IRQ line 102 edge-falling, power_ana `pmgr 98:dpLE(0x302)`, power_ldo `pmgr 75:pKW4('rBK3')`).
+3. Calibration blobs from m1n1 (`syscfg` → DT `apple,z2-*-cal-blob`).
 
 ## Firmware provenance
 
