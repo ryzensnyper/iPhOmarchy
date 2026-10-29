@@ -1,0 +1,50 @@
+From 223613ead1c1573efe9820c421cff60685b7d1dd Mon Sep 17 00:00:00 2001
+From: dugs <dugahol@protonmail.com>
+Date: Thu, 29 Oct 2026 21:59:15 +1030
+Subject: [PATCH] input: apple-z2: D21 kick= knob - disable+enable the IRQ to
+ re-sample the level
+
+Diagnostics for the batched-delivery investigation: during the ~2 s
+silent gaps between frame bursts the queued frames may be held with the
+line asserted but the level re-fire missed after the threaded handler
+unmasks.  kick= forces the interrupt controller to re-sample.
+---
+ drivers/input/touchscreen/apple_z2.c | 22 ++++++++++++++++++++++
+ 1 file changed, 22 insertions(+)
+
+diff --git a/drivers/input/touchscreen/apple_z2.c b/drivers/input/touchscreen/apple_z2.c
+index b98b65729..cd7780734 100644
+--- a/drivers/input/touchscreen/apple_z2.c
++++ b/drivers/input/touchscreen/apple_z2.c
+@@ -2624,6 +2624,28 @@ MODULE_PARM_DESC(read_now,
+ 		 "D21: write 'id:len,id:len' to read reports immediately, no reload "
+ 		 "(e.g. echo 7f:16 > .../parameters/read_now)");
+ 
++/*
++ * Diagnostics for the batched-delivery investigation: kick the IRQ line by
++ * disable+enable so the interrupt controller re-samples the level.  If frames
++ * are queued with the line asserted and the level re-fire was missed, a kick
++ * mid-gap releases them immediately.
++ */
++static int d21_kick_set(const char *val, const struct kernel_param *kp)
++{
++	if (!d21_z2_now)
++		return -ENODEV;
++	disable_irq(d21_z2_now->spidev->irq);
++	enable_irq(d21_z2_now->spidev->irq);
++	return 0;
++}
++
++static const struct kernel_param_ops d21_kick_ops = {
++	.set = d21_kick_set,
++};
++module_param_cb(kick, &d21_kick_ops, NULL, 0644);
++MODULE_PARM_DESC(kick,
++		 "D21: write anything to disable+enable the touch IRQ (AIC level re-sample test)");
++
+ static int apple_z2_d21_probe_tail(struct apple_z2 *z2);
+ 
+ static int apple_z2_d21_init_locked(struct apple_z2 *z2)
+-- 
+2.55.0
+

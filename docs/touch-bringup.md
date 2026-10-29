@@ -116,3 +116,27 @@ Open issues (in order):
 3. Console-blanking side quests resolved: the display must be unblanked for fb work; blanking
    is NOT the death mechanism (verified by trace).
 
+## Status (2026-10-29 late): 6-point multipoint tracking, ghost-free boot
+
+A heavily-used session (26+ min, 3954+ frames, kernel `a11-port` at `223613ead`) showed what
+this hardware does when the edge ghosts stay quiet:
+
+- **Six independent real contacts tracked simultaneously** (0x44 records, positions drifting
+  per-frame, per-finger pressure 28-97, tool sizes 440-5450).
+- **Palm/hover discrimination for free**: large contacts (tool ≈5450) with pressure 0 and
+  state without the Touch bit (st=4 = Position only) arrive as hover records — the driver's
+  `state & 1` check suppresses them, which is exactly palm rejection.
+- **Delivery fine-grained**: 76% of inter-frame gaps < 150 ms; the ~2.05-s batch cadence of
+  earlier boots was absent.
+- **One ghost frame in 3668.**
+- **No pipeline death** in 26+ min (earlier boots died at 6-25 min — signature: controller
+  goes silent, then firmware crashes with scan frozen and the IRQ line stuck low for a
+  ~1.5 kHz storm of ~178k IRQs, then quiet).
+
+Working theory: the left-edge ghost contacts (fixed positions at raw x = exactly `min_x`,
+i.e. sensor column 0) are the common root cause — when they fire, delivery batches and the
+pipeline eventually crashes; when they stay quiet, everything streams. Next: catch a
+ghost-active boot with the trace running, and inspect the edge-channel calibration
+(`orb-gap-cal`, `mtcl` blobs; check whether column 0 has a baseline at all).
+
+
