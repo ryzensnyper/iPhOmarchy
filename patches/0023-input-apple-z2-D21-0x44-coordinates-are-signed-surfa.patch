@@ -1,0 +1,86 @@
+From d43453d194cd0ae6310b0260368376a97d1f3323 Mon Sep 17 00:00:00 2001
+From: dugs <dugahol@protonmail.com>
+Date: Thu, 29 Oct 2026 19:48:24 +1030
+Subject: [PATCH 23/24] input: apple-z2: D21 0x44 coordinates are signed
+ surface units, not per-mille
+
+Frame decode with a live stream shows contact abs_x/abs_y spanning the
+d9 surface descriptor range (real touches -198..; edge ghost contacts
+at exactly min_x=-224), so the earlier per-mille reading was a
+coincidence of small values.  Scale like the iPhone 7 Plus path:
+signed (raw - min) / (max - min) * pixels with clamping.  Drops the
+coord_denom knob; Y direction still to be verified visually.
+---
+ drivers/input/touchscreen/apple_z2.c | 48 +++++++++++++++++-----------
+ 1 file changed, 30 insertions(+), 18 deletions(-)
+
+diff --git a/drivers/input/touchscreen/apple_z2.c b/drivers/input/touchscreen/apple_z2.c
+index b31f63ba3..f6476b125 100644
+--- a/drivers/input/touchscreen/apple_z2.c
++++ b/drivers/input/touchscreen/apple_z2.c
+@@ -399,11 +399,6 @@ static void apple_z2_parse_j172_touches(struct apple_z2 *z2,
+ 	input_sync(z2->input_dev);
+ }
+ 
+-static int d21_coord_denom = 1000;
+-module_param_named(coord_denom, d21_coord_denom, int, 0444);
+-MODULE_PARM_DESC(coord_denom,
+-		 "D21: denominator of the 0x44 per-mille contact coordinates (raw*max/denom)");
+-
+ /*
+  * Per-frame logging (irq-rx / irq-pkt / irq-pkt valid / touch parse) is pure
+  * diagnostics: at ~30 Hz it floods the console and the dmesg ring.  Off by
+@@ -491,20 +486,37 @@ static void apple_z2_parse_touches(struct apple_z2 *z2,
+ 					       true);
+ 		} else if (apple_z2_is_d21(z2)) {
+ 			/*
+-			 * The D21 legacy 0x44 records carry the contact
+-			 * position as a per-mille fraction of the panel
+-			 * (corner touches read x 0..~900, y 0..~1030), not
+-			 * surface-descriptor units like the D111 raw path.
+-			 * Scale to the display; coord_denom tunes the
+-			 * fraction denominator.
++			 * D21 0x44 records carry the contact position in
++			 * SIGNED surface-descriptor units: the edge "ghost"
++			 * contacts sit at exactly min_x (-224 on this panel),
++			 * real contacts span min..max (-224..6608 x,
++			 * -236..11904 y per the d9 read), so the earlier
++			 * per-mille interpretation was a coincidence of
++			 * small values.  Scale like the iPhone 7 Plus path;
++			 * the controller clamps out-of-surface contacts to
++			 * the border, and so do we.
+ 			 */
+-			unsigned int x = (u32)le16_to_cpu(fingers[i].abs_x) *
+-					 z2->props.max_x / d21_coord_denom;
+-			unsigned int y = (u32)le16_to_cpu(fingers[i].abs_y) *
+-					 z2->props.max_y / d21_coord_denom;
+-			touchscreen_report_pos(z2->input_dev, &z2->props,
+-					       min(x, z2->props.max_x),
+-					       min(y, z2->props.max_y), true);
++			s16 sx = (s16)le16_to_cpu(fingers[i].abs_x);
++			s16 sy = (s16)le16_to_cpu(fingers[i].abs_y);
++			bool coords_valid;
++
++			coords_valid = apple_z2_scale_iphone7_coord(sx,
++								    z2->sensor_max_x,
++								    z2->sensor_min_x,
++								    z2->props.max_x, &x);
++			if (coords_valid)
++				coords_valid = apple_z2_scale_iphone7_coord(sy,
++									    z2->sensor_max_y,
++									    z2->sensor_min_y,
++									    z2->props.max_y,
++									    &y);
++			if (!coords_valid) {
++				dev_warn_ratelimited(&z2->spidev->dev,
++						     "invalid D21 touch coordinates\n");
++				continue;
++			}
++			touchscreen_report_pos(z2->input_dev, &z2->props, x,
++					       y, true);
+ 		} else {
+ 		touchscreen_report_pos(z2->input_dev, &z2->props,
+ 				       le16_to_cpu(fingers[i].abs_x),
+-- 
+2.55.0
+

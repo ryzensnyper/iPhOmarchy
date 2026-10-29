@@ -1,0 +1,286 @@
+From fb913fdd5f4f9201e28cab077e66688dca3e163a Mon Sep 17 00:00:00 2001
+From: dugs <dugahol@protonmail.com>
+Date: Thu, 29 Oct 2026 15:23:28 +1030
+Subject: [PATCH 20/24] input: apple-z2: D21 chestnut touch-HV supply; PMIC +
+ regulator + DTS
+
+The D21 ADT names the touch analog rail as function-power_ana =
+98:dpLE(0x302) - a switch inside the display-pmu,chestnut I2C PMIC at
+0x27, the same rail the A10 parts model as their HV supply, and the
+first step of iOS's touch power sequence (power_ana -> power_ldo ->
+clock_enable).  Without it the Z2 scans (0xf8 counters advance, the ASD
+reacts to touch) but the 0xec image report stays frozen at neutral and
+no contact frame is ever queued.
+
+- mfd: simple-mfd-i2c match data for apple,chestnut-pmic (8-bit regs)
+- regulator: apple-pmic-touch-regulator (chestnut touch-HV, ported from
+  Paul Praschl's A10 series)
+- dts: enable i2c0, chestnut PMIC @0x27, hv-supply on the touchscreen
+- apple_z2: optional hv-supply for D21, enabled first in the D21 power
+  sequence, disabled on power-off
+---
+ arch/arm64/boot/dts/apple/t8015-8plus.dtsi    | 25 ++++++
+ drivers/input/touchscreen/apple_z2.c          | 47 +++++++---
+ drivers/mfd/simple-mfd-i2c.c                  |  5 ++
+ drivers/regulator/Kconfig                     |  9 ++
+ drivers/regulator/Makefile                    |  1 +
+ .../regulator/apple-pmic-touch-regulator.c    | 85 +++++++++++++++++++
+ 6 files changed, 160 insertions(+), 12 deletions(-)
+ create mode 100644 drivers/regulator/apple-pmic-touch-regulator.c
+
+diff --git a/arch/arm64/boot/dts/apple/t8015-8plus.dtsi b/arch/arm64/boot/dts/apple/t8015-8plus.dtsi
+index 65f588159..8331623ed 100644
+--- a/arch/arm64/boot/dts/apple/t8015-8plus.dtsi
++++ b/arch/arm64/boot/dts/apple/t8015-8plus.dtsi
+@@ -46,3 +46,28 @@ touchscreen0: touchscreen@0 {
+ 		touchscreen-size-y = <1920>;
+ 	};
+ };
++
++/*
++ * Display PMIC (ADT "display-pmu,chestnut", I2C 0x27 on i2c0): carries the
++ * touchscreen high-voltage analog switch the ADT names as
++ * function-power_ana = 98:dpLE(0x302), enabled by iOS as the first step of
++ * the touch power sequence (power_ana -> power_ldo -> clock_enable).
++ * Without it the Z2 controller scans but the image/contact path reads flat
++ * neutral data and no contact frames are ever produced.
++ */
++&i2c0 {
++	status = "okay";
++
++	pmic@27 {
++		compatible = "apple,chestnut-pmic";
++		reg = <0x27>;
++
++		touch_hv: regulator-touch-hv {
++			compatible = "apple,chestnut-touch-hv-regulator";
++		};
++	};
++};
++
++&touchscreen0 {
++	hv-supply = <&touch_hv>;
++};
+diff --git a/drivers/input/touchscreen/apple_z2.c b/drivers/input/touchscreen/apple_z2.c
+index dc06f3ab9..a16821a02 100644
+--- a/drivers/input/touchscreen/apple_z2.c
++++ b/drivers/input/touchscreen/apple_z2.c
+@@ -1609,15 +1609,17 @@ static void apple_z2_platform_power_off(struct apple_z2 *z2)
+ 			}
+ 			usleep_range(1000, 2000);
+ 		}
+-		if (z2->hv_enabled) {
+-			error = regulator_disable(z2->hv_supply);
+-			if (error) {
+-				dev_warn(&z2->spidev->dev,
+-					 "failed to disable HV supply: %d\n", error);
+-			} else {
+-				z2->hv_enabled = false;
+-			}
++	}
++	if (z2->hv_enabled) {
++		error = regulator_disable(z2->hv_supply);
++		if (error) {
++			dev_warn(&z2->spidev->dev,
++				 "failed to disable HV supply: %d\n", error);
++		} else {
++			z2->hv_enabled = false;
+ 		}
++	}
++	if (apple_z2_is_iphone7_plus(z2)) {
+ 		z2->platform_powered = false;
+ 		return;
+ 	}
+@@ -1685,11 +1687,19 @@ static int apple_z2_d21_power_on(struct apple_z2 *z2)
+ 	int error;
+ 
+ 	/*
+-	 * The ADT sequence is power_ana -> power_ldo -> clock_enable, but both
+-	 * rails are PMGR/PMIC gates (98:dpLE 0x302 and the PMIC's rBK3 LDO),
+-	 * not regulator objects like the A10 parts. iBoot leaves them enabled,
+-	 * so assert reset and bring up the touch clock on top of them.
++	 * The ADT sequence is power_ana -> power_ldo -> clock_enable.  The
++	 * power_ana rail is the chestnut display-PMIC touch-HV switch, wired
++	 * as the optional "hv" supply; enable it first, then assert reset and
++	 * bring up the touch clock on top.
+ 	 */
++	if (z2->hv_supply) {
++		error = regulator_enable(z2->hv_supply);
++		if (error)
++			return error;
++		z2->hv_enabled = true;
++		usleep_range(1000, 2000);
++	}
++
+ 	gpiod_set_value_cansleep(z2->reset_gpio, 1);
+ 
+ 	error = apple_z2_enable_clock(z2);
+@@ -3782,6 +3792,19 @@ static int apple_z2_probe(struct spi_device *spi)
+ 					     "unable to get core supply\n");
+ 	}
+ 
++	if (apple_z2_is_d21(z2)) {
++		/*
++		 * The D21 ADT names the touch analog rail as
++		 * function-power_ana = 98:dpLE(0x302) - a switch inside the
++		 * "display-pmu,chestnut" I2C PMIC, the same rail the A10 parts
++		 * model as their HV supply.  Optional: when the DT does not
++		 * describe it, the rails stay as iBoot/iOS left them.
++		 */
++		z2->hv_supply = devm_regulator_get_optional(dev, "hv");
++		if (IS_ERR(z2->hv_supply))
++			z2->hv_supply = NULL;
++	}
++
+ 	z2->power_ana_gpio =
+ 		devm_gpiod_get_optional(dev, "power-ana", GPIOD_OUT_LOW);
+ 	if (IS_ERR(z2->power_ana_gpio))
+diff --git a/drivers/mfd/simple-mfd-i2c.c b/drivers/mfd/simple-mfd-i2c.c
+index 8a81d7acc..636afd117 100644
+--- a/drivers/mfd/simple-mfd-i2c.c
++++ b/drivers/mfd/simple-mfd-i2c.c
+@@ -76,6 +76,10 @@ static const struct simple_mfd_data apple_i2c_pmic = {
+ 	.regmap_config = &regmap_config_16r_8v
+ };
+ 
++static const struct simple_mfd_data apple_chestnut_pmic = {
++	.regmap_config = &regmap_config_8r_8v
++};
++
+ static const struct mfd_cell sy7636a_cells[] = {
+ 	{ .name = "sy7636a-regulator", },
+ 	{ .name = "sy7636a-temperature", },
+@@ -125,6 +129,7 @@ static const struct simple_mfd_data spacemit_p1 = {
+ };
+ 
+ static const struct of_device_id simple_mfd_i2c_of_match[] = {
++	{ .compatible = "apple,chestnut-pmic", .data = &apple_chestnut_pmic },
+ 	{ .compatible = "apple,i2c-pmic", .data = &apple_i2c_pmic },
+ 	{ .compatible = "delta,tn48m-cpld" },
+ 	{ .compatible = "fsl,ls1028aqds-fpga" },
+diff --git a/drivers/regulator/Kconfig b/drivers/regulator/Kconfig
+index 89789ac7a..ad7423469 100644
+--- a/drivers/regulator/Kconfig
++++ b/drivers/regulator/Kconfig
+@@ -133,6 +133,15 @@ config REGULATOR_ADP5055
+ 	  Say M here if you want to include support for the regulator as a
+ 	  module.
+ 
++config REGULATOR_APPLE_PMIC_TOUCH
++	tristate "Apple PMIC touchscreen supply regulators"
++	depends on MFD_SIMPLE_MFD_I2C && OF
++	default y if ARCH_APPLE
++	help
++	  Support the high-voltage touchscreen supply switch provided by the
++	  Apple Chestnut display PMIC (A10/A11). Each compatible identifies one
++	  physical rail and keeps its register layout inside the driver.
++
+ config REGULATOR_ANATOP
+ 	tristate "Freescale i.MX on-chip ANATOP LDO regulators"
+ 	depends on ARCH_MXC || COMPILE_TEST
+diff --git a/drivers/regulator/Makefile b/drivers/regulator/Makefile
+index 5a764cec8..731ea00ec 100644
+--- a/drivers/regulator/Makefile
++++ b/drivers/regulator/Makefile
+@@ -23,6 +23,7 @@ obj-$(CONFIG_REGULATOR_ACT8865) += act8865-regulator.o
+ obj-$(CONFIG_REGULATOR_ACT8945A) += act8945a-regulator.o
+ obj-$(CONFIG_REGULATOR_AD5398) += ad5398.o
+ obj-$(CONFIG_REGULATOR_ADP5055) += adp5055-regulator.o
++obj-$(CONFIG_REGULATOR_APPLE_PMIC_TOUCH) += apple-pmic-touch-regulator.o
+ obj-$(CONFIG_REGULATOR_ANATOP) += anatop-regulator.o
+ obj-$(CONFIG_REGULATOR_ARIZONA_LDO1) += arizona-ldo1.o
+ obj-$(CONFIG_REGULATOR_ARIZONA_MICSUPP) += arizona-micsupp.o
+diff --git a/drivers/regulator/apple-pmic-touch-regulator.c b/drivers/regulator/apple-pmic-touch-regulator.c
+new file mode 100644
+index 000000000..c802cbc94
+--- /dev/null
++++ b/drivers/regulator/apple-pmic-touch-regulator.c
+@@ -0,0 +1,85 @@
++// SPDX-License-Identifier: GPL-2.0-only
++/*
++ * Apple PMIC touchscreen supply regulators
++ *
++ * Ported from Paul Praschl's A10 (D111) series: the D21's ADT names the
++ * touchscreen analog rail as function-power_ana = 98:dpLE(0x302), i.e. a
++ * switch inside the "display-pmu,chestnut" PMIC at I2C 0x27 - the same PMIC
++ * the A10 parts take their touch high-voltage rail from.  Without it the Z2
++ * controller scans but the image/contact path reads flat neutral data.
++ */
++
++#include <linux/module.h>
++#include <linux/of.h>
++#include <linux/platform_device.h>
++#include <linux/property.h>
++#include <linux/regmap.h>
++#include <linux/regulator/driver.h>
++#include <linux/regulator/of_regulator.h>
++
++static const struct regulator_ops apple_pmic_touch_regulator_ops = {
++	.enable = regulator_enable_regmap,
++	.disable = regulator_disable_regmap,
++	.is_enabled = regulator_is_enabled_regmap,
++};
++
++static const struct regulator_desc apple_chestnut_touch_hv = {
++	.name = "chestnut-touch-hv",
++	.ops = &apple_pmic_touch_regulator_ops,
++	.type = REGULATOR_VOLTAGE,
++	.owner = THIS_MODULE,
++	.enable_reg = 0x05,
++	.enable_mask = 0x10,
++	.enable_val = 0x10,
++	.disable_val = 0,
++	.enable_time = 1000,
++	.off_on_delay = 1000,
++};
++
++static int apple_pmic_touch_regulator_probe(struct platform_device *pdev)
++{
++	const struct regulator_desc *desc;
++	struct regulator_config config = { };
++	struct device *dev = &pdev->dev;
++	struct regulator_dev *rdev;
++	struct regmap *regmap;
++
++	desc = device_get_match_data(dev);
++	if (!desc)
++		return dev_err_probe(dev, -EINVAL, "missing regulator match data\n");
++
++	regmap = dev_get_regmap(dev->parent, NULL);
++	if (!regmap)
++		return dev_err_probe(dev, -ENODEV,
++				     "parent PMIC has no regmap\n");
++
++	config.dev = dev;
++	config.of_node = dev->of_node;
++	config.init_data = of_get_regulator_init_data(dev, dev->of_node, desc);
++	config.regmap = regmap;
++
++	rdev = devm_regulator_register(dev, desc, &config);
++	return PTR_ERR_OR_ZERO(rdev);
++}
++
++static const struct of_device_id apple_pmic_touch_regulator_of_match[] = {
++	{
++		.compatible = "apple,chestnut-touch-hv-regulator",
++		.data = &apple_chestnut_touch_hv,
++	},
++	{ }
++};
++MODULE_DEVICE_TABLE(of, apple_pmic_touch_regulator_of_match);
++
++static struct platform_driver apple_pmic_touch_regulator_driver = {
++	.probe = apple_pmic_touch_regulator_probe,
++	.driver = {
++		.name = "apple-pmic-touch-regulator",
++		.of_match_table = apple_pmic_touch_regulator_of_match,
++	},
++};
++module_platform_driver(apple_pmic_touch_regulator_driver);
++
++MODULE_AUTHOR("Paul Praschl <praschlpaul@g-p.at>");
++MODULE_DESCRIPTION("Apple PMIC touchscreen supply regulators");
++MODULE_LICENSE("GPL");
+-- 
+2.55.0
+

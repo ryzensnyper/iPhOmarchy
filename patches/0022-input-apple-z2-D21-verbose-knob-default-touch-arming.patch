@@ -1,0 +1,203 @@
+From 1c357b4459d31f37352b7905386e78d39a918f2a Mon Sep 17 00:00:00 2001
+From: dugs <dugahol@protonmail.com>
+Date: Thu, 29 Oct 2026 17:53:15 +1030
+Subject: [PATCH 22/24] input: apple-z2: D21 verbose knob, default
+ touch-arming, runtime read_now
+
+- per-frame logs (irq-rx/irq-pkt/touch parse) behind a runtime-togglable
+  verbose= knob, off by default: they flood the console and the dmesg ring
+  at ~30 Hz
+- arm=1 (default): apply the D21 touch-arming writes (c8=09, bf mode 1
+  8-byte) after the init choreography, so a bare insmod produces touch;
+  the init's legacy bf write is MultitouchSupport touch-mode 0 = OFF
+- read_now= runtime knob: echo 'f8:166,7f:16' into the sysfs param reads
+  reports immediately, no module reload needed (no controller reset)
+---
+ drivers/input/touchscreen/apple_z2.c | 106 ++++++++++++++++++++++++---
+ 1 file changed, 95 insertions(+), 11 deletions(-)
+
+diff --git a/drivers/input/touchscreen/apple_z2.c b/drivers/input/touchscreen/apple_z2.c
+index d2e9fcd0f..b31f63ba3 100644
+--- a/drivers/input/touchscreen/apple_z2.c
++++ b/drivers/input/touchscreen/apple_z2.c
+@@ -404,6 +404,16 @@ module_param_named(coord_denom, d21_coord_denom, int, 0444);
+ MODULE_PARM_DESC(coord_denom,
+ 		 "D21: denominator of the 0x44 per-mille contact coordinates (raw*max/denom)");
+ 
++/*
++ * Per-frame logging (irq-rx / irq-pkt / irq-pkt valid / touch parse) is pure
++ * diagnostics: at ~30 Hz it floods the console and the dmesg ring.  Off by
++ * default; runtime-togglable so a stream-death watch can enable it only
++ * around the interesting moment.
++ */
++static bool z2_verbose;
++module_param_named(verbose, z2_verbose, bool, 0644);
++MODULE_PARM_DESC(verbose, "Per-frame IRQ/packet/touch-parse logging (diagnostic)");
++
+ static void apple_z2_parse_touches(struct apple_z2 *z2,
+ 				   const u8 *msg, size_t msg_len)
+ {
+@@ -428,8 +438,10 @@ static void apple_z2_parse_touches(struct apple_z2 *z2,
+ 	if (msg_len <= APPLE_Z2_NUM_FINGERS_OFFSET)
+ 		return;
+ 	nfingers = msg[APPLE_Z2_NUM_FINGERS_OFFSET];
+-	dev_info(&z2->spidev->dev, "touch parse: nfingers=%d msg_len=%zu\n",
+-		 nfingers, msg_len);
++	if (z2_verbose)
++		dev_info(&z2->spidev->dev,
++			 "touch parse: nfingers=%d msg_len=%zu\n",
++			 nfingers, msg_len);
+ 	if (msg_len < APPLE_Z2_FINGERS_OFFSET ||
+ 	    nfingers > (msg_len - APPLE_Z2_FINGERS_OFFSET) /
+ 		       sizeof(*fingers)) {
+@@ -757,7 +769,8 @@ static int apple_z2_read_packet(struct apple_z2 *z2)
+ 		return error;
+ 	apple_z2_post_z2_xfer_delay(z2);
+ 
+-	dev_info(&z2->spidev->dev, "irq-rx: %*ph\n", 16, z2->rx_buf);
++	if (z2_verbose)
++		dev_info(&z2->spidev->dev, "irq-rx: %*ph\n", 16, z2->rx_buf);
+ 
+ 	if (z2->rx_buf[0] != APPLE_Z2_REPLY_INTERRUPT_DATA)
+ 		return 0;
+@@ -828,8 +841,9 @@ static int apple_z2_read_packet(struct apple_z2 *z2)
+ 		return 0;
+ 	}
+ 
+-	dev_info(&z2->spidev->dev, "irq-pkt: len=%zu %*ph\n", pkt_len,
+-		 (int)min_t(size_t, pkt_len, 64U), z2->rx_buf);
++	if (z2_verbose)
++		dev_info(&z2->spidev->dev, "irq-pkt: len=%zu %*ph\n", pkt_len,
++			 (int)min_t(size_t, pkt_len, 64U), z2->rx_buf);
+ 	if (z2_frame_dump) {
+ 		size_t off;
+ 
+@@ -847,13 +861,15 @@ static int apple_z2_read_packet(struct apple_z2 *z2)
+ 		apple_z2_gen2_packet_valid(z2->rx_buf, pkt_len, counter,
+ 					   strict_counter);
+ 	if (!z2->runtime_frame_valid) {
+-		dev_info(&z2->spidev->dev,
+-			 "irq-pkt invalid: counter=%u strict=%d\n",
+-			 counter, strict_counter);
++		if (z2_verbose)
++			dev_info(&z2->spidev->dev,
++				 "irq-pkt invalid: counter=%u strict=%d\n",
++				 counter, strict_counter);
+ 		return 0;
+ 	}
+-	dev_info(&z2->spidev->dev, "irq-pkt valid: report=0x%02x\n",
+-		 z2->rx_buf[5]);
++	if (z2_verbose)
++		dev_info(&z2->spidev->dev, "irq-pkt valid: report=0x%02x\n",
++			 z2->rx_buf[5]);
+ 
+ 	if (!z2_tag_always)
+ 		z2->index_parity = !z2->index_parity;
+@@ -2383,6 +2399,20 @@ static char *d21_write;
+ module_param_named(write, d21_write, charp, 0444);
+ MODULE_PARM_DESC(write,
+ 		 "D21: comma-separated id:hexpayload report writes applied after the whole init (e.g. write=c8:01,9d:0200)");
++/*
++ * Default D21 arming.  The init choreography's legacy bf write carries the
++ * MultitouchSupport "touch mode 0" payload (9d 81 09 00 = touch OFF), and the
++ * userspace arming that iOS lands from backboardd never happens on Linux.
++ * With HV rails powered the controller boots and scans but stays silent
++ * until these two writes are made: report 0xc8 bit0 set (one-byte detection
++ * options, 08 -> 09) and report 0xbf mode 1 (touch on, 8-byte
++ * endianness-tagged form).  arm=0 restores the raw pre-arming behaviour for
++ * A/B tests; explicit write= entries always apply on top of the default.
++ */
++static bool d21_arm = true;
++module_param_named(arm, d21_arm, bool, 0444);
++MODULE_PARM_DESC(arm,
++		 "D21: apply the default touch-arming writes (c8=09, bf mode 1) after init");
+ static char *d21_read_ids;
+ module_param_named(read, d21_read_ids, charp, 0444);
+ MODULE_PARM_DESC(read,
+@@ -2537,6 +2567,38 @@ static void apple_z2_d21_read_list(struct apple_z2 *z2, const char *ids)
+ 	kfree(buf);
+ }
+ 
++/*
++ * The (single) D21 device, for the runtime read_now= knob below.  Set once
++ * the D21 probe tail runs; cleared on remove.
++ */
++static struct apple_z2 *d21_z2_now;
++
++static int d21_read_now_set(const char *val, const struct kernel_param *kp)
++{
++	char *buf;
++
++	if (!d21_z2_now)
++		return -ENODEV;
++	buf = kstrdup(val, GFP_KERNEL);
++	if (!buf)
++		return -ENOMEM;
++
++	mutex_lock(&d21_z2_now->io_lock);
++	apple_z2_d21_read_list(d21_z2_now, buf);
++	mutex_unlock(&d21_z2_now->io_lock);
++
++	kfree(buf);
++	return 0;
++}
++
++static const struct kernel_param_ops d21_read_now_ops = {
++	.set = d21_read_now_set,
++};
++module_param_cb(read_now, &d21_read_now_ops, NULL, 0644);
++MODULE_PARM_DESC(read_now,
++		 "D21: write 'id:len,id:len' to read reports immediately, no reload "
++		 "(e.g. echo 7f:16 > .../parameters/read_now)");
++
+ static int apple_z2_d21_probe_tail(struct apple_z2 *z2);
+ 
+ static int apple_z2_d21_init_locked(struct apple_z2 *z2)
+@@ -2837,6 +2899,8 @@ static int apple_z2_d21_probe_tail(struct apple_z2 *z2)
+ 	unsigned int i;
+ 	int error;
+ 
++	d21_z2_now = z2;
++
+ 	/*
+ 	 * Sample the controller's own view of itself: the high-level state
+ 	 * and the scan timing counters, the latter repeatedly so an advancing
+@@ -3017,6 +3081,22 @@ static int apple_z2_d21_probe_tail(struct apple_z2 *z2)
+ 	if (d21_read_ids && d21_read_ids[0])
+ 		apple_z2_d21_read_list(z2, d21_read_ids);
+ 
++	/* Default D21 touch arming - see the arm= param comment. */
++	if (d21_arm) {
++		static const u8 arm_c8[] = { 0x09 };
++		static const u8 arm_bf[] = { 0x9f, 0x83, 0x0b, 0x02,
++					     0x00, 0x10, 0x00, 0x00 };
++
++		error = apple_z2_write_report_locked(z2, 0xc8, arm_c8,
++						     sizeof(arm_c8),
++						     "d21-arm-c8");
++		dev_info(dev, "D21 arm c8 write: err=%d\n", error);
++		error = apple_z2_write_report_locked(z2, 0xbf, arm_bf,
++						     sizeof(arm_bf),
++						     "d21-arm-bf");
++		dev_info(dev, "D21 arm bf write: err=%d\n", error);
++	}
++
+ 	/*
+ 	 * Generic post-init report writes, applied after the whole init
+ 	 * choreography and with the IRQ already live - the position where the
+@@ -3967,7 +4047,11 @@ static void apple_z2_stop(struct apple_z2 *z2)
+ 
+ static void apple_z2_remove(struct spi_device *spi)
+ {
+-	apple_z2_stop(spi_get_drvdata(spi));
++	struct apple_z2 *z2 = spi_get_drvdata(spi);
++
++	if (d21_z2_now == z2)
++		d21_z2_now = NULL;
++	apple_z2_stop(z2);
+ }
+ 
+ static int apple_z2_suspend(struct device *dev)
+-- 
+2.55.0
+

@@ -1,0 +1,69 @@
+From e8b110082764b5d9b9bc0677ccec7dd1505bde00 Mon Sep 17 00:00:00 2001
+From: dugs <dugahol@protonmail.com>
+Date: Thu, 29 Oct 2026 16:35:06 +1030
+Subject: [PATCH 21/24] input: apple-z2: D21 scales the 0x44 per-mille contact
+ coordinates
+
+Corner-touch calibration shows the D21 0x44 records carry the contact
+position as a per-mille fraction of the panel (TL ~ (170,220),
+TR ~ (880,240), BL ~ (130,950), BR ~ (760,1030)), not
+surface-descriptor units.  The generic D11 path passed the raw values
+straight through, so dots landed in the top-left quadrant.  Scale by
+props max / coord_denom (default 1000, tunable at insmod).
+---
+ drivers/input/touchscreen/apple_z2.c | 31 +++++++++++++++++++++++-----
+ 1 file changed, 26 insertions(+), 5 deletions(-)
+
+diff --git a/drivers/input/touchscreen/apple_z2.c b/drivers/input/touchscreen/apple_z2.c
+index a16821a02..d2e9fcd0f 100644
+--- a/drivers/input/touchscreen/apple_z2.c
++++ b/drivers/input/touchscreen/apple_z2.c
+@@ -399,6 +399,11 @@ static void apple_z2_parse_j172_touches(struct apple_z2 *z2,
+ 	input_sync(z2->input_dev);
+ }
+ 
++static int d21_coord_denom = 1000;
++module_param_named(coord_denom, d21_coord_denom, int, 0444);
++MODULE_PARM_DESC(coord_denom,
++		 "D21: denominator of the 0x44 per-mille contact coordinates (raw*max/denom)");
++
+ static void apple_z2_parse_touches(struct apple_z2 *z2,
+ 				   const u8 *msg, size_t msg_len)
+ {
+@@ -472,12 +477,28 @@ static void apple_z2_parse_touches(struct apple_z2 *z2,
+ 			touchscreen_report_pos(z2->input_dev, &z2->props, x,
+ 					       z2->props.max_y - y,
+ 					       true);
+-		} else {
++		} else if (apple_z2_is_d21(z2)) {
++			/*
++			 * The D21 legacy 0x44 records carry the contact
++			 * position as a per-mille fraction of the panel
++			 * (corner touches read x 0..~900, y 0..~1030), not
++			 * surface-descriptor units like the D111 raw path.
++			 * Scale to the display; coord_denom tunes the
++			 * fraction denominator.
++			 */
++			unsigned int x = (u32)le16_to_cpu(fingers[i].abs_x) *
++					 z2->props.max_x / d21_coord_denom;
++			unsigned int y = (u32)le16_to_cpu(fingers[i].abs_y) *
++					 z2->props.max_y / d21_coord_denom;
+ 			touchscreen_report_pos(z2->input_dev, &z2->props,
+-					       le16_to_cpu(fingers[i].abs_x),
+-					       le16_to_cpu(fingers[i].abs_y),
+-					       true);
+-		}
++					       min(x, z2->props.max_x),
++					       min(y, z2->props.max_y), true);
++		} else {
++		touchscreen_report_pos(z2->input_dev, &z2->props,
++				       le16_to_cpu(fingers[i].abs_x),
++				       le16_to_cpu(fingers[i].abs_y),
++				       true);
++	}
+ 		input_report_abs(z2->input_dev, ABS_MT_WIDTH_MAJOR,
+ 				 le16_to_cpu(fingers[i].tool_major));
+ 		input_report_abs(z2->input_dev, ABS_MT_WIDTH_MINOR,
+-- 
+2.55.0
+

@@ -27,7 +27,7 @@ this driver generation (Z2/HBPP 0x103) for any device other than Orchard's iPad 
 | Boot Linux from the internal partition | ✅ (pongoOS → m1n1 → kernel → rootfs) |
 | Display (simple framebuffer, 1080×1920) | ✅ working, brightness ✅; real KMS is TBA upstream |
 | Touch controller boot/calibration (Z2, HBPP 0x103) | ✅ controller boots, calibrates, scans |
-| **Touch input** | ❌ contact frames never delivered — under active investigation |
+| **Touch input** | ✅ **working** (multitouch evdev events; short taps accurate & responsive). Known issues: ghost contacts pinned to the left sensor edge, and frames batch during sustained/slow contact — active investigation |
 | Wi-Fi (BCM4357 over `apcie`) | ❌ parked |
 | Bluetooth (N88 UART + patchram) | ❌ parked |
 | GPU | ❌ out of scope (no mainline A11 driver) |
@@ -36,9 +36,9 @@ this driver generation (Z2/HBPP 0x103) for any device other than Orchard's iPad 
 
 - The touch stack is the **Z2 / AppleHIDTransport HBPP generation**: the controller boots from a
   container built from Apple's own `D21.mtprops` profile, is calibrated from four blob slots, and
-  reports contacts as **0x76 HID frames** (32-byte header + 48-byte contact records, X/Y as
-  0..1 fractions of the sensor surface). The frame format is decoded here and the in-kernel
-  parser already matches it — the open question is the frame-delivery path.
+  reports contacts as **0x44 D11-family frames** (24-byte header + 30-byte contact records in
+  SIGNED surface-descriptor units; state byte = event mask, bit0 Touch). The frame format is
+  decoded here and the in-kernel parser now matches it end to end.
 - **Nobody has working touch on this generation in Linux.** OrchardLinux's J71b (iPad 6) is the
   only working reference and it differs in container layout, HBPP version (0x104 vs 0x103) and
   power sequencing (`function-power_ana` is a *display-pipeline* function on D21).

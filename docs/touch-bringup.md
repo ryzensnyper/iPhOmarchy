@@ -71,3 +71,48 @@ Remaining (all need a live device / m1n1):
 Touch/SmartIO firmware comes from the matching device's firmware and must be extracted legally
 by the user (same IPSW path we used for the ADT — see [../tools/README.md](../tools/README.md)).
 It is **not** included in this repo.
+
+## Status (2026-10-29): TOUCH WORKS
+
+The blocker was never the protocol — it was **power**. The D21 touch controller's high-voltage
+analog rail (mutual-cap drive) is the `display-pmu,chestnut` I2C PMIC switch that the ADT names
+as `function-power_ana = 98:dpLE(0x302)` — the FIRST step of iOS's touch power sequence
+(power_ana → power_ldo → clock_enable). Nothing in the Linux stack turned it on: i2c0 was
+`disabled` in our DTB. With `touch_hv` enabled first in the power sequence (patches
+`0020`+), the 0x44 contact frames flow immediately.
+
+Patch series state (`patches/0020`-`0024`, kernel tree `a11-port` at `57e788b91`):
+
+| Piece | State |
+|---|---|
+| Chestnut touch-HV regulator + i2c0/PMIC DTB | ✅ patch 0020 — THE fix |
+| 0x44 contact decode | ✅ patches 0023/0024 — signed surface units (d9 range, e.g. x −224..6608), state byte = event mask (bit0 Touch) |
+| Driver arming (c8=09, bf mode 1) built in | ✅ patch 0022 — bare insmod works; `arm=0` for raw A/B |
+| Runtime diagnostics | ✅ `verbose=` / `read_now=` / `frame_dump=1` knobs |
+
+Container rule (learned 2026-10-29 the hard way): the flashed container **must be the
+C1F5E,4-personality image** (fw 0x0773, `dfrmtfw-d21-c1f5e-4.bin` copied over the DT-named
+`...-3.bin`). The Apple C1F5E,3-era container ("original", fw 0x0753) boots the panel but runs
+the wrong firmware generation: scan rate halves (14 vs 34 Hz), frames batch ~2 s apart, edge
+ghosts multiply, and the pipeline dies after ~6 min. Verify with the d3 property read:
+bytes [3..4] must read `07 73`.
+
+Frame-decode ground truth (live-stream capture, `tools` in the session logs):
+
+- 0x44 msg: `[0]=0x44 [1]=seq [16]=nfingers`, fingers at +24, 30 B each:
+  +0 finger id, +1 state (bit0 Touch, bit1 Range, bit2 Position), +4/+6 abs_x/abs_y
+  (le16, signed surface units), +12/+14 tool major/minor, +26 pressure.
+- Real touches: state 1 (tap), 2 (range/hover), 7 (touch+range+position), 0 (lift).
+- **Ghost contacts**: four FIXED positions at raw x = −224..−210 (= exactly `min_x`, the left
+  sensor edge), plausible finger sizes, full touch lifecycle, bursts every ~20-200 s. iOS
+  presumably filters them by bounds; open question whether they are a hardware/analog marginal
+  (edge columns) or a missing runtime recalibration.
+
+Open issues (in order):
+
+1. Ghost contacts at the left sensor edge (clamped to screen x≈0 by the driver).
+2. Frames batch ~2 s apart during sustained contact; short taps stream fine (1→2→7→0 in
+   ~0.3 s). IRQ line silent between batches — controller-side assert cadence suspected.
+3. Console-blanking side quests resolved: the display must be unblanked for fb work; blanking
+   is NOT the death mechanism (verified by trace).
+

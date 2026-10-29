@@ -1,0 +1,46 @@
+From 57e788b91de6b0a053ffd0223e22255605a8502a Mon Sep 17 00:00:00 2001
+From: dugs <dugahol@protonmail.com>
+Date: Thu, 29 Oct 2026 20:19:59 +1030
+Subject: [PATCH 24/24] input: apple-z2: D21 0x44 state byte is an event mask,
+ not the J172 enum
+
+Live-stream frame decode: real contacts read state 1 (Touch), 2 (Range
+only, hover/lift) and 7 (Touch|Range|Position); the J172 check
+(3=started, 4=moved) classified every real touch as a lift - which is
+why only the edge ghost contacts (state 3 = Touch|Range) ever reached
+userspace.  D21 contact is active iff the Touch bit (bit0) is set.
+---
+ drivers/input/touchscreen/apple_z2.c | 17 +++++++++++++++--
+ 1 file changed, 15 insertions(+), 2 deletions(-)
+
+diff --git a/drivers/input/touchscreen/apple_z2.c b/drivers/input/touchscreen/apple_z2.c
+index f6476b125..b98b65729 100644
+--- a/drivers/input/touchscreen/apple_z2.c
++++ b/drivers/input/touchscreen/apple_z2.c
+@@ -458,8 +458,21 @@ static void apple_z2_parse_touches(struct apple_z2 *z2,
+ 			dev_warn(&z2->spidev->dev, "unable to get slot for finger\n");
+ 			continue;
+ 		}
+-		slot_valid = fingers[i].state == APPLE_Z2_TOUCH_STARTED ||
+-			     fingers[i].state == APPLE_Z2_TOUCH_MOVED;
++		if (apple_z2_is_d21(z2)) {
++			/*
++			 * D21 0x44: the state byte is an event mask
++			 * (bit0 Touch, bit1 Range, bit2 Position), not the
++			 * J172 enum.  Real touches read 1 (tap), 2 (range
++			 * only, hover/lift) and 7 (touch|range|position),
++			 * so a contact is active iff the Touch bit is set.
++			 * The J172 check (3=started, 4=moved) silently
++			 * discarded every real touch here.
++			 */
++			slot_valid = fingers[i].state & 0x1;
++		} else {
++			slot_valid = fingers[i].state == APPLE_Z2_TOUCH_STARTED ||
++				     fingers[i].state == APPLE_Z2_TOUCH_MOVED;
++		}
+ 		input_mt_slot(z2->input_dev, slot);
+ 		if (!input_mt_report_slot_state(z2->input_dev, MT_TOOL_FINGER, slot_valid))
+ 			continue;
+-- 
+2.55.0
+
