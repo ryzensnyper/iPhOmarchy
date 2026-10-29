@@ -1,0 +1,114 @@
+From 52414f83235b90ad10ca64efbb2c1db05580955c Mon Sep 17 00:00:00 2001
+From: dugs <dugahol@protonmail.com>
+Date: Fri, 30 Oct 2026 00:10:43 +1030
+Subject: [PATCH 26/27] input: apple-z2: D21 kext-faithful interrupt pull -
+ [EB][seq][00] + 0xAA filler
+
+RE of AppleMultitouchZ2SPI (kernelcache 20H392) pinned the interrupt
+contract: the pull is [EB][seq][0x00][0xAA*11][cksum], the data read is
+[EB][seq][0x01][zeros][cksum at the transfer END], same seq for both,
+toggled only after the frame is fully consumed; exactly one frame per
+IRQ.  The driver sent 0x01 in the pull (parsed by the controller as a
+data read for a frame that was never presented), zero filler, a 16-byte
+checksum in a stretched transfer, and toggled the seq on empty pulls -
+all deviating from the contract and the likely cause of the ~2 s
+batched delivery.  tag_always now defaults to the kext-faithful
+discipline; pull_cksum_end=0 restores the legacy checksum placement.
+---
+ drivers/input/touchscreen/apple_z2.c | 56 +++++++++++++++++-----------
+ 1 file changed, 35 insertions(+), 21 deletions(-)
+
+diff --git a/drivers/input/touchscreen/apple_z2.c b/drivers/input/touchscreen/apple_z2.c
+index cd7780734..e21909aac 100644
+--- a/drivers/input/touchscreen/apple_z2.c
++++ b/drivers/input/touchscreen/apple_z2.c
+@@ -742,16 +742,27 @@ MODULE_PARM_DESC(frame_dump,
+ 		 "Log the full interrupt-frame payload on every packet (diagnostic)");
+ 
+ /*
+- * Tag discipline for the interrupt-data pull.  true (default): the expected
+- * [0xEB][seq] alternates on every pull, empty ones included.  false
+- * (Orchard-style, their working J71b runtime): the tag advances only after
+- * a valid frame - "do not emit an event or advance the tag" on the
+- * zero/no-data replies.
++ * Tag discipline for the interrupt-data pull.  false (default, kext-faithful):
++ * the iOS AppleMultitouchZ2SPI keeps the same [0xEB][seq] for the pull and the
++ * data read of ONE frame transaction and toggles 1<->2 only after the frame is
++ * fully consumed - empty pulls leave it untouched.  true: the legacy
++ * toggle-on-every-pull discipline (including empty pulls), kept for A/B.
+  */
+-static bool z2_tag_always = true;
++static bool z2_tag_always;
+ module_param_named(tag_always, z2_tag_always, bool, 0444);
+ MODULE_PARM_DESC(tag_always,
+-		 "Toggle the pull sequence tag on every read (true) or only after valid frames (false)");
++		 "Toggle the pull sequence tag on every read (legacy) or only after a consumed frame (kext-faithful, default)");
++
++/*
++ * Checksum placement of the D21 interrupt data-read command.  true (default,
++ * per the kext disassembly): the [EB][seq][01] command is stretched to the
++ * full transfer with its checksum in the LAST two bytes.  false: the legacy
++ * 16-byte command checksum at bytes 14-15.
++ */
++static bool z2_pull_cksum_end = true;
++module_param_named(pull_cksum_end, z2_pull_cksum_end, bool, 0444);
++MODULE_PARM_DESC(pull_cksum_end,
++		 "D21: data-read command checksum at the transfer end (kext) or at byte 14 (legacy)");
+ 
+ static int apple_z2_read_packet(struct apple_z2 *z2)
+ {
+@@ -772,16 +783,17 @@ static int apple_z2_read_packet(struct apple_z2 *z2)
+ 	counter = z2->index_parity + 1;
+ 	z2->tx_buf[1] = counter;
+ 	/*
+-	 * The controller alternates its expected sequence number on every
+-	 * pull, empty ones included (the AHT toggles per readOneFrameOfData).
+-	 * Toggling only on valid frames desyncs us after the first empty
+-	 * drain - every later pull is then ignored and the interrupt-data
+-	 * channel reads flat zero for the rest of the session.
++	 * Kext-faithful (AppleMultitouchZ2SPI) interrupt pull: [EB][seq][00]
++	 * with 0xAA filler in bytes 3..13.  Byte 2 = 0x00 means "present a
++	 * frame"; the data read that follows uses 0x01.  The legacy driver
++	 * sent 0x01 here, which the controller parses as a data read for a
++	 * frame that was never presented.
+ 	 *
+-	 * tag_always=0 switches to the Orchard J71b discipline instead: the
+-	 * tag advances only after a valid frame, and the zero/no-data replies
+-	 * leave it untouched ("bounded drain retries").
++	 * The seq toggles only after a frame is fully consumed (see the end
++	 * of this function); empty pulls leave it untouched.
+ 	 */
++	z2->tx_buf[2] = 0x00;
++	memset(&z2->tx_buf[3], 0xaa, APPLE_Z2_CMD_SIZE - 3 - 2);
+ 	if (z2_tag_always)
+ 		z2->index_parity = !z2->index_parity;
+ 	apple_z2_z2_checksum(z2->tx_buf, APPLE_Z2_CMD_SIZE);
+@@ -823,17 +835,19 @@ static int apple_z2_read_packet(struct apple_z2 *z2)
+ 
+ 	if (apple_z2_is_d21(z2)) {
+ 		/*
+-		 * Acknowledge the queued report: the controller reads the
+-		 * transmitted bytes as the packet ACK, so send the command
+-		 * frame rather than filler. It has to come from its own buffer,
+-		 * because the receive side writes into rx_buf as the transfer
+-		 * runs and would corrupt the tail of the frame.
++		 * Data read of the presented frame: [EB][seq][01] with zero
++		 * filler, same seq as the pull.  Per the kext disassembly the
++		 * command is stretched to the full transfer length with the
++		 * checksum in the LAST two bytes (pull_cksum_end); the legacy
++		 * placement was bytes 14-15 of a 16-byte command.
+ 		 */
+ 		memset(z2->tx_buf, 0, wire_len);
+ 		z2->tx_buf[0] = APPLE_Z2_CMD_READ_INTERRUPT_DATA;
+ 		z2->tx_buf[1] = counter;
+ 		z2->tx_buf[2] = 1;
+-		apple_z2_z2_checksum(z2->tx_buf, APPLE_Z2_CMD_SIZE);
++		apple_z2_z2_checksum(z2->tx_buf,
++				     z2_pull_cksum_end ? wire_len :
++							 APPLE_Z2_CMD_SIZE);
+ 		memset(z2->rx_buf, 0, wire_len);
+ 		error = apple_z2_gen1_exchange(z2, wire_len);
+ 	} else if (apple_z2_is_j172(z2) || apple_z2_is_iphone7_plus(z2)) {
+-- 
+2.55.0
+

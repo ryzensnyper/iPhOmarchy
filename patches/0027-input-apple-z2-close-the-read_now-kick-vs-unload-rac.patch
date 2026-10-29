@@ -1,0 +1,129 @@
+From 80af090aa413fcafd87e98966e03b1a28ad22be9 Mon Sep 17 00:00:00 2001
+From: dugs <dugahol@protonmail.com>
+Date: Fri, 30 Oct 2026 00:21:41 +1030
+Subject: [PATCH 27/27] input: apple-z2: close the read_now=/kick= vs unload
+ race (NULL deref oops)
+
+A sysfs write to the read_now=/kick= params can pass the d21_z2_now NULL
+check, sleep in kstrdup(), and then use the struct after remove() cleared
+the pointer and devm freed it - observed in the field as a level-0
+translation fault at 0 inside apple_z2_d21_read_list (z2->spidev read
+from freed memory). Guard the whole pointer lifecycle with d21_now_lock:
+setters hold it across their entire use, probe tail publishes the pointer
+and remove() clears it under the lock before anything is torn down.
+
+Reproduction: rmmod apple_z2 while a script periodically writes
+/sys/module/apple_z2/parameters/read_now.
+---
+ drivers/input/touchscreen/apple_z2.c | 57 +++++++++++++++++++++++-----
+ 1 file changed, 47 insertions(+), 10 deletions(-)
+
+diff --git a/drivers/input/touchscreen/apple_z2.c b/drivers/input/touchscreen/apple_z2.c
+index e21909aac..c03614996 100644
+--- a/drivers/input/touchscreen/apple_z2.c
++++ b/drivers/input/touchscreen/apple_z2.c
+@@ -2607,26 +2607,51 @@ static void apple_z2_d21_read_list(struct apple_z2 *z2, const char *ids)
+ }
+ 
+ /*
+- * The (single) D21 device, for the runtime read_now= knob below.  Set once
+- * the D21 probe tail runs; cleared on remove.
++ * The (single) D21 device, for the runtime read_now=/kick= knobs below.  Set
++ * once the D21 probe tail runs; cleared on remove.
++ *
++ * The sysfs param setters race with module unload: a write can pass the NULL
++ * check and then sleep in kstrdup() while remove() clears the pointer and
++ * devm frees the struct.  Observed in the field as a NULL deref inside
++ * apple_z2_d21_read_list (z2->spidev read as NULL from the zeroed freed
++ * chunk).  d21_now_lock closes the window: setters hold it across the whole
++ * use, remove clears the pointer under it before anything is freed.
+  */
+ static struct apple_z2 *d21_z2_now;
++static DEFINE_MUTEX(d21_now_lock);
++
++static struct apple_z2 *apple_z2_d21_now_get(void)
++{
++	mutex_lock(&d21_now_lock);
++	if (!d21_z2_now)
++		mutex_unlock(&d21_now_lock);
++	return d21_z2_now;
++}
++
++static void apple_z2_d21_now_put(void)
++{
++	mutex_unlock(&d21_now_lock);
++}
+ 
+ static int d21_read_now_set(const char *val, const struct kernel_param *kp)
+ {
++	struct apple_z2 *z2 = apple_z2_d21_now_get();
+ 	char *buf;
+ 
+-	if (!d21_z2_now)
++	if (!z2)
+ 		return -ENODEV;
+ 	buf = kstrdup(val, GFP_KERNEL);
+-	if (!buf)
++	if (!buf) {
++		apple_z2_d21_now_put();
+ 		return -ENOMEM;
++	}
+ 
+-	mutex_lock(&d21_z2_now->io_lock);
+-	apple_z2_d21_read_list(d21_z2_now, buf);
+-	mutex_unlock(&d21_z2_now->io_lock);
++	mutex_lock(&z2->io_lock);
++	apple_z2_d21_read_list(z2, buf);
++	mutex_unlock(&z2->io_lock);
+ 
+ 	kfree(buf);
++	apple_z2_d21_now_put();
+ 	return 0;
+ }
+ 
+@@ -2646,10 +2671,13 @@ MODULE_PARM_DESC(read_now,
+  */
+ static int d21_kick_set(const char *val, const struct kernel_param *kp)
+ {
+-	if (!d21_z2_now)
++	struct apple_z2 *z2 = apple_z2_d21_now_get();
++
++	if (!z2)
+ 		return -ENODEV;
+-	disable_irq(d21_z2_now->spidev->irq);
+-	enable_irq(d21_z2_now->spidev->irq);
++	disable_irq(z2->spidev->irq);
++	enable_irq(z2->spidev->irq);
++	apple_z2_d21_now_put();
+ 	return 0;
+ }
+ 
+@@ -2960,7 +2988,9 @@ static int apple_z2_d21_probe_tail(struct apple_z2 *z2)
+ 	unsigned int i;
+ 	int error;
+ 
++	mutex_lock(&d21_now_lock);
+ 	d21_z2_now = z2;
++	mutex_unlock(&d21_now_lock);
+ 
+ 	/*
+ 	 * Sample the controller's own view of itself: the high-level state
+@@ -4110,8 +4140,15 @@ static void apple_z2_remove(struct spi_device *spi)
+ {
+ 	struct apple_z2 *z2 = spi_get_drvdata(spi);
+ 
++	/*
++	 * Drop the runtime-knob handle under the lock first: a concurrent
++	 * read_now=/kick= write is either rejected (-ENODEV) or has already
++	 * finished with the struct by the time we return.
++	 */
++	mutex_lock(&d21_now_lock);
+ 	if (d21_z2_now == z2)
+ 		d21_z2_now = NULL;
++	mutex_unlock(&d21_now_lock);
+ 	apple_z2_stop(z2);
+ }
+ 
+-- 
+2.55.0
+
