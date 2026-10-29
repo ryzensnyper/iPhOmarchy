@@ -1,0 +1,441 @@
+From b1135f1f4ccfca6412cb21cd825ba62434a04ac7 Mon Sep 17 00:00:00 2001
+From: dugs <dugahol@protonmail.com>
+Date: Thu, 29 Oct 2026 03:30:44 +1030
+Subject: [PATCH 07/19] input: apple-z2: D21 J71b-order init choreography,
+ full-payload report watch
+
+The working J71b runtime (same HBPP 0x103 generation) arms its contact
+stream with a fixed post-boot choreography: DeviceInfo, one poll, 0xd9
+surface read, 0xdb read x3, 0x73 probe, queue drain, level-low IRQ,
+2260 ms settle, late WAKE, then a 0x9d probe that gates the J172 writes.
+The D21 path did the reads once, woke first, and never settled. Mirror
+the reference order by default (j71b_order=1) with every step exposed as
+a module param (db_reads, settle_ms, drain_polls); keep the legacy order
+behind j71b_order=0.
+
+Diagnostics: probe_reports now diffs and dumps full report payloads (the
+old sweep compared only an 8-byte prefix and could not see contact data
+living deeper in a report), and watch_ids=<hex,hex,...> quietly dumps
+named reports in full on change only.
+
+Measured on device: the choreography runs cleanly and the controller's
+report table grows (0x30/0x7e/0xcd appear), but no contact frames are
+produced under a finger in either order, and no PIO report reacts to a
+touch with full-payload diffs. Report 0x9d exists on D21 (status=0,
+8 bytes) where J71b does not implement it.
+---
+ drivers/input/touchscreen/apple_z2.c | 306 +++++++++++++++++++++++++--
+ 1 file changed, 283 insertions(+), 23 deletions(-)
+
+diff --git a/drivers/input/touchscreen/apple_z2.c b/drivers/input/touchscreen/apple_z2.c
+index f0d669ad9..401cb253f 100644
+--- a/drivers/input/touchscreen/apple_z2.c
++++ b/drivers/input/touchscreen/apple_z2.c
+@@ -2289,6 +2289,9 @@ MODULE_PARM_DESC(probe_times, "How many times to read probe_id");
+ static bool d21_poll;
+ module_param_named(poll, d21_poll, bool, 0444);
+ MODULE_PARM_DESC(poll, "Poll the interrupt-data queue after init (probe_times x 100 ms)");
++static char *d21_watch_ids;
++module_param_named(watch_ids, d21_watch_ids, charp, 0444);
++MODULE_PARM_DESC(watch_ids, "Comma-separated hex report ids to watch with full-payload dumps");
+ 
+ /*
+  * Orchard's working J71b runtime (same HBPP 0x103 generation as D21) switches
+@@ -2311,6 +2314,34 @@ static int d21_spi_mode = -1;
+ module_param_named(spi_mode, d21_spi_mode, int, 0444);
+ MODULE_PARM_DESC(spi_mode, "D21: force SPI mode 0..3 (Apple profile: 1), -1 keeps");
+ 
++/*
++ * Orchard's working J71b runtime (same HBPP 0x103 firmware generation as D21)
++ * arms the contact stream with a fixed post-boot choreography, and its
++ * container carries no runtime-enable write at all.  Its order is:
++ *
++ *   DeviceInfo (WAKE,E2,E1) -> one interrupt-data poll -> surface (0xd9)
++ *   info+read -> database (0xdb) info + read x3 -> 0x73 info (+reads when it
++ *   exists) -> drain the queue -> touch IRQ to level-low -> settle 2260 ms ->
++ *   WAKE -> 0x9d info (J71b: unsupported -> no writes at all -> REPORTS_READY)
++ *
++ * The D21 path did the reads only once, WAKE first, and had no settle, and the
++ * write-based A/B (9d/bf/af/e2/72) never changed that.  Mirror the working
++ * reference by default; every knob is exposed so each step can be varied on
++ * the device without a rebuild.
++ */
++static bool d21_j71b_order = true;
++module_param_named(j71b_order, d21_j71b_order, bool, 0444);
++MODULE_PARM_DESC(j71b_order, "D21: use the J71b runtime init choreography");
++static int d21_db_reads = 3;
++module_param_named(db_reads, d21_db_reads, int, 0444);
++MODULE_PARM_DESC(db_reads, "D21: how many times to read report 0xdb (J71b: 3)");
++static int d21_settle_ms = 2260;
++module_param_named(settle_ms, d21_settle_ms, int, 0444);
++MODULE_PARM_DESC(settle_ms, "D21: settle after IRQ enable, before the late WAKE (J71b: 2260)");
++static int d21_drain_polls = 4;
++module_param_named(drain_polls, d21_drain_polls, int, 0444);
++MODULE_PARM_DESC(drain_polls, "D21: interrupt-data drain polls after the init reads (J71b: 4)");
++
+ /*
+  * Read a report back and log it. The controller's own configuration for this
+  * part declares two host-visible reports: 0xf8 carries the scan timing
+@@ -2346,6 +2377,8 @@ static void apple_z2_d21_probe_report(struct apple_z2 *z2, u8 report,
+ 			 z2->rx_buf[4]);
+ }
+ 
++static int apple_z2_d21_probe_tail(struct apple_z2 *z2);
++
+ static int apple_z2_d21_init_locked(struct apple_z2 *z2)
+ {
+ 	static const u8 rep9d[] = { 0x01, 0x00, 0x00, 0x00,
+@@ -2355,15 +2388,24 @@ static int apple_z2_d21_init_locked(struct apple_z2 *z2)
+ 	u8 high_level[8] = { };	/* the state channel sits at offset 1 */
+ 	u8 status = 0;
+ 	u16 len = 0;
+-	unsigned int i;
+ 	int error;
+ 
+ 	error = apple_z2_d21_device_info(z2);
+ 	dev_info(dev, "D21 init: device info err=%d\n", error);
+ 
+-	error = apple_z2_z2_cmd_locked(z2, APPLE_Z2_CMD_WAKE, 0, "d21-wake");
+-	dev_info(dev, "D21 init: wake err=%d\n", error);
+-	usleep_range(2000, 2100);
++	if (!d21_j71b_order) {
++		error = apple_z2_z2_cmd_locked(z2, APPLE_Z2_CMD_WAKE, 0, "d21-wake");
++		dev_info(dev, "D21 init: wake err=%d\n", error);
++		usleep_range(2000, 2100);
++	} else {
++		/*
++		 * The J71b runtime performs a single interrupt-data poll right
++		 * after the handoff, before any report queries.
++		 */
++		error = apple_z2_read_packet(z2);
++		dev_info(dev, "D21 init: post-handoff poll err=%d valid=%d\n",
++			 error, z2->runtime_frame_valid);
++	}
+ 
+ 	error = apple_z2_read_report_info_locked(z2, 0xd9, &status, &len,
+ 						 "d21-d9");
+@@ -2385,8 +2427,16 @@ static int apple_z2_d21_init_locked(struct apple_z2 *z2)
+ 	dev_info(dev, "D21 init: db info err=%d status=%u len=%u\n",
+ 		 error, status, len);
+ 	if (!error && len) {
+-		error = apple_z2_read_report_locked(z2, 0xdb, len, "d21-db-read");
+-		dev_info(dev, "D21 init: db read err=%d len=%u\n", error, len);
++		unsigned int db;
++
++		for (db = 0; db < (d21_j71b_order ? d21_db_reads : 1); db++) {
++			char tag[16];
++
++			snprintf(tag, sizeof(tag), "d21-db-read-%u", db + 1);
++			error = apple_z2_read_report_locked(z2, 0xdb, len, tag);
++			dev_info(dev, "D21 init: db read %u err=%d len=%u\n",
++				 db + 1, error, len);
++		}
+ 	}
+ 
+ 	status = 0; len = 0;
+@@ -2395,8 +2445,137 @@ static int apple_z2_d21_init_locked(struct apple_z2 *z2)
+ 	dev_info(dev, "D21 init: 73 info err=%d status=%u len=%u\n",
+ 		 error, status, len);
+ 	if (!error && len) {
+-		error = apple_z2_read_report_locked(z2, 0x73, len, "d21-73-read");
+-		dev_info(dev, "D21 init: 73 read err=%d len=%u\n", error, len);
++		unsigned int pr;
++
++		for (pr = 0; pr < (d21_j71b_order ? 3 : 1); pr++) {
++			char tag[16];
++
++			snprintf(tag, sizeof(tag), "d21-73-read-%u", pr + 1);
++			error = apple_z2_read_report_locked(z2, 0x73, len, tag);
++			dev_info(dev, "D21 init: 73 read %u err=%d len=%u\n",
++				 pr + 1, error, len);
++		}
++	} else if (d21_j71b_order && !error && !len) {
++		dev_info(dev,
++			 "D21 init: report 0x73 unsupported (status=%u), as on J71b\n",
++			 status);
++	}
++
++	if (d21_j71b_order) {
++		/*
++		 * Drain the interrupt-data queue the way the J71b runtime does
++		 * before it arms the IRQ: an asserted line must be serviced
++		 * through reads, not left pending.
++		 */
++		unsigned int dp;
++
++		for (dp = 0; dp < d21_drain_polls; dp++) {
++			error = apple_z2_read_packet(z2);
++			dev_info(dev, "D21 init: drain %u err=%d empty=%d\n",
++				 dp + 1, error, z2->runtime_queue_empty);
++			if (z2->runtime_queue_empty ||
++			    (!z2->runtime_frame_valid &&
++			     !z2->runtime_control_reply))
++				break;
++		}
++	}
++
++	if (d21_j71b_order) {
++		/*
++		 * J71b order: switch the touch IRQ to level-low, then let the
++		 * line settle before the final handshake.  The J172 report
++		 * writes are not part of this choreography; the reference
++		 * probes 0x9d and skips them when the image does not
++		 * implement it.
++		 */
++		if (d21_irq_level) {
++			z2->saved_irq_type = irq_get_trigger_type(z2->spidev->irq);
++			if (!z2->saved_irq_type ||
++			    irq_set_irq_type(z2->spidev->irq, IRQ_TYPE_LEVEL_LOW)) {
++				dev_warn(dev, "D21: could not set level-low IRQ\n");
++			} else {
++				z2->irq_type_changed = true;
++				dev_info(dev,
++					 "D21: touch IRQ -> level-low (was %u)\n",
++					 z2->saved_irq_type);
++			}
++		}
++
++		msleep(d21_settle_ms);
++
++		error = apple_z2_z2_cmd_locked(z2, APPLE_Z2_CMD_WAKE, 0,
++					       "d21-late-wake");
++		dev_info(dev, "D21 init: late wake err=%d\n", error);
++		usleep_range(2200, 2300);
++
++		status = 0; len = 0;
++		error = apple_z2_read_report_info_locked(z2, 0x9d, &status, &len,
++							 "d21-9d-info");
++		dev_info(dev, "D21 init: 9d info err=%d status=%u len=%u\n",
++			 error, status, len);
++		if (!error && status == 2 && !len) {
++			dev_info(dev,
++				 "D21 init: 0x9d unsupported -> no J172 9d/bf writes (REPORTS_READY)\n");
++		} else if (d21_skip_j172_writes) {
++			dev_info(dev, "D21 init: J172 9d/bf writes skipped\n");
++		} else {
++			error = apple_z2_write_report_locked(z2, 0x9d, rep9d,
++							     sizeof(rep9d), "d21-9d-1");
++			dev_info(dev, "D21 init: 9d write1 err=%d\n", error);
++			usleep_range(50500, 50700);
++			error = apple_z2_write_report_locked(z2, 0x9d, rep9d,
++							     sizeof(rep9d), "d21-9d-2");
++			dev_info(dev, "D21 init: 9d write2 err=%d\n", error);
++			error = apple_z2_write_report_locked(z2, 0xbf, repbf,
++							     sizeof(repbf), "d21-bf");
++			dev_info(dev, "D21 init: bf write err=%d\n", error);
++		}
++
++		/*
++		 * The report-enable knobs stay available in this order too:
++		 * D21 is D11-descended (its status frame is the D11 status
++		 * report), so the D11 report-enable (0xe2) and the
++		 * high-level state (0x72) may yet be the missing arms - but
++		 * now they are written after the reads and the settle, which
++		 * is the only ordering never tried.
++		 */
++		if (d21_af_val >= 0) {
++			u8 af_data = d21_af_val & 0xff;
++
++			error = apple_z2_write_report_locked(z2, APPLE_Z2_REPORT_ENABLE,
++							     &af_data, sizeof(af_data),
++							     "d21-af-write");
++			dev_info(dev, "D21 init: af write %#x err=%d\n",
++				 af_data, error);
++		}
++		if (d21_e2_val >= 0) {
++			u8 e2_data = d21_e2_val & 0xff;
++
++			error = apple_z2_write_report_locked(z2,
++							     APPLE_Z2_D11_REPORT_ENABLE,
++							     &e2_data, sizeof(e2_data),
++							     "d21-e2-write");
++			dev_info(dev, "D21 init: e2 write %#x err=%d\n",
++				 e2_data, error);
++		}
++		if (d21_hl_state >= 0) {
++			u8 high_level[8] = { };
++
++			high_level[1] = d21_hl_state & 0xff;
++			error = apple_z2_write_report_locked(z2,
++							     APPLE_Z2_REPORT_HIGH_LEVEL,
++							     high_level,
++							     sizeof(high_level),
++							     "d21-72-active");
++			dev_info(dev, "D21 init: 72 set-state %u err=%d\n",
++				 high_level[1], error);
++			apple_z2_d21_probe_report(z2, APPLE_Z2_REPORT_HIGH_LEVEL,
++						  "d21-72-after");
++		}
++
++		dev_info(dev,
++			 "D21 init: J71b order complete\n");
++		return apple_z2_d21_probe_tail(z2);
+ 	}
+ 
+ 	if (d21_skip_j172_writes) {
+@@ -2484,6 +2663,20 @@ static int apple_z2_d21_init_locked(struct apple_z2 *z2)
+ 		}
+ 	}
+ 
++	return apple_z2_d21_probe_tail(z2);
++}
++
++/*
++ * Diagnostics that run after either init order: the report-table sweep (what
++ * changes under a finger), the focused single-report probe and the
++ * interrupt-data poll harness.
++ */
++static int apple_z2_d21_probe_tail(struct apple_z2 *z2)
++{
++	struct device *dev = &z2->spidev->dev;
++	unsigned int i;
++	int error;
++
+ 	/*
+ 	 * Sample the controller's own view of itself: the high-level state
+ 	 * and the scan timing counters, the latter repeatedly so an advancing
+@@ -2493,7 +2686,7 @@ static int apple_z2_d21_init_locked(struct apple_z2 *z2)
+ 		struct apple_z2_cand {
+ 			u8 id;
+ 			u16 len;
+-			u8 prev[8];
++			u8 prev[400];
+ 		} *cand;
+ 		unsigned int n = 0;
+ 		unsigned int k;
+@@ -2502,8 +2695,10 @@ static int apple_z2_d21_init_locked(struct apple_z2 *z2)
+ 		 * Find the report that actually carries contacts. Walk the
+ 		 * whole table and then read every report that exists, logging
+ 		 * the ones that change: a contact report changes under a
+-		 * finger, counters change all the time, and anything that stays
+-		 * put is inert data.
++		 * finger, counters change all the time, and anything that
++		 * stays put is inert data.  The comparison and the dumps cover
++		 * the whole payload - an 8-byte-prefix diff silently missed
++		 * contact data living deeper in a report.
+ 		 */
+ 		cand = kcalloc(0x100, sizeof(*cand), GFP_KERNEL);
+ 		if (cand) {
+@@ -2515,9 +2710,12 @@ static int apple_z2_d21_init_locked(struct apple_z2 *z2)
+ 									 &cand_status,
+ 									 &cand_len,
+ 									 "d21-cand");
+-				if (!error && cand_len > 1 && cand_len <= 400) {
++				if (!error && cand_len > 1 &&
++				    cand_len <= sizeof(cand->prev)) {
+ 					cand[n].id = i;
+ 					cand[n].len = cand_len;
++					memset(cand[n].prev, 0,
++					       sizeof(cand[n].prev));
+ 					n++;
+ 				}
+ 			}
+@@ -2525,6 +2723,9 @@ static int apple_z2_d21_init_locked(struct apple_z2 *z2)
+ 
+ 			for (i = 0; i < 120; i++) {
+ 				for (k = 0; k < n; k++) {
++					unsigned int seg;
++					bool changed;
++
+ 					if (!cand[k].len)
+ 						continue;
+ 					error = apple_z2_read_report_locked(z2,
+@@ -2535,18 +2736,25 @@ static int apple_z2_d21_init_locked(struct apple_z2 *z2)
+ 						cand[k].len = 0;
+ 						continue;
+ 					}
+-					if (memcmp(cand[k].prev,
+-						   z2->rx_buf + 3,
+-						   sizeof(cand[k].prev))) {
+-						memcpy(cand[k].prev,
+-						       z2->rx_buf + 3,
+-						       sizeof(cand[k].prev));
+-						dev_info(dev,
+-							 "D21 cand %02x: %*ph\n",
+-							 cand[k].id,
+-							 (int)sizeof(cand[k].prev),
+-							 z2->rx_buf + 3);
++					changed = memcmp(cand[k].prev,
++							 z2->rx_buf + 3,
++							 cand[k].len) != 0;
++					if (!changed)
++						continue;
++					dev_info(dev, "D21 cand %02x changed (len %u):\n",
++						 cand[k].id, cand[k].len);
++					dev_info(dev, "  was: %*ph\n",
++						 (int)cand[k].len,
++						 cand[k].prev);
++					for (seg = 0; seg < cand[k].len;
++					     seg += 48) {
++						dev_info(dev, "  now: %*ph\n",
++							 (int)min(48u,
++								  cand[k].len - seg),
++							 z2->rx_buf + 3 + seg);
+ 					}
++					memcpy(cand[k].prev, z2->rx_buf + 3,
++					       cand[k].len);
+ 				}
+ 				msleep(100);
+ 			}
+@@ -2585,6 +2793,58 @@ static int apple_z2_d21_init_locked(struct apple_z2 *z2)
+ 		}
+ 	}
+ 
++	/*
++	 * Focused watcher: full-payload dumps of the named reports, logged
++	 * only when the payload changes.  The generic sweep floods the ring
++	 * buffer so hard that the touch window falls out of it; this keeps a
++	 * touch-vs-idle diff readable.
++	 */
++	if (d21_watch_ids[0]) {
++		u8 ids[16];
++		u8 (*prev)[400];
++		bool seen[16] = { };
++		unsigned int n = 0;
++		unsigned int k, it, seg;
++		char *p = d21_watch_ids ? d21_watch_ids : "";
++
++		while (*p && n < ARRAY_SIZE(ids)) {
++			ids[n] = (u8)simple_strtoul(p, &p, 16);
++			if (*p == ',')
++				p++;
++			n++;
++		}
++		prev = kcalloc(n, sizeof(*prev), GFP_KERNEL);
++		if (prev) {
++			for (it = 0; it < d21_probe_times; it++) {
++				for (k = 0; k < n; k++) {
++					u8 st = 0;
++					u16 len = 0;
++
++					error = apple_z2_read_report_info_locked(z2, ids[k], &st, &len, "watch");
++					if (error || !len || len > 400)
++						continue;
++					error = apple_z2_read_report_locked(z2, ids[k], len, "watch");
++					if (error)
++						continue;
++					if (seen[k] &&
++					    !memcmp(prev[k], z2->rx_buf + 3, len))
++						continue;
++					dev_info(dev, "D21 watch %02x (len %u)%s:\n",
++						 ids[k], len,
++						 seen[k] ? " changed" : " base");
++					for (seg = 0; seg < len; seg += 48)
++						dev_info(dev, "  %*ph\n",
++							 (int)min(48u, len - seg),
++							 z2->rx_buf + 3 + seg);
++					memcpy(prev[k], z2->rx_buf + 3, len);
++					seen[k] = true;
++				}
++				msleep(100);
++			}
++			kfree(prev);
++		}
++	}
++
+ 	return 0;
+ }
+ 
+-- 
+2.55.0
+

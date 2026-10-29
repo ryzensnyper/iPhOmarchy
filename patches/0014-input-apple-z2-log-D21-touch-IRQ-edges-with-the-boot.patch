@@ -1,0 +1,26 @@
+From 14a66713a5755ee9d39a9298ce39d18dff9fc8f0 Mon Sep 17 00:00:00 2001
+From: dugs <dugahol@protonmail.com>
+Date: Thu, 29 Oct 2026 07:25:17 +1030
+Subject: [PATCH 14/19] input: apple-z2: log D21 touch IRQ edges with the
+ booted state
+
+---
+ drivers/input/touchscreen/apple_z2.c | 2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/drivers/input/touchscreen/apple_z2.c b/drivers/input/touchscreen/apple_z2.c
+index 798021a87..a52182bcd 100644
+--- a/drivers/input/touchscreen/apple_z2.c
++++ b/drivers/input/touchscreen/apple_z2.c
+@@ -1362,6 +1362,8 @@ static irqreturn_t apple_z2_irq(int irq, void *data)
+ 	 * calibration.
+ 	 */
+ 	complete(&z2->boot_irq);
++	dev_info_ratelimited(&z2->spidev->dev, "D21: touch IRQ edge, booted=%d\n",
++			     z2->booted);
+ 
+ 	if (!z2->booted) {
+ 		return IRQ_HANDLED;
+-- 
+2.55.0
+

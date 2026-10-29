@@ -1,0 +1,76 @@
+From 592435ee710350a252cc05c4120a9aaaaa642166 Mon Sep 17 00:00:00 2001
+From: dugs <dugahol@protonmail.com>
+Date: Thu, 29 Oct 2026 14:13:20 +1030
+Subject: [PATCH 19/19] input: apple-z2: D21 poll_watch knob - post-arming
+ report watcher
+
+---
+ drivers/input/touchscreen/apple_z2.c | 45 ++++++++++++++++++++++++++++
+ 1 file changed, 45 insertions(+)
+
+diff --git a/drivers/input/touchscreen/apple_z2.c b/drivers/input/touchscreen/apple_z2.c
+index 8c4ddba1b..dc06f3ab9 100644
+--- a/drivers/input/touchscreen/apple_z2.c
++++ b/drivers/input/touchscreen/apple_z2.c
+@@ -2366,6 +2366,13 @@ module_param_named(rmw, d21_rmw, charp, 0444);
+ MODULE_PARM_DESC(rmw,
+ 		 "D21: comma-separated id:len read-modify-write entries applied after the writes "
+ 		 "(reads len bytes and writes them straight back, e.g. rmw=a6:4)");
++static int d21_poll_watch;
++module_param_named(poll_watch, d21_poll_watch, int, 0444);
++MODULE_PARM_DESC(poll_watch,
++		 "D21: read this report id every poll iteration and dump changes (post-arming watch)");
++static int d21_poll_watch_len = 512;
++module_param_named(poll_watch_len, d21_poll_watch_len, int, 0444);
++MODULE_PARM_DESC(poll_watch_len, "D21: cap the poll-watch read length");
+ 
+ /*
+  * Orchard's working J71b runtime (same HBPP 0x103 generation as D21) switches
+@@ -3108,6 +3115,44 @@ static int apple_z2_d21_probe_tail(struct apple_z2 *z2)
+ 			error = apple_z2_read_packet(z2);
+ 			dev_info(dev, "D21 poll %u: err=%d valid=%d\n", k, error,
+ 				 z2->runtime_frame_valid);
++			if (d21_poll_watch) {
++				u8 st = 0;
++				u16 wlen = 0;
++				static u8 prev[512];
++				static bool have;
++
++				error = apple_z2_read_report_info_locked(z2,
++					 d21_poll_watch, &st, &wlen,
++					 "poll-watch");
++				if (!error && wlen && wlen <= 512 &&
++				    wlen <= d21_poll_watch_len) {
++					error = apple_z2_read_report_locked(z2,
++						d21_poll_watch, wlen,
++						"poll-watch-read");
++					if (!error && (!have ||
++					    memcmp(prev, z2->rx_buf + 3,
++						   wlen))) {
++						unsigned int seg;
++
++						dev_info(dev,
++							 "poll-watch %02x (len %u)%s:\n",
++							 d21_poll_watch, wlen,
++							 have ? " changed" :
++								" base");
++						for (seg = 0; seg < wlen;
++						     seg += 48)
++							dev_info(dev, "  %*ph\n",
++							      (int)min_t(size_t,
++								 wlen - seg,
++								 48U),
++							      z2->rx_buf + 3 +
++								      seg);
++						memcpy(prev, z2->rx_buf + 3,
++						       wlen);
++						have = true;
++					}
++				}
++			}
+ 			msleep(100);
+ 		}
+ 	}
+-- 
+2.55.0
+

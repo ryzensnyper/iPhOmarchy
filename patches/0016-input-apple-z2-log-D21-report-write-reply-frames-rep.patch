@@ -1,0 +1,59 @@
+From d66e31cb02571fda53a814d8a1c3bcbb6cba604a Mon Sep 17 00:00:00 2001
+From: dugs <dugahol@protonmail.com>
+Date: Thu, 29 Oct 2026 10:13:40 +1030
+Subject: [PATCH 16/19] input: apple-z2: log D21 report-write reply frames
+ (reply_log=1)
+
+The D21 write path never validated the controller's reply, so a silently
+dropped or NAKed SET_REPORT looked like err=0.  With reply_log=1 the raw
+16-byte reply frame of every report write is logged; the frames decode as
+a rolling [cmd][id][status] command history with a u16-LE byte-sum
+checksum, letting known-good writes (0x72 state, which sticks) be
+compared against writes whose readback never changes (0xc8 detection
+options - accepted with status 00, yet read back unchanged; 0xe2 - a
+J172-ism - rejected with status 03).
+---
+ drivers/input/touchscreen/apple_z2.c | 13 +++++++++++++
+ 1 file changed, 13 insertions(+)
+
+diff --git a/drivers/input/touchscreen/apple_z2.c b/drivers/input/touchscreen/apple_z2.c
+index 614ce4afb..0977eeb7e 100644
+--- a/drivers/input/touchscreen/apple_z2.c
++++ b/drivers/input/touchscreen/apple_z2.c
+@@ -1006,6 +1006,11 @@ static int apple_z2_read_device_info_locked(struct apple_z2 *z2)
+ 					 APPLE_Z2_STATE_DEVICE_INFO);
+ }
+ 
++static bool z2_reply_log;
++module_param_named(reply_log, z2_reply_log, bool, 0444);
++MODULE_PARM_DESC(reply_log,
++		 "Log the raw reply frame of every report write (diagnostic)");
++
+ static int apple_z2_write_report_locked(struct apple_z2 *z2, u8 report,
+ 					const u8 *data, u8 len,
+ 					const char *tag)
+@@ -1026,6 +1031,10 @@ static int apple_z2_write_report_locked(struct apple_z2 *z2, u8 report,
+ 	if (error)
+ 		return error;
+ 
++	if (z2_reply_log)
++		dev_info(&z2->spidev->dev, "%s: write reply: %*ph\n", tag,
++			 APPLE_Z2_CMD_SIZE, z2->rx_buf);
++
+ 	memset(z2->tx_buf, 0, APPLE_Z2_CMD_SIZE);
+ 	memset(z2->rx_buf, 0, APPLE_Z2_CMD_SIZE);
+ 	z2->tx_buf[0] = APPLE_Z2_CMD_LAST;
+@@ -1034,6 +1043,10 @@ static int apple_z2_write_report_locked(struct apple_z2 *z2, u8 report,
+ 	if (error)
+ 		return error;
+ 
++	if (z2_reply_log)
++		dev_info(&z2->spidev->dev, "%s: last reply: %*ph\n", tag,
++			 APPLE_Z2_CMD_SIZE, z2->rx_buf);
++
+ 	if (apple_z2_is_d11(z2) &&
+ 	    (z2->rx_buf[0] != APPLE_Z2_CMD_LAST ||
+ 	     !apple_z2_z2_checksum_valid(z2->rx_buf, APPLE_Z2_CMD_SIZE)))
+-- 
+2.55.0
+

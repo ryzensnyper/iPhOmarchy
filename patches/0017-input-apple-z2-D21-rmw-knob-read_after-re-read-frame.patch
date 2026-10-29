@@ -1,0 +1,289 @@
+From 094b4ae91ea2cbcb1ee6790fd524892cc112bd6f Mon Sep 17 00:00:00 2001
+From: dugs <dugahol@protonmail.com>
+Date: Thu, 29 Oct 2026 10:25:05 +1030
+Subject: [PATCH 17/19] input: apple-z2: D21 rmw= knob, read_after= re-read,
+ frame_dump
+
+- rmw=id:len: read len bytes of a report and write the same payload
+  straight back, after the write= entries - the pattern of the userspace
+  plugin's ReceiverProximityReset property (getReport(0xa6) then
+  setReport(0xa6) of the u32 just read), and a generic poke for reports
+  whose write semantics are unknown.
+- read_after=1: re-run the read= list after the write/rmw entries so
+  readbacks can be compared before vs after arming.
+- frame_dump=1: hex-dump the full interrupt-frame payload on every
+  packet, so the first real contact frames can be decoded empirically
+  (irq-pkt previously capped at 64 bytes).
+---
+ drivers/input/touchscreen/apple_z2.c | 175 +++++++++++++++++++++------
+ 1 file changed, 136 insertions(+), 39 deletions(-)
+
+diff --git a/drivers/input/touchscreen/apple_z2.c b/drivers/input/touchscreen/apple_z2.c
+index 0977eeb7e..8a47a2aef 100644
+--- a/drivers/input/touchscreen/apple_z2.c
++++ b/drivers/input/touchscreen/apple_z2.c
+@@ -678,6 +678,11 @@ static void apple_z2_gen1_prepare_report_read(struct apple_z2 *z2, u8 report,
+ 	apple_z2_z2_checksum(z2->rx_buf, bytes);
+ }
+ 
++static bool z2_frame_dump;
++module_param_named(frame_dump, z2_frame_dump, bool, 0444);
++MODULE_PARM_DESC(frame_dump,
++		 "Log the full interrupt-frame payload on every packet (diagnostic)");
++
+ static int apple_z2_read_packet(struct apple_z2 *z2)
+ {
+ 	struct spi_transfer xfer = { };
+@@ -787,6 +792,14 @@ static int apple_z2_read_packet(struct apple_z2 *z2)
+ 
+ 	dev_info(&z2->spidev->dev, "irq-pkt: len=%zu %*ph\n", pkt_len,
+ 		 (int)min_t(size_t, pkt_len, 64U), z2->rx_buf);
++	if (z2_frame_dump) {
++		size_t off;
++
++		for (off = 0; off < pkt_len; off += 48)
++			dev_info(&z2->spidev->dev, "irq-frame+%zu: %*ph\n",
++				 off, (int)min_t(size_t, pkt_len - off, 48U),
++				 z2->rx_buf + off);
++	}
+ 
+ 	/* D11 touch reports do not follow the requested alternating tag. */
+ 	strict_counter = !apple_z2_is_d11(z2) ||
+@@ -2324,6 +2337,15 @@ module_param_named(read, d21_read_ids, charp, 0444);
+ MODULE_PARM_DESC(read,
+ 		 "D21: comma-separated id:len raw report reads, run before the writes (feature-space "
+ 		 "properties invisible to GET_REPORT_INFO, e.g. read=d1:4,d3:16,7f:16)");
++static bool d21_read_after;
++module_param_named(read_after, d21_read_after, bool, 0444);
++MODULE_PARM_DESC(read_after,
++		 "D21: re-run the read= list after the write/rmw entries to compare readbacks");
++static char *d21_rmw;
++module_param_named(rmw, d21_rmw, charp, 0444);
++MODULE_PARM_DESC(rmw,
++		 "D21: comma-separated id:len read-modify-write entries applied after the writes "
++		 "(reads len bytes and writes them straight back, e.g. rmw=a6:4)");
+ 
+ /*
+  * Orchard's working J71b runtime (same HBPP 0x103 generation as D21) switches
+@@ -2409,6 +2431,54 @@ static void apple_z2_d21_probe_report(struct apple_z2 *z2, u8 report,
+ 			 z2->rx_buf[4]);
+ }
+ 
++/*
++ * Run a comma-separated id:len raw feature-space read list (see the read=
++ * knob).  Idempotent: called before the writes by default and again after
++ * them when read_after=1, to spot readbacks that change once the arming
++ * writes have landed.
++ */
++static void apple_z2_d21_read_list(struct apple_z2 *z2, const char *ids)
++{
++	char *buf, *entry;
++	struct device *dev = &z2->spidev->dev;
++	int error;
++
++	buf = kstrdup(ids, GFP_KERNEL);
++	if (!buf)
++		return;
++	for (entry = buf; entry && *entry; ) {
++		unsigned int id, len;
++		char *comma, *colon;
++
++		comma = strpbrk(entry, ",");
++		if (comma)
++			*comma++ = '\0';
++		colon = strchr(entry, ':');
++		if (!colon) {
++			dev_err(dev, "D21 read: bad entry '%s'\n", entry);
++			entry = comma;
++			continue;
++		}
++		*colon++ = '\0';
++		id = simple_strtoul(entry, NULL, 16);
++		len = simple_strtoul(colon, NULL, 10);
++		if (!len || len > APPLE_Z2_RX_BUF_SIZE - 5) {
++			dev_err(dev, "D21 read: bad len %u\n", len);
++			entry = comma;
++			continue;
++		}
++		error = apple_z2_read_report_locked(z2, id, len, "d21-read");
++		dev_info(dev, "D21 read %02x len %u: err=%d\n", id, len,
++			 error);
++		if (!error)
++			dev_info(dev, "D21 read %02x: %*ph\n", id,
++				 (int)min_t(size_t, len + 5U, 96U),
++				 z2->rx_buf);
++		entry = comma;
++	}
++	kfree(buf);
++}
++
+ static int apple_z2_d21_probe_tail(struct apple_z2 *z2);
+ 
+ static int apple_z2_d21_init_locked(struct apple_z2 *z2)
+@@ -2886,14 +2956,27 @@ static int apple_z2_d21_probe_tail(struct apple_z2 *z2)
+ 	 * descriptor, 0xa1 region param, 0x7f critical errors, 0xd9 surface)
+ 	 * answer here even though GET_REPORT_INFO reports them as not valid.
+ 	 */
+-	if (d21_read_ids && d21_read_ids[0]) {
++	if (d21_read_ids && d21_read_ids[0])
++		apple_z2_d21_read_list(z2, d21_read_ids);
++
++	/*
++	 * Generic post-init report writes, applied after the whole init
++	 * choreography and with the IRQ already live - the position where the
++	 * iOS userspace arming lands (backboardd's MultitouchHID toggles a
++	 * one-byte "detection options" value and sends the touch mode only
++	 * once the device is open and on).  Each entry is id:hexpayload,
++	 * at most 11 payload bytes (CTRL_WRITE_SHORT), e.g.:
++	 *   insmod apple_z2.ko write=c8:01,c8:03
++	 */
++	if (d21_write && d21_write[0]) {
+ 		char *buf, *entry;
+ 
+-		buf = kstrdup(d21_read_ids, GFP_KERNEL);
++		buf = kstrdup(d21_write, GFP_KERNEL);
+ 		if (!buf)
+ 			return -ENOMEM;
+ 		for (entry = buf; entry && *entry; ) {
+-			unsigned int id, len;
++			u8 data[11];
++			unsigned int id, len = 0;
+ 			char *comma, *colon;
+ 
+ 			comma = strpbrk(entry, ",");
+@@ -2901,50 +2984,48 @@ static int apple_z2_d21_probe_tail(struct apple_z2 *z2)
+ 				*comma++ = '\0';
+ 			colon = strchr(entry, ':');
+ 			if (!colon) {
+-				dev_err(dev, "D21 read: bad entry '%s'\n",
++				dev_err(dev, "D21 write: bad entry '%s'\n",
+ 					entry);
+ 				entry = comma;
+ 				continue;
+ 			}
+ 			*colon++ = '\0';
+ 			id = simple_strtoul(entry, NULL, 16);
+-			len = simple_strtoul(colon, NULL, 10);
+-			if (!len || len > APPLE_Z2_RX_BUF_SIZE - 5) {
+-				dev_err(dev, "D21 read: bad len %u\n", len);
+-				entry = comma;
+-				continue;
++			while (colon[0] && colon[1] && len < sizeof(data)) {
++				int hi = hex_to_bin(colon[0]);
++				int lo = hex_to_bin(colon[1]);
++
++				if (hi < 0 || lo < 0)
++					break;
++				data[len++] = (u8)((hi << 4) | lo);
++				colon += 2;
+ 			}
+-			error = apple_z2_read_report_locked(z2, id, len,
+-							    "d21-read");
+-			dev_info(dev, "D21 read %02x len %u: err=%d\n",
++			error = apple_z2_write_report_locked(z2, id, data, len,
++							     "d21-write");
++			dev_info(dev, "D21 write %02x len %u: err=%d\n",
+ 				 id, len, error);
+-			if (!error)
+-				dev_info(dev, "D21 read %02x: %*ph\n", id,
+-					 (int)min_t(size_t, len + 5U, 96U),
+-					 z2->rx_buf);
+ 			entry = comma;
+ 		}
+ 		kfree(buf);
+ 	}
+ 
+ 	/*
+-	 * Generic post-init report writes, applied after the whole init
+-	 * choreography and with the IRQ already live - the position where the
+-	 * iOS userspace arming lands (backboardd's MultitouchHID toggles a
+-	 * one-byte "detection options" value and sends the touch mode only
+-	 * once the device is open and on).  Each entry is id:hexpayload,
+-	 * at most 11 payload bytes (CTRL_WRITE_SHORT), e.g.:
+-	 *   insmod apple_z2.ko write=c8:01,c8:03
++	 * Read-modify-write entries ("rmw=id:len", applied after the writes):
++	 * read len bytes of the report and write the same payload straight
++	 * back - the pattern of the userspace plugin's ReceiverProximityReset
++	 * property (getReport(0xa6) then setReport(0xa6) of the u32 just
++	 * read), and a generic "poke" for reports whose write semantics are
++	 * unknown.
+ 	 */
+-	if (d21_write && d21_write[0]) {
++	if (d21_rmw && d21_rmw[0]) {
+ 		char *buf, *entry;
+ 
+-		buf = kstrdup(d21_write, GFP_KERNEL);
++		buf = kstrdup(d21_rmw, GFP_KERNEL);
+ 		if (!buf)
+ 			return -ENOMEM;
+ 		for (entry = buf; entry && *entry; ) {
+-			u8 data[11];
+-			unsigned int id, len = 0;
++			u8 data[32];
++			unsigned int id, len;
+ 			char *comma, *colon;
+ 
+ 			comma = strpbrk(entry, ",");
+@@ -2952,31 +3033,47 @@ static int apple_z2_d21_probe_tail(struct apple_z2 *z2)
+ 				*comma++ = '\0';
+ 			colon = strchr(entry, ':');
+ 			if (!colon) {
+-				dev_err(dev, "D21 write: bad entry '%s'\n",
++				dev_err(dev, "D21 rmw: bad entry '%s'\n",
+ 					entry);
+ 				entry = comma;
+ 				continue;
+ 			}
+ 			*colon++ = '\0';
+ 			id = simple_strtoul(entry, NULL, 16);
+-			while (colon[0] && colon[1] && len < sizeof(data)) {
+-				int hi = hex_to_bin(colon[0]);
+-				int lo = hex_to_bin(colon[1]);
+-
+-				if (hi < 0 || lo < 0)
+-					break;
+-				data[len++] = (u8)((hi << 4) | lo);
+-				colon += 2;
++			len = simple_strtoul(colon, NULL, 10);
++			if (!len || len > sizeof(data)) {
++				dev_err(dev, "D21 rmw: bad len %u\n", len);
++				entry = comma;
++				continue;
+ 			}
+-			error = apple_z2_write_report_locked(z2, id, data, len,
+-							     "d21-write");
+-			dev_info(dev, "D21 write %02x len %u: err=%d\n",
++			error = apple_z2_read_report_locked(z2, id, len,
++							    "d21-rmw-read");
++			dev_info(dev, "D21 rmw %02x read len %u: err=%d\n",
++				 id, len, error);
++			if (error) {
++				entry = comma;
++				continue;
++			}
++			if (z2_reply_log)
++				dev_info(dev, "d21-rmw-read %02x: %*ph\n",
++					 id,
++					 (int)min_t(size_t, len + 5U, 40U),
++					 z2->rx_buf);
++			/* write_report_locked clobbers rx_buf - copy first */
++			memcpy(data, z2->rx_buf + 3, len);
++			error = apple_z2_write_report_locked(z2, id, data,
++							     len,
++							     "d21-rmw-write");
++			dev_info(dev, "D21 rmw %02x write len %u: err=%d\n",
+ 				 id, len, error);
+ 			entry = comma;
+ 		}
+ 		kfree(buf);
+ 	}
+ 
++	if (d21_read_after && d21_read_ids && d21_read_ids[0])
++		apple_z2_d21_read_list(z2, d21_read_ids);
++
+ 
+ 
+ 	/*
+-- 
+2.55.0
+

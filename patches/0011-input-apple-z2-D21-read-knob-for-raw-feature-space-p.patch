@@ -1,0 +1,191 @@
+From 72f189de1afae28a7385fa428af335ff4b08cbad Mon Sep 17 00:00:00 2001
+From: dugs <dugahol@protonmail.com>
+Date: Thu, 29 Oct 2026 06:51:47 +1030
+Subject: [PATCH 11/19] input: apple-z2: D21 read= knob for raw feature-space
+ property reads
+
+---
+ drivers/input/touchscreen/apple_z2.c | 152 ++++++++++++++++++---------
+ 1 file changed, 104 insertions(+), 48 deletions(-)
+
+diff --git a/drivers/input/touchscreen/apple_z2.c b/drivers/input/touchscreen/apple_z2.c
+index fe394fc3b..fe8a23ae1 100644
+--- a/drivers/input/touchscreen/apple_z2.c
++++ b/drivers/input/touchscreen/apple_z2.c
+@@ -800,6 +800,104 @@ static int apple_z2_read_packet(struct apple_z2 *z2)
+ 	apple_z2_dispatch_frame(z2, z2->rx_buf + 5, payload_len - 2);
+ 	z2->index_parity = !z2->index_parity;
+ 
++	/*
++	 * Raw feature-space reads, run before the writes: the property reports
++	 * AppleMultitouchHIDService reads on every open (0xd1 family id,
++	 * 0xd3 rows/cols/bcd/max-packet, 0xd0 region descriptor, 0xa1 region
++	 * param, 0x7f critical errors, 0xd9 surface) answer here even though
++	 * GET_REPORT_INFO reports them as not valid.
++	 */
++	if (d21_read_ids && d21_read_ids[0]) {
++		char *buf, *entry;
++
++		buf = kstrdup(d21_read_ids, GFP_KERNEL);
++		if (!buf)
++			return -ENOMEM;
++		for (entry = buf; entry && *entry; ) {
++			unsigned int id, len;
++			char *comma, *colon;
++
++			comma = strpbrk(entry, ",");
++			if (comma)
++				*comma++ = '\0';
++			colon = strchr(entry, ':');
++			if (!colon) {
++				dev_err(dev, "D21 read: bad entry '%s'\n",
++					entry);
++				entry = comma;
++				continue;
++			}
++			*colon++ = '\0';
++			id = simple_strtoul(entry, NULL, 16);
++			len = simple_strtoul(colon, NULL, 10);
++			if (!len || len > APPLE_Z2_RX_BUF_SIZE - 5) {
++				dev_err(dev, "D21 read: bad len %u\n", len);
++				entry = comma;
++				continue;
++			}
++			error = apple_z2_read_report_locked(z2, id, len,
++							    "d21-read");
++			dev_info(dev, "D21 read %02x len %u: err=%d\n",
++				 id, len, error);
++			if (!error)
++				dev_info(dev, "D21 read %02x: %*ph\n", id,
++					 (int)min_t(size_t, len + 5U, 96U),
++					 z2->rx_buf);
++			entry = comma;
++		}
++		kfree(buf);
++	}
++
++	/*
++	 * Generic post-init report writes, applied after the whole init
++	 * choreography and with the IRQ already live - the position where the
++	 * iOS userspace arming lands (backboardd's MultitouchHID toggles a
++	 * one-byte "detection options" value and sends the touch mode only
++	 * once the device is open and on).  Each entry is id:hexpayload,
++	 * at most 11 payload bytes (CTRL_WRITE_SHORT), e.g.:
++	 *   insmod apple_z2.ko write=c8:01,c8:03
++	 */
++	if (d21_write && d21_write[0]) {
++		char *buf, *entry;
++
++		buf = kstrdup(d21_write, GFP_KERNEL);
++		if (!buf)
++			return -ENOMEM;
++		for (entry = buf; entry && *entry; ) {
++			u8 data[11];
++			unsigned int id, len = 0;
++			char *comma, *colon;
++
++			comma = strpbrk(entry, ",");
++			if (comma)
++				*comma++ = '\0';
++			colon = strchr(entry, ':');
++			if (!colon) {
++				dev_err(dev, "D21 write: bad entry '%s'\n",
++					entry);
++				entry = comma;
++				continue;
++			}
++			*colon++ = '\0';
++			id = simple_strtoul(entry, NULL, 16);
++			while (colon[0] && colon[1] && len < sizeof(data)) {
++				int hi = hex_to_bin(colon[0]);
++				int lo = hex_to_bin(colon[1]);
++
++				if (hi < 0 || lo < 0)
++					break;
++				data[len++] = (u8)((hi << 4) | lo);
++				colon += 2;
++			}
++			error = apple_z2_write_report_locked(z2, id, data, len,
++							     "d21-write");
++			dev_info(dev, "D21 write %02x len %u: err=%d\n",
++				 id, len, error);
++			entry = comma;
++		}
++		kfree(buf);
++	}
++
+ 	return 0;
+ }
+ 
+@@ -2306,6 +2404,12 @@ static char *d21_write;
+ module_param_named(write, d21_write, charp, 0444);
+ MODULE_PARM_DESC(write,
+ 		 "D21: comma-separated id:hexpayload report writes applied after the whole init (e.g. write=c8:01,9d:0200)");
++static char *d21_read_ids;
++module_param_named(read, d21_read_ids, charp, 0444);
++MODULE_PARM_DESC(read,
++		 "D21: comma-separated id:len raw report reads after the writes (feature-space "
++		 "properties, e.g. read=d1:4,d3:16,7f:16 - lengths are explicit because "
++		 "GET_REPORT_INFO does not describe the feature namespace)");
+ 
+ /*
+  * Orchard's working J71b runtime (same HBPP 0x103 generation as D21) switches
+@@ -2811,55 +2915,7 @@ static int apple_z2_d21_probe_tail(struct apple_z2 *z2)
+ 		apple_z2_d21_probe_report(z2, 0x72, "d21-72-state");
+ 	}
+ 
+-	/*
+-	 * Generic post-init report writes, applied after the whole init
+-	 * choreography and with the IRQ already live - the position where the
+-	 * iOS userspace arming lands (backboardd's MultitouchHID toggles a
+-	 * one-byte "detection options" value and sends the touch mode only
+-	 * once the device is open and on).  Each entry is id:hexpayload,
+-	 * at most 11 payload bytes (CTRL_WRITE_SHORT), e.g.:
+-	 *   insmod apple_z2.ko write=c8:01,c8:03
+-	 */
+-	if (d21_write && d21_write[0]) {
+-		char *buf, *entry;
+ 
+-		buf = kstrdup(d21_write, GFP_KERNEL);
+-		if (!buf)
+-			return -ENOMEM;
+-		for (entry = buf; entry && *entry; ) {
+-			u8 data[11];
+-			unsigned int id, len = 0;
+-			char *comma, *colon;
+-
+-			comma = strpbrk(entry, ",");
+-			if (comma)
+-				*comma++ = '\0';
+-			colon = strchr(entry, ':');
+-			if (!colon) {
+-				dev_err(dev, "D21 write: bad entry '%s'\n",
+-					entry);
+-				entry = comma;
+-				continue;
+-			}
+-			*colon++ = '\0';
+-			id = simple_strtoul(entry, NULL, 16);
+-			while (colon[0] && colon[1] && len < sizeof(data)) {
+-				int hi = hex_to_bin(colon[0]);
+-				int lo = hex_to_bin(colon[1]);
+-
+-				if (hi < 0 || lo < 0)
+-					break;
+-				data[len++] = (u8)((hi << 4) | lo);
+-				colon += 2;
+-			}
+-			error = apple_z2_write_report_locked(z2, id, data, len,
+-							     "d21-write");
+-			dev_info(dev, "D21 write %02x len %u: err=%d\n",
+-				 id, len, error);
+-			entry = comma;
+-		}
+-		kfree(buf);
+-	}
+ 
+ 	/*
+ 	 * Focused diagnostic: read one report id repeatedly so a counter report
+-- 
+2.55.0
+

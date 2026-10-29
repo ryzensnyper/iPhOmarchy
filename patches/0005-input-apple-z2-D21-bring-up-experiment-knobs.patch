@@ -1,0 +1,207 @@
+From fb79092f4c16ea2384b8f4d1ce49109dfa057695 Mon Sep 17 00:00:00 2001
+From: agent <agent@local>
+Date: Wed, 28 Oct 2026 16:15:15 +1030
+Subject: [PATCH 05/19] input: apple-z2: D21 bring-up experiment knobs
+
+Module parameters to A/B the D21 runtime initialisation without a rebuild:
+  skip_j172_writes  skip the J172 0x9d/0xbf mode-setup writes
+  af_val / e2_val   value for the 0xaf / 0xe2 report-enable writes (-1 skips)
+  hl_state          report 0x72 offset-1 high-level state (-1 skips)
+  probe_id/times    read one report id repeatedly (counter diagnostics)
+  poll              poll the interrupt-data queue after init
+
+Off by default: a normal load is byte-for-byte the previous behaviour.
+Built for vermagic g30a2e7532 (git reset --soft 30a2e7532 before building).
+---
+ drivers/input/touchscreen/apple_z2.c | 138 +++++++++++++++++++++------
+ 1 file changed, 107 insertions(+), 31 deletions(-)
+
+diff --git a/drivers/input/touchscreen/apple_z2.c b/drivers/input/touchscreen/apple_z2.c
+index 0bbf2b623..ae6794dbe 100644
+--- a/drivers/input/touchscreen/apple_z2.c
++++ b/drivers/input/touchscreen/apple_z2.c
+@@ -2229,6 +2229,39 @@ static bool apple_z2_probe_reports;
+ module_param_named(probe_reports, apple_z2_probe_reports, bool, 0444);
+ MODULE_PARM_DESC(probe_reports, "Sample the controller state and counter reports");
+ 
++/*
++ * Bring-up experiment knobs.  D21 is HBPP 0x103, the same firmware generation
++ * as Orchard's verified J71b, yet its report table also exposes the 0x9d/0xbf/
++ * 0xaf reports that the J172 path uses.  Rather than guess, let every step of
++ * the runtime initialisation be skipped or re-valued without a rebuild:
++ *   - 0x9d/0xbf are J172 "mode setup", skipped on J71b;
++ *   - 0xaf is a report-enable whose value the J71b image does not implement;
++ *   - 0xe2 enables the iPhone-family report set;
++ *   - 0x72 offset 1 is the "Multitouch high level" power/UI state.
++ * A -1 value skips that write entirely.
++ */
++static bool d21_skip_j172_writes;
++module_param_named(skip_j172_writes, d21_skip_j172_writes, bool, 0444);
++MODULE_PARM_DESC(skip_j172_writes, "Skip the J172 0x9d/0xbf mode-setup writes");
++static int d21_af_val = 0;
++module_param_named(af_val, d21_af_val, int, 0444);
++MODULE_PARM_DESC(af_val, "Value written to report 0xaf, or -1 to skip");
++static int d21_e2_val = 1;
++module_param_named(e2_val, d21_e2_val, int, 0444);
++MODULE_PARM_DESC(e2_val, "Value written to report 0xe2, or -1 to skip");
++static int d21_hl_state = 1;
++module_param_named(hl_state, d21_hl_state, int, 0444);
++MODULE_PARM_DESC(hl_state, "Report 0x72 offset 1 high-level state, or -1 to skip");
++static int d21_probe_id = -1;
++module_param_named(probe_id, d21_probe_id, int, 0444);
++MODULE_PARM_DESC(probe_id, "Read this report id repeatedly after init (diagnostic)");
++static int d21_probe_times = 20;
++module_param_named(probe_times, d21_probe_times, int, 0444);
++MODULE_PARM_DESC(probe_times, "How many times to read probe_id");
++static bool d21_poll;
++module_param_named(poll, d21_poll, bool, 0444);
++MODULE_PARM_DESC(poll, "Poll the interrupt-data queue after init (probe_times x 100 ms)");
++
+ /*
+  * Read a report back and log it. The controller's own configuration for this
+  * part declares two host-visible reports: 0xf8 carries the scan timing
+@@ -2269,8 +2302,6 @@ static int apple_z2_d21_init_locked(struct apple_z2 *z2)
+ 	static const u8 rep9d[] = { 0x01, 0x00, 0x00, 0x00,
+ 				    0x00, 0x00, 0x00, 0x00 };
+ 	static const u8 repbf[] = { 0x9d, 0x81, 0x09, 0x00 };
+-	static const u8 disable_legacy_reports[] = { 0 };
+-	static const u8 enable_reports = 1;
+ 	struct device *dev = &z2->spidev->dev;
+ 	u8 high_level[8] = { };	/* the state channel sits at offset 1 */
+ 	u8 status = 0;
+@@ -2319,16 +2350,20 @@ static int apple_z2_d21_init_locked(struct apple_z2 *z2)
+ 		dev_info(dev, "D21 init: 73 read err=%d len=%u\n", error, len);
+ 	}
+ 
+-	error = apple_z2_write_report_locked(z2, 0x9d, rep9d, sizeof(rep9d),
+-					     "d21-9d-1");
+-	dev_info(dev, "D21 init: 9d write1 err=%d\n", error);
+-	usleep_range(50500, 50700);
+-	error = apple_z2_write_report_locked(z2, 0x9d, rep9d, sizeof(rep9d),
+-					     "d21-9d-2");
+-	dev_info(dev, "D21 init: 9d write2 err=%d\n", error);
+-	error = apple_z2_write_report_locked(z2, 0xbf, repbf, sizeof(repbf),
+-					     "d21-bf");
+-	dev_info(dev, "D21 init: bf write err=%d\n", error);
++	if (d21_skip_j172_writes) {
++		dev_info(dev, "D21 init: J172 9d/bf writes skipped\n");
++	} else {
++		error = apple_z2_write_report_locked(z2, 0x9d, rep9d,
++						     sizeof(rep9d), "d21-9d-1");
++		dev_info(dev, "D21 init: 9d write1 err=%d\n", error);
++		usleep_range(50500, 50700);
++		error = apple_z2_write_report_locked(z2, 0x9d, rep9d,
++						     sizeof(rep9d), "d21-9d-2");
++		dev_info(dev, "D21 init: 9d write2 err=%d\n", error);
++		error = apple_z2_write_report_locked(z2, 0xbf, repbf,
++						     sizeof(repbf), "d21-bf");
++		dev_info(dev, "D21 init: bf write err=%d\n", error);
++	}
+ 
+ 	status = 0; len = 0;
+ 	error = apple_z2_read_report_info_locked(z2, 0xaf, &status, &len,
+@@ -2337,22 +2372,28 @@ static int apple_z2_d21_init_locked(struct apple_z2 *z2)
+ 		 error, status, len);
+ 
+ 	/*
+-	 * Enable reporting, as the iPhone-family initialisation does: disable
+-	 * the legacy report set and then enable the one this controller is
+-	 * expected to stream. Without this the controller is initialised but
+-	 * never sends anything, which is exactly what we were seeing.
++	 * Enable reporting, as the iPhone-family initialisation does: write the
++	 * legacy report-enable (0xaf) and then the iPhone-family one (0xe2).
++	 * Both values are overridable; -1 skips the write.
+ 	 */
+-	error = apple_z2_write_report_locked(z2, APPLE_Z2_REPORT_ENABLE,
+-					     disable_legacy_reports,
+-					     sizeof(disable_legacy_reports),
+-					     "d21-af-disable");
+-	dev_info(dev, "D21 init: af disable err=%d\n", error);
++	if (d21_af_val >= 0) {
++		u8 af_data = d21_af_val & 0xff;
++
++		error = apple_z2_write_report_locked(z2, APPLE_Z2_REPORT_ENABLE,
++						     &af_data, sizeof(af_data),
++						     "d21-af-write");
++		dev_info(dev, "D21 init: af write %#x err=%d\n", af_data, error);
++	}
+ 
+-	error = apple_z2_write_report_locked(z2, APPLE_Z2_D11_REPORT_ENABLE,
+-					     &enable_reports,
+-					     sizeof(enable_reports),
+-					     "d21-e2-enable");
+-	dev_info(dev, "D21 init: e2 enable err=%d\n", error);
++	if (d21_e2_val >= 0) {
++		u8 e2_data = d21_e2_val & 0xff;
++
++		error = apple_z2_write_report_locked(z2,
++						     APPLE_Z2_D11_REPORT_ENABLE,
++						     &e2_data, sizeof(e2_data),
++						     "d21-e2-write");
++		dev_info(dev, "D21 init: e2 write %#x err=%d\n", e2_data, error);
++	}
+ 
+ 	/*
+ 	 * The controller reads its high-level power state back as Unknown until
+@@ -2360,11 +2401,16 @@ static int apple_z2_d21_init_locked(struct apple_z2 *z2)
+ 	 * undefined. Declare the UI live, as the host does once it is ready to
+ 	 * consume input.
+ 	 */
+-	high_level[1] = APPLE_Z2_HIGH_LEVEL_ACTIVE;
+-	error = apple_z2_write_report_locked(z2, APPLE_Z2_REPORT_HIGH_LEVEL,
+-					     high_level, sizeof(high_level),
+-					     "d21-72-active");
+-	dev_info(dev, "D21 init: 72 set-active err=%d\n", error);
++	if (d21_hl_state >= 0) {
++		high_level[1] = d21_hl_state & 0xff;
++		error = apple_z2_write_report_locked(z2,
++						     APPLE_Z2_REPORT_HIGH_LEVEL,
++						     high_level,
++						     sizeof(high_level),
++						     "d21-72-active");
++		dev_info(dev, "D21 init: 72 set-state %u err=%d\n",
++			 high_level[1], error);
++	}
+ 	apple_z2_d21_probe_report(z2, APPLE_Z2_REPORT_HIGH_LEVEL,
+ 				  "d21-72-after");
+ 
+@@ -2439,6 +2485,36 @@ static int apple_z2_d21_init_locked(struct apple_z2 *z2)
+ 		apple_z2_d21_probe_report(z2, 0x72, "d21-72-state");
+ 	}
+ 
++	/*
++	 * Focused diagnostic: read one report id repeatedly so a counter report
++	 * (e.g. 0xf8) can be watched with and without a finger on the panel,
++	 * independently of the interrupt channel.
++	 */
++	if (d21_probe_id >= 0 && d21_probe_id <= 0xff) {
++		unsigned int k;
++
++		for (k = 0; k < d21_probe_times; k++) {
++			apple_z2_d21_probe_report(z2, d21_probe_id, "d21-probe");
++			msleep(100);
++		}
++	}
++
++	/*
++	 * Poll the interrupt-data queue directly.  If the controller has frames
++	 * queued under a finger but the edge-triggered IRQ never delivers them,
++	 * this shows it: apple_z2_read_packet logs irq-rx/irq-pkt per poll.
++	 */
++	if (d21_poll) {
++		unsigned int k;
++
++		for (k = 0; k < d21_probe_times; k++) {
++			error = apple_z2_read_packet(z2);
++			dev_info(dev, "D21 poll %u: err=%d valid=%d\n", k, error,
++				 z2->runtime_frame_valid);
++			msleep(100);
++		}
++	}
++
+ 	/*
+ 	 * The interrupt trigger stays as the device tree declares it
+ 	 * (edge-falling, as mainline's touchbar nodes and the working D111
+-- 
+2.55.0
+

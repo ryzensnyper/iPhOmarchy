@@ -1,0 +1,117 @@
+From c4598293a29f0c09d1d32f036e1f5ce0173ec3f7 Mon Sep 17 00:00:00 2001
+From: dugs <dugahol@protonmail.com>
+Date: Thu, 29 Oct 2026 05:10:15 +1030
+Subject: [PATCH 08/19] input: apple-z2: D21 watch 1-byte reports, generic
+ post-init write knob
+
+The probe_reports watch skipped reports shorter than two bytes, but the
+iOS userspace arming toggle is exactly a one-byte 'detection options'
+report (0xc8), so keep len==1 reports in the watch.
+
+Add a write= module parameter taking comma-separated id:hexpayload
+report writes applied after the whole init choreography, with the IRQ
+already live - the position where the iOS userspace arming (detection
+options bit0, touch mode) happens relative to open. Each candidate
+arming write is now an insmod flag instead of a rebuild.
+---
+ drivers/input/touchscreen/apple_z2.c | 63 +++++++++++++++++++++++++++-
+ 1 file changed, 62 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/input/touchscreen/apple_z2.c b/drivers/input/touchscreen/apple_z2.c
+index 401cb253f..f610446fa 100644
+--- a/drivers/input/touchscreen/apple_z2.c
++++ b/drivers/input/touchscreen/apple_z2.c
+@@ -11,6 +11,7 @@
+ #include <linux/delay.h>
+ #include <linux/firmware.h>
+ #include <linux/gpio/consumer.h>
++#include <linux/hex.h>
+ #include <linux/irq.h>
+ #include <linux/input.h>
+ #include <linux/input/mt.h>
+@@ -2292,6 +2293,10 @@ MODULE_PARM_DESC(poll, "Poll the interrupt-data queue after init (probe_times x
+ static char *d21_watch_ids;
+ module_param_named(watch_ids, d21_watch_ids, charp, 0444);
+ MODULE_PARM_DESC(watch_ids, "Comma-separated hex report ids to watch with full-payload dumps");
++static char *d21_write;
++module_param_named(write, d21_write, charp, 0444);
++MODULE_PARM_DESC(write,
++		 "D21: comma-separated id:hexpayload report writes applied after the whole init (e.g. write=c8:01,9d:0200)");
+ 
+ /*
+  * Orchard's working J71b runtime (same HBPP 0x103 generation as D21) switches
+@@ -2710,7 +2715,13 @@ static int apple_z2_d21_probe_tail(struct apple_z2 *z2)
+ 									 &cand_status,
+ 									 &cand_len,
+ 									 "d21-cand");
+-				if (!error && cand_len > 1 &&
++				/*
++				 * Keep 1-byte reports too: the iOS userspace
++				 * arming toggles a single "detection options"
++				 * byte (id 0xc8 on the wire), so a len==1
++				 * report is exactly the shape to watch.
++				 */
++				if (!error && cand_len >= 1 &&
+ 				    cand_len <= sizeof(cand->prev)) {
+ 					cand[n].id = i;
+ 					cand[n].len = cand_len;
+@@ -2845,6 +2856,56 @@ static int apple_z2_d21_probe_tail(struct apple_z2 *z2)
+ 		}
+ 	}
+ 
++	/*
++	 * Generic post-init report writes, applied after the whole init
++	 * choreography and with the IRQ already live - the position where the
++	 * iOS userspace arming lands (backboardd's MultitouchHID toggles a
++	 * one-byte "detection options" value and sends the touch mode only
++	 * once the device is open and on).  Each entry is id:hexpayload,
++	 * at most 11 payload bytes (CTRL_WRITE_SHORT), e.g.:
++	 *   insmod apple_z2.ko write=c8:01,c8:03
++	 */
++	if (d21_write && d21_write[0]) {
++		char *buf, *entry;
++
++		buf = kstrdup(d21_write, GFP_KERNEL);
++		if (!buf)
++			return -ENOMEM;
++		for (entry = buf; entry && *entry; ) {
++			u8 data[11];
++			unsigned int id, len = 0;
++			char *comma, *colon;
++
++			comma = strpbrk(entry, ",");
++			if (comma)
++				*comma++ = '\0';
++			colon = strchr(entry, ':');
++			if (!colon) {
++				dev_err(dev, "D21 write: bad entry '%s'\n",
++					entry);
++				entry = comma;
++				continue;
++			}
++			*colon++ = '\0';
++			id = simple_strtoul(entry, NULL, 16);
++			while (colon[0] && colon[1] && len < sizeof(data)) {
++				int hi = hex_to_bin(colon[0]);
++				int lo = hex_to_bin(colon[1]);
++
++				if (hi < 0 || lo < 0)
++					break;
++				data[len++] = (u8)((hi << 4) | lo);
++				colon += 2;
++			}
++			error = apple_z2_write_report_locked(z2, id, data, len,
++							     "d21-write");
++			dev_info(dev, "D21 write %02x len %u: err=%d\n",
++				 id, len, error);
++			entry = comma;
++		}
++		kfree(buf);
++	}
++
+ 	return 0;
+ }
+ 
+-- 
+2.55.0
+

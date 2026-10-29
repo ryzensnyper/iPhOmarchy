@@ -1,0 +1,64 @@
+From 9b55532d4432b23270f7a225bfe52d06d8e4470c Mon Sep 17 00:00:00 2001
+From: dugs <dugahol@protonmail.com>
+Date: Thu, 29 Oct 2026 07:13:38 +1030
+Subject: [PATCH 13/19] input: apple-z2: run the D21 poll harness after the
+ arming writes
+
+---
+ drivers/input/touchscreen/apple_z2.c | 33 ++++++++++++++--------------
+ 1 file changed, 17 insertions(+), 16 deletions(-)
+
+diff --git a/drivers/input/touchscreen/apple_z2.c b/drivers/input/touchscreen/apple_z2.c
+index 8fcaa6a27..798021a87 100644
+--- a/drivers/input/touchscreen/apple_z2.c
++++ b/drivers/input/touchscreen/apple_z2.c
+@@ -2804,22 +2804,6 @@ static int apple_z2_d21_probe_tail(struct apple_z2 *z2)
+ 		}
+ 	}
+ 
+-	/*
+-	 * Poll the interrupt-data queue directly.  If the controller has frames
+-	 * queued under a finger but the edge-triggered IRQ never delivers them,
+-	 * this shows it: apple_z2_read_packet logs irq-rx/irq-pkt per poll.
+-	 */
+-	if (d21_poll) {
+-		unsigned int k;
+-
+-		for (k = 0; k < d21_probe_times; k++) {
+-			error = apple_z2_read_packet(z2);
+-			dev_info(dev, "D21 poll %u: err=%d valid=%d\n", k, error,
+-				 z2->runtime_frame_valid);
+-			msleep(100);
+-		}
+-	}
+-
+ 	/*
+ 	 * Focused watcher: full-payload dumps of the named reports, logged
+ 	 * only when the payload changes.  The generic sweep floods the ring
+@@ -2971,6 +2955,23 @@ static int apple_z2_d21_probe_tail(struct apple_z2 *z2)
+ 		kfree(buf);
+ 	}
+ 
++
++
++	/*
++	 * Poll the interrupt-data queue directly.  If the controller has frames
++	 * queued under a finger but the edge-triggered IRQ never delivers them,
++	 * this shows it: apple_z2_read_packet logs irq-rx/irq-pkt per poll.
++	 */
++	if (d21_poll) {
++		unsigned int k;
++
++		for (k = 0; k < d21_probe_times; k++) {
++			error = apple_z2_read_packet(z2);
++			dev_info(dev, "D21 poll %u: err=%d valid=%d\n", k, error,
++				 z2->runtime_frame_valid);
++			msleep(100);
++		}
++	}
+ 	return 0;
+ }
+ 
+-- 
+2.55.0
+

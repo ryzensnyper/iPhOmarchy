@@ -1,0 +1,56 @@
+From 800bdcfaac2ebf550cd062fbd87c58cf59229fcb Mon Sep 17 00:00:00 2001
+From: dugs <dugahol@protonmail.com>
+Date: Thu, 29 Oct 2026 06:23:42 +1030
+Subject: [PATCH 09/19] input: apple-z2: fix NULL deref when watch_ids is not
+ passed
+
+d21_watch_ids is a charp module parameter and defaults to NULL; the
+watch block dereferenced it unconditionally, so any module load without
+watch_ids oopsed the probe worker (killing the async probe entry and
+wedging the module for the rest of the boot). Every previous session
+happened to pass watch_ids, which masked it.
+---
+ drivers/input/touchscreen/apple_z2.c | 15 +++++++++++++--
+ 1 file changed, 13 insertions(+), 2 deletions(-)
+
+diff --git a/drivers/input/touchscreen/apple_z2.c b/drivers/input/touchscreen/apple_z2.c
+index f610446fa..a2ffd3aae 100644
+--- a/drivers/input/touchscreen/apple_z2.c
++++ b/drivers/input/touchscreen/apple_z2.c
+@@ -2723,6 +2723,17 @@ static int apple_z2_d21_probe_tail(struct apple_z2 *z2)
+ 				 */
+ 				if (!error && cand_len >= 1 &&
+ 				    cand_len <= sizeof(cand->prev)) {
++					/*
++					 * Log the table itself: the table is
++					 * dynamic (it grew after the J71b
++					 * choreography), so every "does id X
++					 * exist" question is only valid for
++					 * the exact init state that produced
++					 * the answer.
++					 */
++					dev_info(dev,
++						 "D21 table %02x: status=%u len=%u\n",
++						 i, cand_status, cand_len);
+ 					cand[n].id = i;
+ 					cand[n].len = cand_len;
+ 					memset(cand[n].prev, 0,
+@@ -2810,13 +2821,13 @@ static int apple_z2_d21_probe_tail(struct apple_z2 *z2)
+ 	 * buffer so hard that the touch window falls out of it; this keeps a
+ 	 * touch-vs-idle diff readable.
+ 	 */
+-	if (d21_watch_ids[0]) {
++	if (d21_watch_ids && d21_watch_ids[0]) {
+ 		u8 ids[16];
+ 		u8 (*prev)[400];
+ 		bool seen[16] = { };
+ 		unsigned int n = 0;
+ 		unsigned int k, it, seg;
+-		char *p = d21_watch_ids ? d21_watch_ids : "";
++		char *p = d21_watch_ids;
+ 
+ 		while (*p && n < ARRAY_SIZE(ids)) {
+ 			ids[n] = (u8)simple_strtoul(p, &p, 16);
+-- 
+2.55.0
+

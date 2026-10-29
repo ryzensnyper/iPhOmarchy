@@ -1,0 +1,46 @@
+From a6707d3b3ba0f578d45e3b5e7d1892c518391b65 Mon Sep 17 00:00:00 2001
+From: dugs <dugahol@protonmail.com>
+Date: Thu, 29 Oct 2026 07:34:49 +1030
+Subject: [PATCH 15/19] input: apple-z2: toggle the D21 pull sequence on every
+ read, empty ones included
+
+The controller alternates the expected sequence number of the
+interrupt-data pull on every read. The driver only toggled its
+counter after a valid frame, so the first empty pull (the post-init
+drain) desynced the pair and every later pull was ignored - the
+interrupt-data channel read flat zero for the rest of the boot,
+which is why contacts never appeared.
+---
+ drivers/input/touchscreen/apple_z2.c | 9 ++++++++-
+ 1 file changed, 8 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/input/touchscreen/apple_z2.c b/drivers/input/touchscreen/apple_z2.c
+index a52182bcd..614ce4afb 100644
+--- a/drivers/input/touchscreen/apple_z2.c
++++ b/drivers/input/touchscreen/apple_z2.c
+@@ -696,6 +696,14 @@ static int apple_z2_read_packet(struct apple_z2 *z2)
+ 	z2->tx_buf[0] = APPLE_Z2_CMD_READ_INTERRUPT_DATA;
+ 	counter = z2->index_parity + 1;
+ 	z2->tx_buf[1] = counter;
++	/*
++	 * The controller alternates its expected sequence number on every
++	 * pull, empty ones included (the AHT toggles per readOneFrameOfData).
++	 * Toggling only on valid frames desyncs us after the first empty
++	 * drain - every later pull is then ignored and the interrupt-data
++	 * channel reads flat zero for the rest of the session.
++	 */
++	z2->index_parity = !z2->index_parity;
+ 	apple_z2_z2_checksum(z2->tx_buf, APPLE_Z2_CMD_SIZE);
+ 	xfer.tx_buf = z2->tx_buf;
+ 	xfer.rx_buf = z2->rx_buf;
+@@ -798,7 +806,6 @@ static int apple_z2_read_packet(struct apple_z2 *z2)
+ 
+ 	payload_len = get_unaligned_le16(z2->rx_buf + 2);
+ 	apple_z2_dispatch_frame(z2, z2->rx_buf + 5, payload_len - 2);
+-	z2->index_parity = !z2->index_parity;
+ 
+ 	return 0;
+ }
+-- 
+2.55.0
+

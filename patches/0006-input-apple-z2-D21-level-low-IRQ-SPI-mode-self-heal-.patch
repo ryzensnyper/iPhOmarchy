@@ -1,0 +1,224 @@
+From b5a5202e3047474c81ac8f3e482833462b5c7262 Mon Sep 17 00:00:00 2001
+From: dugs <dugahol@protonmail.com>
+Date: Wed, 28 Oct 2026 23:53:40 +1030
+Subject: [PATCH 06/19] input: apple-z2: D21 level-low IRQ, SPI-mode self-heal,
+ host-config knobs
+
+- Set the D21 touch IRQ to level-low at init (mirroring Orchard's working
+  J71b runtime) and restore the trigger type on stop.  The controller's
+  line is level-low: with the device tree's falling-edge trigger an
+  already-asserted line is never serviced, so queued status frames are
+  never drained.
+- Force SPI mode 3 (CPOL|CPHA) for D21 at probe.  spi->mode lives in the
+  persistent spi_device across driver reloads, so a mistuned experiment
+  wedges the bus; this heals it.  spi_mode module param still overrides.
+- Apply Apple's D21 personality host-config (inter-packet delay, minimum
+  DMA transfer size) from module parameters.
+- Handle and log the 0x90 grape HID input report (report 0x76) for D21.
+- Diagnostic logs for the boot/pre-boot/initial-blob replies.
+---
+ drivers/input/touchscreen/apple_z2.c | 125 +++++++++++++++++++++++++--
+ 1 file changed, 116 insertions(+), 9 deletions(-)
+
+diff --git a/drivers/input/touchscreen/apple_z2.c b/drivers/input/touchscreen/apple_z2.c
+index ae6794dbe..f0d669ad9 100644
+--- a/drivers/input/touchscreen/apple_z2.c
++++ b/drivers/input/touchscreen/apple_z2.c
+@@ -135,6 +135,8 @@ struct apple_z2 {
+ 	bool runtime_frame_valid;
+ 	bool runtime_queue_empty;
+ 	bool runtime_control_reply;
++	bool irq_type_changed;
++	unsigned int saved_irq_type;
+ 	bool surface_descriptor_valid;
+ 	bool j172_sync_pinctrl_active;
+ 	bool hv_enabled;
+@@ -498,6 +500,30 @@ static void apple_z2_dispatch_frame(struct apple_z2 *z2, const u8 *payload,
+ 	const u8 *report;
+ 	u16 report_len;
+ 
++	/*
++	 * D21 is the same HBPP generation as Orchard's working J71b, whose
++	 * runtime delivers contacts as 0x90 "input report" frames carrying HID
++	 * report 0x76 on the "grape" interface.  The legacy iPhone7 dispatch
++	 * below would silently drop those, so handle the HID frame shape for
++	 * D21 explicitly and log it -- no such frame has ever been observed on
++	 * this controller, so seeing one is itself the result.
++	 */
++	if (apple_z2_is_d21(z2) && payload_len >= 4 &&
++	    payload[0] == APPLE_Z2_FRAME_INPUT_REPORT) {
++		report_len = get_unaligned_le16(payload + 2);
++		dev_info(&z2->spidev->dev,
++			 "D21 HID input frame: iface=%#x len=%u report=%#x\n",
++			 payload[1], report_len,
++			 payload_len > 4 ? payload[4] : 0);
++		if ((payload[1] & APPLE_Z2_INTERFACE_GRAPE) &&
++		    report_len && report_len == payload_len - 4) {
++			report = payload + 4;
++			if (report[0] == APPLE_Z2_HID_REPORT_ID)
++				apple_z2_parse_touches(z2, report, report_len);
++		}
++		return;
++	}
++
+ 	/* iPhone 7 Plus Gen2 packets carry the legacy report header directly. */
+ 	if (apple_z2_is_iphone7_plus(z2)) {
+ 		if (payload_len < APPLE_Z2_FINGERS_OFFSET)
+@@ -1951,6 +1977,8 @@ static int apple_z2_send_firmware_blob(struct apple_z2 *z2, const u8 *data,
+ 
+ 	if ((apple_z2_is_j172(z2) || apple_z2_is_iphone7_plus(z2)) && init) {
+ 		ready = z2->rx_buf[0] == 0x1f && z2->rx_buf[1] == 0x01;
++		dev_info(&z2->spidev->dev, "D21 initial-blob reply: %*ph\n",
++			 8, z2->rx_buf);
+ 		if (!ready)
+ 			return dev_err_probe(&z2->spidev->dev, -EPROTO,
+ 					     "touch controller not ready\n");
+@@ -2262,6 +2290,27 @@ static bool d21_poll;
+ module_param_named(poll, d21_poll, bool, 0444);
+ MODULE_PARM_DESC(poll, "Poll the interrupt-data queue after init (probe_times x 100 ms)");
+ 
++/*
++ * Orchard's working J71b runtime (same HBPP 0x103 generation as D21) switches
++ * the touch IRQ to level-low before enabling it, while this driver keeps the
++ * device tree's falling-edge trigger.  Apple's own D21 personality also carries
++ * a host-config block (SPI mode, inter-packet delay, minimum DMA size) that the
++ * D21 container has no SET_CONFIG record for, so it is never applied.  Expose
++ * both as knobs so a single run can be A/B'd on the device.
++ */
++static bool d21_irq_level = true;
++module_param_named(irq_level, d21_irq_level, bool, 0444);
++MODULE_PARM_DESC(irq_level, "D21: switch the touch IRQ to level-low at runtime");
++static int d21_ip_delay = -1;
++module_param_named(ip_delay, d21_ip_delay, int, 0444);
++MODULE_PARM_DESC(ip_delay, "D21: inter-packet delay us (Apple profile: 125), -1 keeps");
++static int d21_dma_min = -1;
++module_param_named(dma_min, d21_dma_min, int, 0444);
++MODULE_PARM_DESC(dma_min, "D21: minimum DMA transfer size (Apple profile: 16), -1 keeps");
++static int d21_spi_mode = -1;
++module_param_named(spi_mode, d21_spi_mode, int, 0444);
++MODULE_PARM_DESC(spi_mode, "D21: force SPI mode 0..3 (Apple profile: 1), -1 keeps");
++
+ /*
+  * Read a report back and log it. The controller's own configuration for this
+  * part declares two host-visible reports: 0xf8 carries the scan timing
+@@ -2414,6 +2463,27 @@ static int apple_z2_d21_init_locked(struct apple_z2 *z2)
+ 	apple_z2_d21_probe_report(z2, APPLE_Z2_REPORT_HIGH_LEVEL,
+ 				  "d21-72-after");
+ 
++	/*
++	 * The controller's interrupt line is level-low in hardware, and the
++	 * working J71b (same HBPP generation) runtime switches the trigger to
++	 * level-low before enabling it.  With the device tree's falling-edge
++	 * trigger an already-asserted line is never serviced, so queued status
++	 * frames are never drained.  Mirror the reference here; the original
++	 * trigger is restored on stop.
++	 */
++	if (d21_irq_level) {
++		z2->saved_irq_type = irq_get_trigger_type(z2->spidev->irq);
++		if (!z2->saved_irq_type ||
++		    irq_set_irq_type(z2->spidev->irq, IRQ_TYPE_LEVEL_LOW)) {
++			dev_warn(dev, "D21: could not set level-low IRQ\n");
++		} else {
++			z2->irq_type_changed = true;
++			dev_info(dev,
++				 "D21: touch IRQ -> level-low (was %u)\n",
++				 z2->saved_irq_type);
++		}
++	}
++
+ 	/*
+ 	 * Sample the controller's own view of itself: the high-level state
+ 	 * and the scan timing counters, the latter repeatedly so an advancing
+@@ -2515,14 +2585,6 @@ static int apple_z2_d21_init_locked(struct apple_z2 *z2)
+ 		}
+ 	}
+ 
+-	/*
+-	 * The interrupt trigger stays as the device tree declares it
+-	 * (edge-falling, as mainline's touchbar nodes and the working D111
+-	 * port use). Changing it here would also desynchronise the trigger
+-	 * type cached in the irq descriptor from the device tree, which makes
+-	 * every later bind fail to resolve its interrupt. Held reports are
+-	 * handled by draining the queue in the handler instead.
+-	 */
+ 	return 0;
+ }
+ 
+@@ -2892,6 +2954,9 @@ static int apple_z2_boot_preamble(struct apple_z2 *z2, bool full_duplex)
+ 	if (error)
+ 		return error;
+ 
++	dev_info(&z2->spidev->dev, "D21 boot preamble reply: %*ph\n",
++		 4, z2->rx_buf);
++
+ 	return apple_z2_advance_protocol(z2, APPLE_Z2_STATE_POWERED,
+ 					 APPLE_Z2_STATE_SPI_CONFIGURED);
+ }
+@@ -2909,7 +2974,13 @@ static int apple_z2_iphone7_plus_post_boot_preamble(struct apple_z2 *z2)
+ 	memset(z2->rx_buf, 0, xfer.len);
+ 	apple_z2_apply_z2_delays(z2);
+ 
+-	return spi_sync_transfer(z2->spidev, &xfer, 1);
++	{
++		int ret = spi_sync_transfer(z2->spidev, &xfer, 1);
++
++		dev_info(&z2->spidev->dev,
++			 "D21 post-boot preamble reply: %*ph\n", 4, z2->rx_buf);
++		return ret;
++	}
+ }
+ 
+ static int apple_z2_boot(struct apple_z2 *z2)
+@@ -3079,6 +3150,38 @@ static int apple_z2_probe(struct spi_device *spi)
+ 		 * half second the other iPhone parts use.
+ 		 */
+ 		z2->boot_timeout_ms = 5000;
++
++		/*
++		 * The SPI mode lives in the persistent spi_device across driver
++		 * reloads, and this panel only answers in mode 3 (CPOL|CPHA, as
++		 * the device tree declares).  Restore it explicitly so a
++		 * mistuned experiment cannot wedge the bus; the module parameter
++		 * can still override it for a deliberate test.
++		 */
++		spi->mode = (spi->mode & ~SPI_MODE_X_MASK) |
++			    SPI_CPOL | SPI_CPHA;
++		if (d21_spi_mode >= 0)
++			spi->mode = (spi->mode & ~SPI_MODE_X_MASK) |
++				    (d21_spi_mode & SPI_MODE_X_MASK);
++		error = spi_setup(spi);
++		if (error)
++			return dev_err_probe(dev, error,
++					     "cannot set SPI mode\n");
++
++		/*
++		 * Apple's own D21 profile (C1F5E,4 Firmware Config) carries a
++		 * host-config block that the D21 container has no SET_CONFIG
++		 * record for: inter-packet delay and minimum DMA transfer size.
++		 * Apply them from the module parameters so a run can be
++		 * re-valued without a rebuild.
++		 */
++		if (d21_ip_delay >= 0)
++			z2->z2_inter_packet_delay_us = d21_ip_delay;
++		if (d21_dma_min >= 0)
++			z2->dma_min_len = d21_dma_min;
++		dev_info(dev, "D21 host-config: ip-delay=%u dma-min=%u mode=%u\n",
++			 z2->z2_inter_packet_delay_us, z2->dma_min_len,
++			 (unsigned int)(spi->mode & SPI_MODE_X_MASK));
+ 	}
+ 	z2->bpw16_min_len = 1;
+ 	device_property_read_u32(dev, "apple,z2-bpw16-min-len",
+@@ -3237,6 +3340,10 @@ static int apple_z2_probe(struct spi_device *spi)
+ static void apple_z2_stop(struct apple_z2 *z2)
+ {
+ 	disable_irq(z2->spidev->irq);
++	if (z2->irq_type_changed) {
++		irq_set_irq_type(z2->spidev->irq, z2->saved_irq_type);
++		z2->irq_type_changed = false;
++	}
+ 	gpiod_direction_output(z2->reset_gpio, 1);
+ 	z2->booted = false;
+ 	apple_z2_platform_power_off(z2);
+-- 
+2.55.0
+
