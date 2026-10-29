@@ -1,0 +1,143 @@
+From bdae33f15b8f43f4c77a6afd172dafe690cfa8eb Mon Sep 17 00:00:00 2001
+From: dugs <dugahol@protonmail.com>
+Date: Fri, 30 Oct 2026 09:25:00 +1030
+Subject: [PATCH] input: apple-z2: D21 poke=/poke_after= knobs - replay the
+ fwconfig Boot Sequence register pokes
+
+The C1F5E,4 fwconfig Boot Sequence carries five 32-bit register pokes,
+then the calibration request, then one more (0x10003060=0x17d3,
+0x1000305c=2, 0x10003058=6, 0x10003000=3, 0x10003458=1, cal,
+0x10003300=1) - scan-engine configuration that the D21 container does
+not repeat as load records (it only has INIT_PAYLOAD/SEND_BLOB/WAIT_IRQ/
+SEND_CAL_V2), so the driver never applied it while iOS's loader does.
+Send them through the HBPP blob path (framing identical to the
+calibration packets, including the 16-bit-wire byte swap) around the
+late calibration, gated behind module params so the A/B needs no
+rebuild.
+---
+ drivers/input/touchscreen/apple_z2.c | 95 +++++++++++++++++++++++++++-
+ 1 file changed, 94 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/input/touchscreen/apple_z2.c b/drivers/input/touchscreen/apple_z2.c
+index c03614996..61503b2ae 100644
+--- a/drivers/input/touchscreen/apple_z2.c
++++ b/drivers/input/touchscreen/apple_z2.c
+@@ -2522,6 +2522,15 @@ MODULE_PARM_DESC(settle_ms, "D21: settle after IRQ enable, before the late WAKE
+ static int d21_drain_polls = 4;
+ module_param_named(drain_polls, d21_drain_polls, int, 0444);
+ MODULE_PARM_DESC(drain_polls, "D21: interrupt-data drain polls after the init reads (J71b: 4)");
++static char *d21_poke;
++module_param_named(poke, d21_poke, charp, 0444);
++MODULE_PARM_DESC(poke,
++		 "D21: pre-calibration memory pokes 'addr:val[,addr:val]' (hex), blob path. "
++		 "C1F5E,4 fwconfig Boot Sequence: 10003060:17d3,1000305c:2,10003058:6,10003000:3,10003458:1");
++static char *d21_poke_after;
++module_param_named(poke_after, d21_poke_after, charp, 0444);
++MODULE_PARM_DESC(poke_after,
++		 "D21: post-calibration memory pokes, same format as poke= (C1F5E,4: 10003300:1)");
+ 
+ /*
+  * Read a report back and log it. The controller's own configuration for this
+@@ -3361,6 +3370,85 @@ static int apple_z2_d21_probe_tail(struct apple_z2 *z2)
+ 	return 0;
+ }
+ 
++/*
++ * Write one 32-bit word to controller memory via the HBPP blob path, framed
++ * exactly like the calibration packets (see apple_z2_build_iphone7_cal):
++ * 12-byte header, one payload word byte-swapped for the 16-bit SPI word
++ * order (bpw16_min_len is 1 on D21), trailing checksum.
++ */
++static int apple_z2_poke32(struct apple_z2 *z2, u32 address, u32 value)
++{
++	u8 buf[12 + 4 + 4];
++	u16 header_checksum;
++	u32 checksum;
++	int i;
++
++	put_unaligned_be16(0x18e1, buf);
++	put_unaligned_be16(APPLE_Z2_HBPP_CMD_BLOB, buf + 2);
++	put_unaligned_be16(0, buf + 4);		/* payload words - 1 */
++	put_unaligned_be16(address & 0xffff, buf + 6);
++	put_unaligned_be16(address >> 16, buf + 8);
++	header_checksum = 0;
++	for (i = 4; i < 10; i++)
++		header_checksum += buf[i];
++	put_unaligned_be16(header_checksum, buf + 10);
++
++	put_unaligned_le32(value, buf + 12);
++	checksum = buf[12] + buf[13] + buf[14] + buf[15];
++	swap(buf[12], buf[13]);
++	swap(buf[14], buf[15]);
++	put_unaligned_be16(checksum & 0xffff, buf + 16);
++	put_unaligned_be16(checksum >> 16, buf + 18);
++
++	return apple_z2_send_firmware_blob(z2, buf, sizeof(buf), false, false);
++}
++
++/*
++ * Apply 'addr:val[,addr:val]' hex pairs via the blob path.  The C1F5E,4
++ * fwconfig Boot Sequence carries five register pokes, then the calibration
++ * request, then one more (0x10003060/5c/58, 0x10003000, 0x10003458, cal,
++ * 0x10003300) - scan-engine configuration the D21 container does not repeat
++ * as load records, so it can be replayed with these knobs.
++ */
++static int apple_z2_d21_poke_list(struct apple_z2 *z2, const char *spec,
++				  const char *tag)
++{
++	char *buf, *entry;
++	int error = 0;
++
++	if (!spec || !spec[0])
++		return 0;
++	buf = kstrdup(spec, GFP_KERNEL);
++	if (!buf)
++		return -ENOMEM;
++	for (entry = buf; entry && *entry; ) {
++		char *comma = strpbrk(entry, ",");
++		char *colon;
++		u32 addr, val;
++
++		if (comma)
++			*comma++ = '\0';
++		colon = strchr(entry, ':');
++		if (!colon) {
++			dev_err(&z2->spidev->dev, "D21 poke: bad entry '%s'\n",
++				entry);
++			entry = comma;
++			continue;
++		}
++		*colon++ = '\0';
++		addr = simple_strtoul(entry, NULL, 16);
++		val = simple_strtoul(colon, NULL, 16);
++		error = apple_z2_poke32(z2, addr, val);
++		dev_info(&z2->spidev->dev, "D21 poke %s %08x:%08x err=%d\n",
++			 tag, addr, val, error);
++		if (error)
++			break;
++		entry = comma;
++	}
++	kfree(buf);
++	return error;
++}
++
+ /*
+  * Send the container's calibration blobs, but only after the rest of it.
+  *
+@@ -3589,7 +3677,12 @@ static int apple_z2_upload_firmware(struct apple_z2 *z2)
+ 
+ 	if (apple_z2_is_d21(z2)) {
+ 		mutex_lock(&z2->io_lock);
+-		error = apple_z2_send_late_calibration(z2, fw);
++		error = apple_z2_d21_poke_list(z2, d21_poke, "pre-cal");
++		if (!error)
++			error = apple_z2_send_late_calibration(z2, fw);
++		if (!error)
++			error = apple_z2_d21_poke_list(z2, d21_poke_after,
++						       "post-cal");
+ 		mutex_unlock(&z2->io_lock);
+ 		if (error)
+ 			return error;
+-- 
+2.55.0
+
