@@ -1,7 +1,7 @@
 From 7634f234abd2da64e5c7bb556d73bc5464112dc4 Mon Sep 17 00:00:00 2001
 From: dugs <dugahol@protonmail.com>
 Date: Fri, 30 Oct 2026 18:27:50 +1030
-Subject: [PATCH 36/37] input: apple-z2: D21 pressure-based contact validity -
+Subject: [PATCH 35/36] input: apple-z2: D21 pressure-based contact validity -
  the state byte does not separate touch from hover
 
 Labeled seqtest runs (2026-10-30, one-frame-read-per-IRQ driver) show the
