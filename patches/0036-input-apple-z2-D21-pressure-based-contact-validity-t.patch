@@ -1,0 +1,82 @@
+From 7634f234abd2da64e5c7bb556d73bc5464112dc4 Mon Sep 17 00:00:00 2001
+From: dugs <dugahol@protonmail.com>
+Date: Fri, 30 Oct 2026 18:27:50 +1030
+Subject: [PATCH 36/37] input: apple-z2: D21 pressure-based contact validity -
+ the state byte does not separate touch from hover
+
+Labeled seqtest runs (2026-10-30, one-frame-read-per-IRQ driver) show the
+0x44 state byte's meaning varies with fw state and does not discriminate:
+a deliberate sustained press reads state=4 with real pressure (393-1382),
+a resting finger reads state=4 pressure=0, newly detected contacts read 3
+for one frame, light contacts read 1/2, lifts read 0.  The Touch bit marks
+transient edge events, so the state&1 filter passed hand/phantom blinks
+while dropping EVERY continuous-press record - the driver discarded the
+user's finger mid-hold.
+
+Pressure (+26) is the invariant discriminator: >0 = real contact, 0 =
+hover/rest/lift.  Active contact = state != 0 && pressure >= pres_min
+(new module param, default 1; 0 = raw pass-everything for A/B).  Lifts
+(state 0) end the touch as before.
+---
+ drivers/input/touchscreen/apple_z2.c | 37 ++++++++++++++++++++++------
+ 1 file changed, 29 insertions(+), 8 deletions(-)
+
+diff --git a/drivers/input/touchscreen/apple_z2.c b/drivers/input/touchscreen/apple_z2.c
+index ee4f74f9f..2054e3c03 100644
+--- a/drivers/input/touchscreen/apple_z2.c
++++ b/drivers/input/touchscreen/apple_z2.c
+@@ -411,6 +411,16 @@ static bool z2_verbose;
+ module_param_named(verbose, z2_verbose, bool, 0644);
+ MODULE_PARM_DESC(verbose, "Per-frame IRQ/packet/touch-parse logging (diagnostic)");
+ 
++/*
++ * D21: minimum pressure (+26) for a 0x44 record to count as an active
++ * contact.  1 (the default) accepts every record with any pressure and
++ * drops hover/rest (pressure 0); 0 passes everything (raw A/B).
++ */
++static unsigned int d21_pres_min = 1;
++module_param_named(pres_min, d21_pres_min, uint, 0444);
++MODULE_PARM_DESC(pres_min,
++		 "D21: minimum 0x44 pressure for an active contact (1=default, 0=raw)");
++
+ static void apple_z2_parse_touches(struct apple_z2 *z2,
+ 				   const u8 *msg, size_t msg_len)
+ {
+@@ -462,15 +472,26 @@ static void apple_z2_parse_touches(struct apple_z2 *z2,
+ 		}
+ 		if (apple_z2_is_d21(z2)) {
+ 			/*
+-			 * D21 0x44: the state byte is an event mask
+-			 * (bit0 Touch, bit1 Range, bit2 Position), not the
+-			 * J172 enum.  Real touches read 1 (tap), 2 (range
+-			 * only, hover/lift) and 7 (touch|range|position),
+-			 * so a contact is active iff the Touch bit is set.
+-			 * The J172 check (3=started, 4=moved) silently
+-			 * discarded every real touch here.
++			 * D21 0x44, measured 2026-10-30 with labeled seqtest
++			 * runs: the state byte does NOT separate touch from
++			 * hover (its meaning even varies with fw state).  A
++			 * deliberate sustained press reads state=4 with real
++			 * pressure (393-1382), a resting finger reads state=4
++			 * pressure=0, newly detected contacts read 3 for one
++			 * frame, light contacts read 1/2, lifts read 0.  The
++			 * "Touch bit" (bit0) marks the transient edge events,
++			 * so filtering on it passes phantom/hand blinks while
++			 * dropping every continuous-press record - the driver
++			 * literally discarded the user's finger.
++			 *
++			 * Pressure (+26) is the invariant discriminator:
++			 * >0 = real contact, 0 = hover/rest/lift.  state==0
++			 * is the explicit lift.  d21_pres_min=0 restores the
++			 * raw pass-everything behavior for A/B.
+ 			 */
+-			slot_valid = fingers[i].state & 0x1;
++			slot_valid = fingers[i].state != 0 &&
++				     le16_to_cpu(fingers[i].pressure) >=
++					     d21_pres_min;
+ 		} else {
+ 			slot_valid = fingers[i].state == APPLE_Z2_TOUCH_STARTED ||
+ 				     fingers[i].state == APPLE_Z2_TOUCH_MOVED;
+-- 
+2.55.0
+

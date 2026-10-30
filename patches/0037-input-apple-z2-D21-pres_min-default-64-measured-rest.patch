@@ -1,0 +1,45 @@
+From 2bde906a7ae32acbac2f5814618ae6da63b30be2 Mon Sep 17 00:00:00 2001
+From: dugs <dugahol@protonmail.com>
+Date: Fri, 30 Oct 2026 18:43:35 +1030
+Subject: [PATCH 37/37] input: apple-z2: D21 pres_min default 64 - measured
+ rest/press gap
+
+seqtest pressure landscape (229 contact runs, one labeled session): pure
+hover/lift at 0, resting-finger band 12-16, one-frame flickers to 59,
+every deliberate press >= 100 (taps peak ~338, holds up to 1382).  64
+splits rest from press with margin on both sides.  With pres_min=1 the
+resting band leaked as a stuck touch (225 PKT in the hands-off step).
+---
+ drivers/input/touchscreen/apple_z2.c | 9 ++++++---
+ 1 file changed, 6 insertions(+), 3 deletions(-)
+
+diff --git a/drivers/input/touchscreen/apple_z2.c b/drivers/input/touchscreen/apple_z2.c
+index 2054e3c03..ad80874b6 100644
+--- a/drivers/input/touchscreen/apple_z2.c
++++ b/drivers/input/touchscreen/apple_z2.c
+@@ -416,7 +416,7 @@ MODULE_PARM_DESC(verbose, "Per-frame IRQ/packet/touch-parse logging (diagnostic)
+  * contact.  1 (the default) accepts every record with any pressure and
+  * drops hover/rest (pressure 0); 0 passes everything (raw A/B).
+  */
+-static unsigned int d21_pres_min = 1;
++static unsigned int d21_pres_min = 64;
+ module_param_named(pres_min, d21_pres_min, uint, 0444);
+ MODULE_PARM_DESC(pres_min,
+ 		 "D21: minimum 0x44 pressure for an active contact (1=default, 0=raw)");
+@@ -484,8 +484,11 @@ static void apple_z2_parse_touches(struct apple_z2 *z2,
+ 			 * dropping every continuous-press record - the driver
+ 			 * literally discarded the user's finger.
+ 			 *
+-			 * Pressure (+26) is the invariant discriminator:
+-			 * >0 = real contact, 0 = hover/rest/lift.  state==0
++			 * Pressure (+26) is the invariant discriminator.  Measured landscape
++			 * (seqtest, 229 contact runs): hover/rest/blips sit at 0-59
++			 * (rest band 12-16, one-frame flickers to 59), every deliberate
++			 * press and corner tap ramps >= 100 (taps peak ~338, holds to
++			 * 1382) - so the default threshold is 64.  state==0
+ 			 * is the explicit lift.  d21_pres_min=0 restores the
+ 			 * raw pass-everything behavior for A/B.
+ 			 */
+-- 
+2.55.0
+
