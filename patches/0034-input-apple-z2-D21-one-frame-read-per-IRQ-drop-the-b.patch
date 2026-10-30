@@ -1,0 +1,76 @@
+From 99d364db003a9b738875913c651018482efe1ad0 Mon Sep 17 00:00:00 2001
+From: dugs <dugahol@protonmail.com>
+Date: Fri, 30 Oct 2026 17:25:15 +1030
+Subject: [PATCH 34/34] input: apple-z2: D21 one frame read per IRQ - drop the
+ bounded drain loop
+
+The D21 IRQ handler drained up to 8 packets per IRQ and always ended with
+one extra pull that found the queue empty. That trailing pull+read is an
+off-IRQ transaction pair the controller never expects: AppleMultitouchSPI
+does exactly ONE readOneFrameOfData per IRQ (1 IRQ = 1 frame is the
+contract; the data read is the only ACK), and the poll_hz experiment
+already measured what off-schedule pulls do to this controller - all-zero
+replies, stream collapse, wedge.
+
+The drain loop survived for hours on quiet boots (steady 25 fps production
+rarely leaves the queue non-empty at handler exit) and killed the stream
+in 13 s - 8 min otherwise: with phantom lifecycle bursts the cap-8 exits
+and trailing empty pulls race the controller's queue engine until the
+assert engine stops (line high, no IRQs, scan counters still climbing, HL
+state Active - captured twice today, 2026-10-30).
+
+The drain was also unnecessary: the touch IRQ is LEVEL-LOW, so while
+frames stay queued the line stays asserted and the handler re-fires - the
+queue drains at the controller's own pace with zero extra transactions.
+---
+ drivers/input/touchscreen/apple_z2.c | 31 ++++++++++++++--------------
+ 1 file changed, 15 insertions(+), 16 deletions(-)
+
+diff --git a/drivers/input/touchscreen/apple_z2.c b/drivers/input/touchscreen/apple_z2.c
+index 921ad29df..ee4f74f9f 100644
+--- a/drivers/input/touchscreen/apple_z2.c
++++ b/drivers/input/touchscreen/apple_z2.c
+@@ -1499,25 +1499,24 @@ static irqreturn_t apple_z2_irq(int irq, void *data)
+ 	if (!z2->booted) {
+ 		return IRQ_HANDLED;
+ 	} else if (apple_z2_is_d21(z2)) {
+-		unsigned int i;
+-
+ 		/*
+-		 * Level-low line: keep draining until the controller stops
+-		 * handing out valid frames.
++		 * Kext-faithful: EXACTLY ONE frame read per IRQ
++		 * (AppleMultitouchSPI::handleInterrupt -> gated
++		 * readOneFrameOfData; "the default contract is 1 IRQ = 1
++		 * frame").  Do NOT drain in a loop here: the trailing pull
++		 * that finds the queue empty is an off-IRQ transaction the
++		 * controller never expects - the same transaction class that
++		 * wedges it when poll_hz>0 (measured 2026-10-30).  The old
++		 * bounded drain survived for hours on quiet boots and killed
++		 * the stream in minutes-to-hours otherwise (stochastic).
++		 *
++		 * The line is LEVEL-LOW: while frames stay queued the line
++		 * stays asserted and this handler re-fires, which drains the
++		 * queue at the controller's own pace with no extra
++		 * transactions.
+ 		 */
+ 		mutex_lock(&z2->io_lock);
+-		for (i = 0; i < 8; i++) {
+-			error = apple_z2_read_packet(z2);
+-			if (error)
+-				break;
+-			/*
+-			 * Keep draining while the controller is either handing
+-			 * out frames or still servicing the queue.
+-			 */
+-			if (!z2->runtime_frame_valid &&
+-			    !z2->runtime_control_reply)
+-				break;
+-		}
++		error = apple_z2_read_packet(z2);
+ 		mutex_unlock(&z2->io_lock);
+ 		if (error)
+ 			dev_warn_ratelimited(&z2->spidev->dev,
+-- 
+2.55.0
+
