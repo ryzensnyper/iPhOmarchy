@@ -1,0 +1,48 @@
+From 8f553186ca7d50fb20ecda60207cb0a9a19c9a31 Mon Sep 17 00:00:00 2001
+From: dugs <dugahol@protonmail.com>
+Date: Fri, 30 Oct 2026 11:17:19 +1030
+Subject: [PATCH 31/33] input: apple-z2: document that poll_hz>0 wedges the D21
+ controller
+
+Measured 2026-10-30: with poll_hz=120 the off-IRQ pulls return all-zero
+(1258 of 1303), the frame stream collapses from 24 fps to ~1 Hz with
+phantom storms, and the wedge survives rmmod + reload + 45 s rails-off -
+same persistence class as the dma_min/ip_delay poisoning, force-restart
+is the only recovery.  iOS never pulls without an IRQ, so there is no
+RE'd contract for empty pulls; the D21 runtime firmware clearly does not
+serve them.  The Orchard j71b poller pattern does not transfer.
+
+Also fixes a comment typo that truncated a block comment (rtpoll_*/...).
+---
+ drivers/input/touchscreen/apple_z2.c | 11 ++++++++---
+ 1 file changed, 8 insertions(+), 3 deletions(-)
+
+diff --git a/drivers/input/touchscreen/apple_z2.c b/drivers/input/touchscreen/apple_z2.c
+index 57103ccb5..48531024f 100644
+--- a/drivers/input/touchscreen/apple_z2.c
++++ b/drivers/input/touchscreen/apple_z2.c
+@@ -1537,13 +1537,18 @@ static irqreturn_t apple_z2_irq(int irq, void *data)
+ 
+ /*
+  * Orchard-style runtime poller rate in Hz (0 = off, the default).  See
+- * apple_z2_d21_poll_work().  60-120 is a sensible range; values above the
+- * SPI command round-trip just burn bus time on empty pulls.
++ * apple_z2_d21_poll_work().  WARNING (measured 2026-10-30): non-zero values
++ * WEDGE the D21 controller - off-IRQ pulls return all-zero and the frame
++ * stream collapses to ~1 Hz with phantom storms; the wedge survives
++ * reload + 45 s rails-off and needs a force-restart, like the dma_min
++ * poisoning.  Kept for the record; do not enable on D21.
+  */
+ static unsigned int d21_poll_hz;
+ module_param_named(poll_hz, d21_poll_hz, uint, 0444);
+ MODULE_PARM_DESC(poll_hz,
+-		 "D21: poll the frame queue at N Hz instead of trusting per-frame IRQs (0=off)");
++		 "D21: poll the frame queue at N Hz instead of trusting per-frame IRQs "
++		 "(0=off). WARNING: non-zero wedges the controller (persists across reloads, "
++		 "force-restart to recover)");
+ 
+ /*
+  * Orchard-style runtime poller (j71b_z2.ko runs its whole runtime POLLED,
+-- 
+2.55.0
+

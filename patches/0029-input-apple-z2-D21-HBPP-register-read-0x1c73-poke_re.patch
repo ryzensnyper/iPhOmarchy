@@ -1,0 +1,207 @@
+From fe2c2a0ec9673962ff06b42a164eefa656b00390 Mon Sep 17 00:00:00 2001
+From: dugs <dugahol@protonmail.com>
+Date: Fri, 30 Oct 2026 10:58:48 +1030
+Subject: [PATCH 29/33] input: apple-z2: D21 HBPP register read (0x1c73) +
+ poke_readback=/regread= knobs
+
+Recover AppleMultitouchZ2SPI::readRegisterValue (kernelcache 20H392 text
+0x59b7564): 8-byte packet 1c 73 + 16-bit-wire-swapped address + BE16
+byte-sum, then the long ATN_ACK (1a a1 18 e1 x3) whose response carries
+the value in the same wire order the poke packets use.  The kext only
+ever calls it from MTSPIBootloader_{Z2,N1}::performCalibSeq (version
+detect: read 0x10008ffc, expect 0x5a020028), so the fw-mode response
+format is unverified - raw cmd/ack RX dumps are logged to find out.
+
+- poke_readback=1: read back every poke=/poke_after= register after
+  writing and log wrote vs read (MATCH/MISMATCH).
+- regread= runtime knob: 'echo addr[,addr] > .../parameters/regread'
+  reads registers without a reload (HBPP packets, not report pulls).
+
+Also corrects the record-keeping: the C1F5E,4 container tail carries the
+Boot Sequence pokes as 16-byte 0x331e register-write packets (acked 4a d1)
+- 10003060:17d3, 1000305c:2, 10003058:6, 10003000:3, 10003518:1 - plus a
+1f 01 readiness probe and 10003400:1 (acked 00 00 = rejected).  The
+fwconfig Boot Sequence lists 10003458:1 for step [4] instead of the
+container's 10003518:1; container bytes win.
+---
+ drivers/input/touchscreen/apple_z2.c | 143 +++++++++++++++++++++++++++
+ 1 file changed, 143 insertions(+)
+
+diff --git a/drivers/input/touchscreen/apple_z2.c b/drivers/input/touchscreen/apple_z2.c
+index 61503b2ae..1a0b8037b 100644
+--- a/drivers/input/touchscreen/apple_z2.c
++++ b/drivers/input/touchscreen/apple_z2.c
+@@ -2532,6 +2532,17 @@ module_param_named(poke_after, d21_poke_after, charp, 0444);
+ MODULE_PARM_DESC(poke_after,
+ 		 "D21: post-calibration memory pokes, same format as poke= (C1F5E,4: 10003300:1)");
+ 
++/*
++ * Verify the pokes by reading them back through the kext's register-read
++ * packet (0x1c73 + long ATN_ACK).  There is no other memory-read path, so
++ * without this a poke that the controller silently dropped is invisible -
++ * which is exactly the boot-to-boot variance we are chasing.
++ */
++static bool d21_poke_readback;
++module_param_named(poke_readback, d21_poke_readback, bool, 0444);
++MODULE_PARM_DESC(poke_readback,
++		 "D21: read back every poke= / poke_after= register and log wrote vs read (default false)");
++
+ /*
+  * Read a report back and log it. The controller's own configuration for this
+  * part declares two host-visible reports: 0xf8 carries the scan timing
+@@ -2672,6 +2683,63 @@ MODULE_PARM_DESC(read_now,
+ 		 "D21: write 'id:len,id:len' to read reports immediately, no reload "
+ 		 "(e.g. echo 7f:16 > .../parameters/read_now)");
+ 
++/*
++ * Runtime HBPP register read: 'echo addr[,addr...] > .../parameters/regread'
++ * reads each 32-bit word through the kext's register-read packet and logs
++ * 'D21 regread addr=... =... err=...'.  Unlike read_now= these are HBPP
++ * command packets, not report pulls, so they do not share the frame-stream
++ * pull tag - but they still pause the stream briefly; do not interleave with
++ * a frame-timing capture.
++ */
++static int apple_z2_regread32(struct apple_z2 *z2, u32 address, u32 *value);
++
++static int d21_regread_set(const char *val, const struct kernel_param *kp)
++{
++	struct apple_z2 *z2 = apple_z2_d21_now_get();
++	char *buf, *entry;
++	unsigned long addr;
++	u32 value;
++	int error = 0;
++
++	if (!z2)
++		return -ENODEV;
++	buf = kstrdup(val, GFP_KERNEL);
++	if (!buf) {
++		apple_z2_d21_now_put();
++		return -ENOMEM;
++	}
++
++	mutex_lock(&z2->io_lock);
++	for (entry = buf; entry && *entry; ) {
++		char *comma = strchr(entry, ',');
++
++		if (comma)
++			*comma++ = '\0';
++		addr = simple_strtoul(entry, NULL, 16);
++		value = 0;
++		error = apple_z2_regread32(z2, addr, &value);
++		dev_info(&z2->spidev->dev,
++			 "D21 regread addr=%08lx =%08x err=%d\n",
++			 addr, value, error);
++		if (error)
++			break;
++		entry = comma;
++	}
++	mutex_unlock(&z2->io_lock);
++
++	kfree(buf);
++	apple_z2_d21_now_put();
++	return error;
++}
++
++static const struct kernel_param_ops d21_regread_ops = {
++	.set = d21_regread_set,
++};
++module_param_cb(regread, &d21_regread_ops, NULL, 0644);
++MODULE_PARM_DESC(regread,
++		 "D21: write 'addr[,addr]' (hex) to read 32-bit controller registers via the "
++		 "HBPP register-read packet (e.g. echo 10003060 > .../parameters/regread)");
++
+ /*
+  * Diagnostics for the batched-delivery investigation: kick the IRQ line by
+  * disable+enable so the interrupt controller re-samples the level.  If frames
+@@ -3403,6 +3471,69 @@ static int apple_z2_poke32(struct apple_z2 *z2, u32 address, u32 value)
+ 	return apple_z2_send_firmware_blob(z2, buf, sizeof(buf), false, false);
+ }
+ 
++/*
++ * Read one 32-bit word from controller memory via the HBPP register-read
++ * packet, framed exactly like AppleMultitouchZ2SPI::readRegisterValue
++ * (kernelcache 20H392, text 0x59b7564): an 8-byte packet 1c 73 + the address
++ * split into two 16-bit wire-swapped halves + a BE16 byte-sum of the address
++ * bytes, then the long ATN_ACK transaction (1a a1 18 e1 18 e1 18 e1) whose
++ * response carries the register value in the same 16-bit wire order the poke
++ * packets use.  The 8-byte response to the command packet itself is ignored,
++ * again matching the kext.
++ */
++static int apple_z2_regread32(struct apple_z2 *z2, u32 address, u32 *value)
++{
++	u8 cmd[8];
++	u8 cmd_reply[8];
++	struct spi_transfer cmd_xfer = {
++		.tx_buf = cmd,
++		.rx_buf = cmd_reply,
++		.len = 8,
++		.bits_per_word = 8,
++	};
++	struct spi_transfer ack_xfer = {
++		.tx_buf = z2->tx_buf,
++		.rx_buf = z2->rx_buf,
++		.len = 8,
++		.bits_per_word = 8,
++	};
++	u16 sum;
++	int error;
++
++	cmd[0] = 0x1c;
++	cmd[1] = 0x73;
++	cmd[2] = address >> 8;
++	cmd[3] = address;
++	cmd[4] = address >> 24;
++	cmd[5] = address >> 16;
++	sum = cmd[2] + cmd[3] + cmd[4] + cmd[5];
++	cmd[6] = sum >> 8;
++	cmd[7] = sum;
++
++	z2->tx_buf[0] = 0x1a;
++	z2->tx_buf[1] = 0xa1;
++	z2->tx_buf[2] = 0x18;
++	z2->tx_buf[3] = 0xe1;
++	z2->tx_buf[4] = 0x18;
++	z2->tx_buf[5] = 0xe1;
++	z2->tx_buf[6] = 0x18;
++	z2->tx_buf[7] = 0xe1;
++
++	error = spi_sync_transfer(z2->spidev, &cmd_xfer, 1);
++	if (error)
++		return error;
++	error = spi_sync_transfer(z2->spidev, &ack_xfer, 1);
++	if (error)
++		return error;
++
++	dev_info(&z2->spidev->dev, "D21 regread %08x cmd-rx: %*ph ack-rx: %*ph\n",
++		 address, 8, cmd_reply, 8, z2->rx_buf);
++
++	*value = (z2->rx_buf[2] << 8 | z2->rx_buf[3]) |
++		 (u32)(z2->rx_buf[4] << 8 | z2->rx_buf[5]) << 16;
++	return 0;
++}
++
+ /*
+  * Apply 'addr:val[,addr:val]' hex pairs via the blob path.  The C1F5E,4
+  * fwconfig Boot Sequence carries five register pokes, then the calibration
+@@ -3443,6 +3574,18 @@ static int apple_z2_d21_poke_list(struct apple_z2 *z2, const char *spec,
+ 			 tag, addr, val, error);
+ 		if (error)
+ 			break;
++		if (d21_poke_readback) {
++			u32 got = 0;
++			int rerr;
++
++			rerr = apple_z2_regread32(z2, addr, &got);
++			dev_info(&z2->spidev->dev,
++				 "D21 poke-verify %s %08x wrote=%08x read=%08x %s err=%d\n",
++				 tag, addr, val, got,
++				 rerr ? "unreadable" :
++					got == val ? "MATCH" : "MISMATCH",
++				 rerr);
++		}
+ 		entry = comma;
+ 	}
+ 	kfree(buf);
+-- 
+2.55.0
+

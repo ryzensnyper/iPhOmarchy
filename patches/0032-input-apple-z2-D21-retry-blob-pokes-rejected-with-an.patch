@@ -1,0 +1,108 @@
+From fabf08203126e93eb9424c3aaf0d32beb64d2545 Mon Sep 17 00:00:00 2001
+From: dugs <dugahol@protonmail.com>
+Date: Fri, 30 Oct 2026 13:18:48 +1030
+Subject: [PATCH 32/33] input: apple-z2: D21 retry blob pokes rejected with an
+ all-zero ack - the boot-to-boot variance
+
+Measured on a degraded boot (2026-10-30): the container's 0x331e register
+writes all ack 4a d1 but are inert in fw mode, and the FIRST blob-path
+poke (0x10003060, the register that ends the ~1.93 s metronome) came back
+ack 00 00 while the remaining pokes acked e1 0e - the stream then ran the
+pre-poke metronome with phantom storms.  Healthy boots ack the same poke
+e1 00.  A silently dropped first poke IS the variance.
+
+send_firmware_blob now records the 2-byte ack in z2->last_blob_ack, and
+apple_z2_poke32 retries a rejected poke (ack 0000) up to 3 times with a
+20 ms backoff - later pokes in the same list are accepted ~100 ms later,
+and the writes are idempotent.  The poke-readback log no longer claims
+MATCH/MISMATCH: fw-mode reads return the pull-response echo, not register
+data.
+---
+ drivers/input/touchscreen/apple_z2.c | 41 +++++++++++++++++++++++-----
+ 1 file changed, 34 insertions(+), 7 deletions(-)
+
+diff --git a/drivers/input/touchscreen/apple_z2.c b/drivers/input/touchscreen/apple_z2.c
+index 48531024f..acf169ba1 100644
+--- a/drivers/input/touchscreen/apple_z2.c
++++ b/drivers/input/touchscreen/apple_z2.c
+@@ -159,6 +159,7 @@ struct apple_z2 {
+ 	u8 *rx_buf;
+ 	u8 ack_buf[2];
+ 	struct delayed_work d21_poll;
++	u16 last_blob_ack;
+ };
+ 
+ static bool apple_z2_is_j172(const struct apple_z2 *z2)
+@@ -2186,6 +2187,7 @@ static int apple_z2_send_firmware_blob(struct apple_z2 *z2, const u8 *data,
+ 		error = spi_sync_transfer(z2->spidev, &ack_xfer, 1);
+ 		if (error)
+ 			return error;
++		z2->last_blob_ack = get_unaligned_le16(z2->ack_buf);
+ 		dev_info(&z2->spidev->dev, "blob len=%u ack: %*ph\n", size, 2,
+ 			 z2->ack_buf);
+ 		apple_z2_post_ack_delay(z2);
+@@ -3504,7 +3506,7 @@ static int apple_z2_poke32(struct apple_z2 *z2, u32 address, u32 value)
+ 	u8 buf[12 + 4 + 4];
+ 	u16 header_checksum;
+ 	u32 checksum;
+-	int i;
++	int i, error;
+ 
+ 	put_unaligned_be16(0x18e1, buf);
+ 	put_unaligned_be16(APPLE_Z2_HBPP_CMD_BLOB, buf + 2);
+@@ -3523,7 +3525,29 @@ static int apple_z2_poke32(struct apple_z2 *z2, u32 address, u32 value)
+ 	put_unaligned_be16(checksum & 0xffff, buf + 16);
+ 	put_unaligned_be16(checksum >> 16, buf + 18);
+ 
+-	return apple_z2_send_firmware_blob(z2, buf, sizeof(buf), false, false);
++	/*
++	 * The controller sometimes rejects the first blob-path poke after the
++	 * boot sequence with an all-zero ack (measured 2026-10-30: ack 00 00
++	 * on a boot whose stream then ran the pre-poke ~1.93 s metronome,
++	 * while the same poke acked e1 00 on healthy boots).  0x10003060 is
++	 * the register that ends the metronome, so a silently dropped first
++	 * poke IS the boot-to-boot variance.  Retry rejected pokes: later
++	 * pokes in the same list are accepted ~100 ms later, so a short
++	 * backoff is enough.  Writes are idempotent.
++	 */
++	for (i = 0; i < 3; i++) {
++		error = apple_z2_send_firmware_blob(z2, buf, sizeof(buf),
++						    false, false);
++		if (error)
++			return error;
++		if (z2->last_blob_ack)
++			break;
++		dev_warn(&z2->spidev->dev,
++			 "D21 poke %08x rejected (ack 0000), retry %d\n",
++			 address, i + 1);
++		msleep(20);
++	}
++	return error;
+ }
+ 
+ /*
+@@ -3633,13 +3657,16 @@ static int apple_z2_d21_poke_list(struct apple_z2 *z2, const char *spec,
+ 			u32 got = 0;
+ 			int rerr;
+ 
++			/*
++			 * Known useless in fw mode: the read packet returns the
++			 * pull-response echo, not register data (the kext only
++			 * reads registers from the bootloader).  Kept for the
++			 * record; do not trust got vs val.
++			 */
+ 			rerr = apple_z2_regread32(z2, addr, &got);
+ 			dev_info(&z2->spidev->dev,
+-				 "D21 poke-verify %s %08x wrote=%08x read=%08x %s err=%d\n",
+-				 tag, addr, val, got,
+-				 rerr ? "unreadable" :
+-					got == val ? "MATCH" : "MISMATCH",
+-				 rerr);
++				 "D21 poke-readback %s %08x wrote=%08x fw-read=%08x err=%d\n",
++				 tag, addr, val, got, rerr);
+ 		}
+ 		entry = comma;
+ 	}
+-- 
+2.55.0
+

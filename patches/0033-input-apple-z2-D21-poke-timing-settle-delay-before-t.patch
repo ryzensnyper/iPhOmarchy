@@ -1,0 +1,107 @@
+From afadcefa7a362142f22c0fc80e0f244221ef317a Mon Sep 17 00:00:00 2001
+From: dugs <dugahol@protonmail.com>
+Date: Fri, 30 Oct 2026 15:14:52 +1030
+Subject: [PATCH 33/33] input: apple-z2: D21 poke timing - settle delay before
+ the poke lists, drop the retry
+
+A/B measured 2026-10-30: with identical params, boots where the first
+blob-path poke is ACCEPTED (e1 0e, no retry fired) come up with the
+continuous stream, and boots where it is REJECTED (ack 0000) degrade -
+metronome without intervention, full delivery silence with the retry
+added earlier today.  The rejection is pure timing: the container's
+readiness probe completes ~20us before our first poke, and on some boots
+the controller is not accepting blobs yet.  Retrying mid-boot-sequence
+does not rescue the poke - it corrupts the boot further (silent stream,
+worse than the metronome).
+
+- poke_delay_ms (default 50): settle before each poke list; removes the
+  rejection on the boots tested.
+- The retry is gone: a rejected poke is logged loudly (boot will run the
+  pre-poke metronome; reload re-rolls) and the boot proceeds like -11.
+- poke_readback is exonerated by the same A/B (healthy boot13 had it too).
+---
+ drivers/input/touchscreen/apple_z2.c | 46 +++++++++++++++-------------
+ 1 file changed, 25 insertions(+), 21 deletions(-)
+
+diff --git a/drivers/input/touchscreen/apple_z2.c b/drivers/input/touchscreen/apple_z2.c
+index acf169ba1..921ad29df 100644
+--- a/drivers/input/touchscreen/apple_z2.c
++++ b/drivers/input/touchscreen/apple_z2.c
+@@ -2589,6 +2589,17 @@ module_param_named(poke_after, d21_poke_after, charp, 0444);
+ MODULE_PARM_DESC(poke_after,
+ 		 "D21: post-calibration memory pokes, same format as poke= (C1F5E,4: 10003300:1)");
+ 
++/*
++ * Settle delay in ms before each poke list.  The container's readiness
++ * probe completes microseconds before our first blob poke; on some boots
++ * the controller is not accepting blobs yet and rejects it (measured
++ * 2026-10-30).  50 ms removes the rejection on the boots tested.
++ */
++static unsigned int d21_poke_delay_ms = 50;
++module_param_named(poke_delay_ms, d21_poke_delay_ms, uint, 0444);
++MODULE_PARM_DESC(poke_delay_ms,
++		 "D21: settle delay before the poke= / poke_after= lists (default 50)");
++
+ /*
+  * Verify the pokes by reading them back through the kext's register-read
+  * packet (0x1c73 + long ATN_ACK).  There is no other memory-read path, so
+@@ -3525,28 +3536,11 @@ static int apple_z2_poke32(struct apple_z2 *z2, u32 address, u32 value)
+ 	put_unaligned_be16(checksum & 0xffff, buf + 16);
+ 	put_unaligned_be16(checksum >> 16, buf + 18);
+ 
+-	/*
+-	 * The controller sometimes rejects the first blob-path poke after the
+-	 * boot sequence with an all-zero ack (measured 2026-10-30: ack 00 00
+-	 * on a boot whose stream then ran the pre-poke ~1.93 s metronome,
+-	 * while the same poke acked e1 00 on healthy boots).  0x10003060 is
+-	 * the register that ends the metronome, so a silently dropped first
+-	 * poke IS the boot-to-boot variance.  Retry rejected pokes: later
+-	 * pokes in the same list are accepted ~100 ms later, so a short
+-	 * backoff is enough.  Writes are idempotent.
+-	 */
+-	for (i = 0; i < 3; i++) {
+-		error = apple_z2_send_firmware_blob(z2, buf, sizeof(buf),
+-						    false, false);
+-		if (error)
+-			return error;
+-		if (z2->last_blob_ack)
+-			break;
++	error = apple_z2_send_firmware_blob(z2, buf, sizeof(buf), false, false);
++	if (!error && !z2->last_blob_ack)
+ 		dev_warn(&z2->spidev->dev,
+-			 "D21 poke %08x rejected (ack 0000), retry %d\n",
+-			 address, i + 1);
+-		msleep(20);
+-	}
++			 "D21 poke %08x REJECTED (ack 0000) - boot will run the "
++			 "pre-poke metronome; reload to re-roll\n", address);
+ 	return error;
+ }
+ 
+@@ -3619,6 +3613,14 @@ static int apple_z2_regread32(struct apple_z2 *z2, u32 address, u32 *value)
+  * request, then one more (0x10003060/5c/58, 0x10003000, 0x10003458, cal,
+  * 0x10003300) - scan-engine configuration the D21 container does not repeat
+  * as load records, so it can be replayed with these knobs.
++ *
++ * Timing note (measured 2026-10-30): on some boots the controller rejects
++ * the FIRST poke with an all-zero ack when it is sent within microseconds
++ * of the container's readiness probe; rejected boots run the pre-poke
++ * ~1.93 s metronome.  A short settle delay before the list removes the
++ * rejection.  Do NOT retry a rejected poke: a re-send mid-boot-sequence
++ * leaves the delivery engine fully silent (measured - worse than the
++ * metronome).  Log the rejection and move on; a reload re-rolls the boot.
+  */
+ static int apple_z2_d21_poke_list(struct apple_z2 *z2, const char *spec,
+ 				  const char *tag)
+@@ -3631,6 +3633,8 @@ static int apple_z2_d21_poke_list(struct apple_z2 *z2, const char *spec,
+ 	buf = kstrdup(spec, GFP_KERNEL);
+ 	if (!buf)
+ 		return -ENOMEM;
++	if (d21_poke_delay_ms)
++		msleep(d21_poke_delay_ms);
+ 	for (entry = buf; entry && *entry; ) {
+ 		char *comma = strpbrk(entry, ",");
+ 		char *colon;
+-- 
+2.55.0
+

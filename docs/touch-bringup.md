@@ -139,4 +139,70 @@ pipeline eventually crashes; when they stay quiet, everything streams. Next: cat
 ghost-active boot with the trace running, and inspect the edge-channel calibration
 (`orb-gap-cal`, `mtcl` blobs; check whether column 0 has a baseline at all).
 
+## Status (2026-10-30): boot variance SOLVED, idle delivery fixed by the Boot Sequence pokes; touch-path gate open
+
+Patch series state (`patches/` `0026`-`0033`, kernel tree `a11-port` at `afadcefa7`, tag
+`d21-gold`):
+
+| Piece | State |
+|---|---|
+| Kext-faithful interrupt pull (`[EB][seq][00]`+0xAA filler, seq after consume) | ✅ patch 0026 |
+| `read_now=`/`kick=` vs unload race fix (field-captured NULL oops) | ✅ patch 0027 |
+| Boot Sequence pokes (`poke=`/`poke_after=` blob-path params) | ✅ patches 0028 — idle metronome → continuous 20-40 fps |
+| HBPP register read (0x1c73) + `poke_readback=`/`regread=` | ✅ patch 0029 |
+| `poll_hz=` runtime poller + hazard doc | ✅ patches 0030/0031 — DO NOT enable (see below) |
+| Poke-retry experiment | ✅ patches 0032/0033 — retry REMOVED (made rejected-poke boots fully silent); `poke_delay_ms=50` settle is the fix |
+
+**Boot-to-boot variance solved** (`poke_delay_ms=50`, default): the container's readiness
+probe completes ~20 µs before the driver's first poke, so on some boots the first poke is
+REJECTED (ack `0000`) and delivery degrades to the 1.9 s metronome. A rejected first poke is
+pure timing — settle 50 ms before the poke lists and every probe-time poke is accepted
+(verified: 0 rejections, 23.9 fps continuous, p50 25 ms). **Never retry a rejected poke**
+(measured: the boot goes fully silent — worse than the metronome; a reload re-rolls).
+
+**Container tail vs fwconfig discrepancy [4]**: the fwconfig Boot Sequence says poke[4] =
+`10003458:1` but the container's five `0x331e` register-write records carry `10003518:1`.
+Both boot healthy; the container bytes are treated as authoritative (the gold config uses
+`10003518:1`). The container tail also carries the pokes as kext-style register writes —
+the 10-30 conclusion that "the driver must replay them via `poke=`" was about REDUNDANCY:
+the driver replays them after `poke_delay_ms`, which is what makes the acceptance reliable.
+
+**`poll_hz>0` wedges the D21 controller** (patches 0030/0031): off-IRQ pulls return
+all-zero, the stream collapses, and the poisoning SURVIVES rmmod + 45 s rails-off — only a
+force-restart recovers. Same persistence class as `dma_min=`/`ip_delay=`. Never combine
+either with the pokes. iOS never pulls without an IRQ, so no firmware path serves
+off-schedule pulls.
+
+**fw-mode register reads do not exist** (patch 0029): the 0x1c73 read-register command is
+bootloader-only — in fw mode every read returns the pull-response echo. A poke value's
+EFFECT is the only observable; `poke_readback=` verifies only via boot-log acks.
+
+### The open problem: the touch-path delivery gate
+
+Measured law on a healthy boot (labeled-gesture seqtest runs):
+
+1. idle/hover: continuous, p50 = 25 ms
+2. **sustained still contact: ~1.9 s metronome ticks** (1-2 frames per tick)
+3. active drag: adapts, gaps tighten to 250-600 ms
+4. short contacts (<2 s): continuous (p50 = 122 ms)
+
+The gate is in the controller, below HL state (0x72 reads Active throughout) and below the
+scan engine (0xf8 counters climb in every state). Prime suspects: the three unswept
+small-integer pokes `0x10003058` (=6), `0x1000305c` (=2), `0x10003518` (=1) — sweep them
+against the sustained-touch tick (the 0x10003060 sweep killed streaming at 0/0x40; it is a
+threshold/enable, not the interval). Note: the 0xf8 report layout MUTATES with fw state
+(header u16 `0007`/`0004`/`0000`) — do not hardcode offsets.
+
+### Operating notes
+
+- After any boot: `dmesg -n 1` (+ optionally unbind vtcon1) **before** starting any fb UI —
+  the console rendering the kmsg flood cooked/froze a phone once.
+- Multi-finger contact (e.g. picking the phone up) on a degraded (metronome) boot wedges
+  delivery permanently; the phone must lie flat during tests.
+- Full calibration set matters: `z2-shapeaccel.bin` was missing until 10-29/30 (zeroed
+  208 B blob every boot); with all four blobs loaded, degraded boots showed 0 phantom
+  records and denser hover (~17-40 fps).
+- Health check (passive, ~15 s): capture kmsg, decode with `decode44-full.py`; healthy =
+  hover st=4 records at p50 ≤ 50 ms, zero gaps > 500 ms after startup.
+
 

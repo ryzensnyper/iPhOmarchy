@@ -1,0 +1,124 @@
+From ddf9f780e15f5ae7e505ce6c9d18efd0afb7b61b Mon Sep 17 00:00:00 2001
+From: dugs <dugahol@protonmail.com>
+Date: Fri, 30 Oct 2026 11:08:06 +1030
+Subject: [PATCH 30/33] input: apple-z2: D21 poll_hz= runtime poller - drain the
+ frame queue without the IRQ gate
+
+Orchard's j71b_z2.ko runtime is fully POLLED (rtpoll callbacks,
+IRQ_IS_POLLED) rather than trusting per-frame IRQs - they never tamed the
+D21 delivery cadence either.  With the Boot Sequence pokes applied, idle
+and hover stream continuously but touch-bit records still arrive on a
+~1.93 s gate, so the gate for touch frames sits somewhere the IRQ path
+cannot bypass.
+
+poll_hz=N arms a self-re-arming delayed work after boot that drains up to
+8 packets per tick under io_lock.  Empty pulls are a single 16-byte
+transfer and leave the seq tag untouched, so this composes with the IRQ
+path.  Canceled in apple_z2_stop before the IRQ/protocol teardown.
+
+This is both a fallback (touch usable while the root cause is unknown)
+and the experiment that splits the hypotheses: frames served mid-silence
+mean the gate is on IRQ assertion only; empty pulls mean the controller
+holds touch frames until its own cadence.
+---
+ drivers/input/touchscreen/apple_z2.c | 63 ++++++++++++++++++++++++++++
+ 1 file changed, 63 insertions(+)
+
+diff --git a/drivers/input/touchscreen/apple_z2.c b/drivers/input/touchscreen/apple_z2.c
+index 1a0b8037b..57103ccb5 100644
+--- a/drivers/input/touchscreen/apple_z2.c
++++ b/drivers/input/touchscreen/apple_z2.c
+@@ -158,6 +158,7 @@ struct apple_z2 {
+ 	u8 *tx_buf;
+ 	u8 *rx_buf;
+ 	u8 ack_buf[2];
++	struct delayed_work d21_poll;
+ };
+ 
+ static bool apple_z2_is_j172(const struct apple_z2 *z2)
+@@ -1534,6 +1535,55 @@ static irqreturn_t apple_z2_irq(int irq, void *data)
+ 	return IRQ_HANDLED;
+ }
+ 
++/*
++ * Orchard-style runtime poller rate in Hz (0 = off, the default).  See
++ * apple_z2_d21_poll_work().  60-120 is a sensible range; values above the
++ * SPI command round-trip just burn bus time on empty pulls.
++ */
++static unsigned int d21_poll_hz;
++module_param_named(poll_hz, d21_poll_hz, uint, 0444);
++MODULE_PARM_DESC(poll_hz,
++		 "D21: poll the frame queue at N Hz instead of trusting per-frame IRQs (0=off)");
++
++/*
++ * Orchard-style runtime poller (j71b_z2.ko runs its whole runtime POLLED,
++ * with rtpoll callbacks and IRQ_IS_POLLED, rather than trusting per-frame
++ * IRQs).
++ *
++ * The D21 scan engine never stops (0xf8 counters climb continuously), but
++ * with the Boot Sequence pokes applied the touch-bit records still arrive on
++ * a ~1.93 s delivery gate while idle/hover streams freely - so the gate for
++ * touch frames sits somewhere the IRQ path cannot bypass.  When poll_hz>0,
++ * re-arm this worker every tick and drain whatever the queue will give us
++ * right now, gate or no gate.  An empty pull is one 16-byte transfer; pulls
++ * that return nothing leave the seq tag untouched, so this composes with
++ * the IRQ path.
++ */
++static void apple_z2_d21_poll_work(struct work_struct *work)
++{
++	struct apple_z2 *z2 = container_of(work, struct apple_z2, d21_poll.work);
++	unsigned int i;
++	int error = 0;
++
++	if (z2->booted) {
++		mutex_lock(&z2->io_lock);
++		for (i = 0; i < 8; i++) {
++			error = apple_z2_read_packet(z2);
++			if (error || (!z2->runtime_frame_valid &&
++				      !z2->runtime_control_reply))
++				break;
++		}
++		mutex_unlock(&z2->io_lock);
++		if (error)
++			dev_warn_ratelimited(&z2->spidev->dev,
++					     "poll packet read failed: %d\n",
++					     error);
++	}
++	if (z2->booted && d21_poll_hz)
++		schedule_delayed_work(&z2->d21_poll,
++				      msecs_to_jiffies(1000 / d21_poll_hz));
++}
++
+ static void apple_z2_set_gpio(struct gpio_desc *gpio, int value)
+ {
+ 	if (gpio)
+@@ -3838,6 +3888,13 @@ static int apple_z2_upload_firmware(struct apple_z2 *z2)
+ 			error = apple_z2_read_packet(z2);
+ 		}
+ 		mutex_unlock(&z2->io_lock);
++		if (!error && d21_poll_hz) {
++			INIT_DELAYED_WORK(&z2->d21_poll, apple_z2_d21_poll_work);
++			schedule_delayed_work(&z2->d21_poll,
++					      msecs_to_jiffies(1000 / d21_poll_hz));
++			dev_info(&z2->spidev->dev, "D21: runtime poller at %u Hz\n",
++				 d21_poll_hz);
++		}
+ 		return error;
+ 	}
+ 
+@@ -4361,6 +4418,12 @@ static int apple_z2_probe(struct spi_device *spi)
+ 
+ static void apple_z2_stop(struct apple_z2 *z2)
+ {
++	/*
++	 * The poller re-arms itself only while booted, but a work item may
++	 * already be queued or running; drain it before the IRQ/protocol go
++	 * away so it can't touch the controller mid-teardown.
++	 */
++	cancel_delayed_work_sync(&z2->d21_poll);
+ 	disable_irq(z2->spidev->irq);
+ 	if (z2->irq_type_changed) {
+ 		irq_set_irq_type(z2->spidev->irq, z2->saved_irq_type);
+-- 
+2.55.0
+
