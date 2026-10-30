@@ -14,16 +14,29 @@ iPhone 7 Plus). Port surface: [bringup-plan.md](bringup-plan.md). Hardware map:
 - **SPI1 controller up** (`spi-apple`), DT loop proven. See `patches/0001`.
 - Full A11 hardware map decoded from the Apple Device Tree (`hardware/`).
 
-### M1 — Touch (the gate for any UI)
-Phone USB is device-mode only, so a compositor is unreachable without touch. Software render
-(`labwc` + `WLR_RENDERER=pixman` on `simpledrm`) is fine; input is the blocker.
-- [ ] Port **touch clock** (`clk-apple-t8015-touch`) from A10 → t8015 PMGR offsets.
-- [ ] Port **SmartIO + SIO-DMA** (`iop,t8015`; ADT `sio@2EE00000`, IRQ 308-311).
-- [ ] Merge the A10 **T8010 SPI** enhancements into `spi-apple.c`; add t8015 data.
-- [ ] Port **`apple_z2.c`**; add a D21 multi-touch node (ADT: `hid-transport,k1`, SPI1, IRQ 292).
-- [ ] Build an **A11 touch firmware** container (`dfrmtfw-d21-…`) with `makez2fw`
-      (`--dynamic-calibration`).
-- [ ] Contribute the **A11 touch calibration bridge** in m1n1 (ADT `syscfg` → DT).
+### M1 — Touch ✅ **WORKING** (2026-10-30)
+Six-finger multitouch with pressure/tool and palm/hover suppression over evdev. What it took
+(all decoded from the ADT, the iOS kernelcache and live captures — see
+[touch-bringup.md](touch-bringup.md)):
+
+- [x] Port **`apple_z2.c`** to the D21 (`hid-transport,k1`, SPI1, GPIO 102 IRQ — **level-low**).
+- [x] Boot the controller from a container built out of Apple's own **`D21.mtprops`**
+      (C1F5E,4 personality, fw 0x0773) + the four calibration blob slots.
+- [x] **Turn on the touch high-voltage rail** — the `display-pmu,chestnut` PMIC switch the
+      ADT names as `function-power_ana` (patch 0020). Without it the controller scans and
+      reacts but never emits a single contact frame.
+- [x] Decode the **0x44 contact frame format** (signed surface units) and replay the
+      fwconfig **Boot Sequence register pokes** (patch 0028) — idle delivery metronome →
+      continuous stream.
+- [x] Kext-faithful interrupt pull + **one frame read per IRQ** (patch 0034) — the drain
+      loop's off-IRQ pulls were the stream-death root cause.
+- [x] **Pressure-based contact validity** (patches 0035/0036) — the 0x44 state byte's
+      meaning varies with fw state; pressure is the invariant.
+
+Open (in order): the controller's **still-contact refresh cadence** (~1.9 s bursts during
+stationary holds — drag streams continuously; suspect the small-integer Boot Sequence pokes),
+**palm rejection** for pressed palms (tool-size rule), and the boot-to-boot **delivery-mode
+variance** (healthy vs phantom-transient vs half-rate reloads).
 
 ### M2 — Bluetooth
 - [ ] ADT says BT is on **uart1** (`0x2E604000`, IRQ 283), `bluetooth,n88`, 3 Mbaud. uart1 node

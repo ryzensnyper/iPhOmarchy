@@ -1,9 +1,23 @@
-# Touch bring-up notes (A11 / D21)
+# Touch bring-up (A11 / D21) — WORKING
 
-Touch is the gate for a usable graphical shell on this phone: the USB port is **device-mode
-only** (no USB keyboard/mouse), so without touch a compositor is unreachable on the device.
-Software rendering is fine (`labwc` on `simpledrm` with `WLR_RENDERER=pixman`, as henrikklee
-does on iPad) — input is the blocker.
+**Status (2026-10-30): touch works.** Six-finger multitouch with pressure/tool and
+palm/hover suppression over evdev; continuous idle/hover and drag streaming. Series state:
+`patches/0001`-`0036` on kernel tree `a11-port`. The sections below record how it was
+decoded and brought up, the measured wire laws, and the open items.
+
+**Open, in order:**
+1. **Still-contact refresh cadence** — stationary holds deliver in ~0.3-1 s bursts every
+   ~1.9 s while active drag streams continuously; the suspect set is the three
+   small-integer Boot Sequence pokes (`0x10003058`=6, `0x1000305c`=2, `0x10003518`=1).
+2. **Palm rejection for pressed palms** (tool-size rule; resting palms already drop via
+   the pressure filter).
+3. **Boot-mode variance** — reloads roll healthy / phantom-transient / half-rate /
+   dead modes; find the selector instead of re-rolling.
+
+This was the gate for a usable graphical shell: the USB port is **device-mode only** (no
+USB keyboard/mouse), so without touch a compositor is unreachable on the device. Software
+rendering is fine (`labwc` on `simpledrm` with `WLR_RENDERER=pixman`, as henrikklee does on
+iPad) — input was the blocker.
 
 ## What the hardware is (from the ADT)
 

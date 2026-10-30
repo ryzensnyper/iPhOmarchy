@@ -1,5 +1,9 @@
 # Omarchy on iPhone 8 Plus (D21 / A11) — plan & reality
 
+> **Historical (2026-10-25, pre-touch).** Current state: [ROADMAP.md](ROADMAP.md) and
+> [touch-bringup.md](touch-bringup.md). The hardware port surface below is still the
+> reference for the remaining drivers (Wi-Fi/BT).
+
 Status date: 2026-10-25. Companion to `/home/doug/checkm8-kit/HANDOFF-2026-10-25.md`.
 
 ## What already works (baseline)
