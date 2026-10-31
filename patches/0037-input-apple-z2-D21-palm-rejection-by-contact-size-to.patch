@@ -1,0 +1,102 @@
+From b0596de41057fed2386628b03da43e56e24d1c45 Mon Sep 17 00:00:00 2001
+From: dugs <dugahol@protonmail.com>
+Date: Sat, 31 Oct 2026 11:39:56 +1030
+Subject: [PATCH 37/38] input: apple-z2: D21 palm rejection by contact size -
+ tool_major latch
+
+Measured on the omarchy-a install (raw evdev, 2026-10-31): a real finger
+(drag) reads tool_major 662-757 while a flat pressed palm reads 3000-4360
+(median 3319, 205 records) with a 4-record onset fringe at 537-1000.
+Pressed palms pass the pressure filter today, so a resting palm clicks the
+desktop.
+
+Reject palms with a per-contact latch: any frame of a contact whose
+tool_major reaches d21_tool_max (default 2000, 0=off) latches that contact
+as a palm until it lifts or vanishes from the report - a per-frame check
+alone would let the onset fringe flicker through.  The finger never
+approaches the threshold, so a finger stays live while a palm rests on the
+panel (the iOS behavior; verified live: a finger tap under a resting palm
+registers today and keeps doing so).
+---
+ drivers/input/touchscreen/apple_z2.c | 35 +++++++++++++++++++++++++++-
+ 1 file changed, 34 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/input/touchscreen/apple_z2.c b/drivers/input/touchscreen/apple_z2.c
+index ad80874b6..7516b19bf 100644
+--- a/drivers/input/touchscreen/apple_z2.c
++++ b/drivers/input/touchscreen/apple_z2.c
+@@ -160,6 +160,8 @@ struct apple_z2 {
+ 	u8 ack_buf[2];
+ 	struct delayed_work d21_poll;
+ 	u16 last_blob_ack;
++	/* D21 palm rejection: one latch bit per MT slot (slots = 10 for D21). */
++	DECLARE_BITMAP(d21_palm_latch, 10);
+ };
+ 
+ static bool apple_z2_is_j172(const struct apple_z2 *z2)
+@@ -421,6 +423,22 @@ module_param_named(pres_min, d21_pres_min, uint, 0444);
+ MODULE_PARM_DESC(pres_min,
+ 		 "D21: minimum 0x44 pressure for an active contact (1=default, 0=raw)");
+ 
++/*
++ * D21: palm rejection by contact size.  tool_major (+12) measured on the
++ * 2026-10-31 omarchy-a install: a real finger (drag) reads 662-757, a flat
++ * pressed palm reads 3000-4360 (median 3319, 205 records) with a 4-record
++ * onset fringe at 537-1000.  Any frame of a contact that reaches tool_max
++ * latches that contact as a palm for its whole life - a per-frame check
++ * alone would let the onset fringe flicker through - and the latch clears
++ * when the contact lifts or vanishes from the report.  The finger never
++ * approaches the threshold, so a finger stays live while a palm rests on
++ * the panel (the iOS behavior).  0 disables the check.
++ */
++static unsigned int d21_tool_max = 2000;
++module_param_named(tool_max, d21_tool_max, uint, 0444);
++MODULE_PARM_DESC(tool_max,
++		 "D21: tool_major that latches a contact as a palm (0=off)");
++
+ static void apple_z2_parse_touches(struct apple_z2 *z2,
+ 				   const u8 *msg, size_t msg_len)
+ {
+@@ -464,6 +482,8 @@ static void apple_z2_parse_touches(struct apple_z2 *z2,
+ 		return;
+ 	}
+ 	fingers = (struct apple_z2_finger *)(msg + APPLE_Z2_FINGERS_OFFSET);
++	/* D21 palm latch: slots seen in THIS frame (vanish sweep below). */
++	unsigned long d21_seen = 0;
+ 	for (i = 0; i < nfingers; i++) {
+ 		slot = input_mt_get_slot_by_key(z2->input_dev, fingers[i].finger);
+ 		if (slot < 0) {
+@@ -492,9 +512,16 @@ static void apple_z2_parse_touches(struct apple_z2 *z2,
+ 			 * is the explicit lift.  d21_pres_min=0 restores the
+ 			 * raw pass-everything behavior for A/B.
+ 			 */
++			if (d21_tool_max &&
++			    le16_to_cpu(fingers[i].tool_major) >= d21_tool_max)
++				set_bit(slot, z2->d21_palm_latch);
++			else if (fingers[i].state == 0)
++				clear_bit(slot, z2->d21_palm_latch);
++			__set_bit(slot, &d21_seen);
+ 			slot_valid = fingers[i].state != 0 &&
+ 				     le16_to_cpu(fingers[i].pressure) >=
+-					     d21_pres_min;
++					     d21_pres_min &&
++				     !test_bit(slot, z2->d21_palm_latch);
+ 		} else {
+ 			slot_valid = fingers[i].state == APPLE_Z2_TOUCH_STARTED ||
+ 				     fingers[i].state == APPLE_Z2_TOUCH_MOVED;
+@@ -575,6 +602,12 @@ static void apple_z2_parse_touches(struct apple_z2 *z2,
+ 		input_report_abs(z2->input_dev, ABS_MT_TOUCH_MINOR,
+ 				 le16_to_cpu(fingers[i].touch_minor));
+ 	}
++	if (apple_z2_is_d21(z2)) {
++		/* Contacts that vanished from the report release their latch. */
++		for (i = 0; i < 10; i++)
++			if (!test_bit(i, &d21_seen))
++				clear_bit(i, z2->d21_palm_latch);
++	}
+ 	input_mt_sync_frame(z2->input_dev);
+ 	input_sync(z2->input_dev);
+ }
+-- 
+2.55.0
+

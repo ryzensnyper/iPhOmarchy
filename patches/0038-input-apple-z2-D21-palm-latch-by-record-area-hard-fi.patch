@@ -1,0 +1,70 @@
+From 136547cacafcf0200b4439a246fb39464c013c8e Mon Sep 17 00:00:00 2001
+From: dugs <dugahol@protonmail.com>
+Date: Sat, 31 Oct 2026 12:06:00 +1030
+Subject: [PATCH 38/38] input: apple-z2: D21 palm latch by record area - hard
+ finger vs light palm
+
+Follow-up to the tool_major latch, from a labeled calibration round (raw
+0x44 records): a HARD finger press ramps tool_major to 1812 x1214 minor
+(area 2.2M) while a LIGHT palm press lands 1934x1552 (area 3.0M) and a
+medium palm 1455-2174 with fragmented finger-sized records - major alone
+cannot separate them.  Record AREA does on this data: palms 2.84M-8.0M,
+fingers <= 2.2M.
+
+Add d21_tool_area_max (default 2.5M, 0=off) OR-ed into the same
+per-contact latch: a contact whose record area reaches it is rejected for
+its whole life.  Palm fragments (657x555, 1763x549 strips) may still
+flash one frame; a resting palm (pressure 0) never reaches the filter.
+---
+ drivers/input/touchscreen/apple_z2.c | 23 +++++++++++++++++++++--
+ 1 file changed, 21 insertions(+), 2 deletions(-)
+
+diff --git a/drivers/input/touchscreen/apple_z2.c b/drivers/input/touchscreen/apple_z2.c
+index 7516b19bf..301eb3889 100644
+--- a/drivers/input/touchscreen/apple_z2.c
++++ b/drivers/input/touchscreen/apple_z2.c
+@@ -433,11 +433,26 @@ MODULE_PARM_DESC(pres_min,
+  * when the contact lifts or vanishes from the report.  The finger never
+  * approaches the threshold, so a finger stays live while a palm rests on
+  * the panel (the iOS behavior).  0 disables the check.
++ *
++ * Calibration round 2 (raw 0x44 records, same day): a HARD finger press
++ * ramps tool_major up to 1812 (x1214 minor, area 2.2M) while a LIGHT palm
++ * press lands at 1934x1552 (area 3.0M) and a medium palm at 1455-2174 -
++ * major alone cannot separate them.  The record AREA (major*minor) does:
++ * every observed palm frame is 2.84M-8.0M, every observed finger <= 2.2M.
++ * d21_tool_area_max latches a contact whose record area reaches it; the
++ * latches OR together.  Palm fragments (657x555, 1763x549 strips) can
++ * still flash a single frame - a resting palm (pressure 0) never reaches
++ * the filter at all, so the fragment blips only occur under deliberate
++ * mashing.  0 disables the area check.
+  */
+ static unsigned int d21_tool_max = 2000;
+ module_param_named(tool_max, d21_tool_max, uint, 0444);
+ MODULE_PARM_DESC(tool_max,
+ 		 "D21: tool_major that latches a contact as a palm (0=off)");
++static unsigned int d21_tool_area_max = 2500000;
++module_param_named(tool_area_max, d21_tool_area_max, uint, 0444);
++MODULE_PARM_DESC(tool_area_max,
++		 "D21: tool_major*tool_minor area that latches a palm (0=off)");
+ 
+ static void apple_z2_parse_touches(struct apple_z2 *z2,
+ 				   const u8 *msg, size_t msg_len)
+@@ -512,8 +527,12 @@ static void apple_z2_parse_touches(struct apple_z2 *z2,
+ 			 * is the explicit lift.  d21_pres_min=0 restores the
+ 			 * raw pass-everything behavior for A/B.
+ 			 */
+-			if (d21_tool_max &&
+-			    le16_to_cpu(fingers[i].tool_major) >= d21_tool_max)
++			if ((d21_tool_max &&
++			     le16_to_cpu(fingers[i].tool_major) >= d21_tool_max) ||
++			    (d21_tool_area_max &&
++			     (unsigned int)le16_to_cpu(fingers[i].tool_major) *
++					     le16_to_cpu(fingers[i].tool_minor) >=
++				     d21_tool_area_max))
+ 				set_bit(slot, z2->d21_palm_latch);
+ 			else if (fingers[i].state == 0)
+ 				clear_bit(slot, z2->d21_palm_latch);
+-- 
+2.55.0
+
