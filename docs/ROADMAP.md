@@ -32,17 +32,43 @@ Six-finger multitouch with pressure/tool and palm/hover suppression over evdev. 
       loop's off-IRQ pulls were the stream-death root cause.
 - [x] **Pressure-based contact validity** (patches 0035/0036) — the 0x44 state byte's
       meaning varies with fw state; pressure is the invariant.
+- [x] **Palm rejection** (patches 0037/0038, 2026-10-31) — per-contact size latch:
+      `tool_major ≥ 2000` OR record **area** `major×minor ≥ 2.5M`. Measured on-device:
+      a hard finger press reaches 1812×1214 (2.2M) while palms land 2.84M-8.0M, so
+      area separates what major alone cannot. Verified: medium + hard palm presses
+      produce zero evdev events; a finger tap under a resting palm registers (the iOS
+      behavior — a resting palm is pressure-0 and never reaches the size rules).
+- [x] **Deployed into the installed omarchy-a system** (2026-10-31) — omarchy-a
+      v0.1.1-d21 installed via the Orchard CLI (custom d21 adapter); touch loads at
+      boot via `d21-touch.service` (gold poke config) and the labwc/Quickshell
+      desktop is touch-reactive. Health gate: healthy rolls stream 19-24 fps,
+      p50 26-33 ms, zero gaps, zero phantoms.
 
-Open (in order): the controller's **still-contact refresh cadence** (~1.9 s bursts during
-stationary holds — drag streams continuously; suspect the small-integer Boot Sequence pokes),
-**palm rejection** for pressed palms (tool-size rule), and the boot-to-boot **delivery-mode
-variance** (healthy vs phantom-transient vs half-rate reloads).
+Closed: the **still-contact refresh cadence** (~1.9 s) turned out to be a drain-loop-era
+artifact — with one-frame-per-IRQ (patch 0034) a verified 9.7 s dead-still hold streams
+at 14.9 fps with zero gaps; it only survives in the big-contact path (a still palm shows
+one ~1.9 s re-scan gap per session). The poke sweep it motivated is void.
 
-### M2 — Bluetooth
+Still open in M1: the boot-to-boot **delivery-mode variance** (healthy vs
+phantom-transient vs half-rate vs dead reloads, ~1/6 healthy; gate every session through
+the idlecheck meter and re-roll via `systemctl restart d21-touch`).
+
+### M2 — Bluetooth (next up)
 - [ ] ADT says BT is on **uart1** (`0x2E604000`, IRQ 283), `bluetooth,n88`, 3 Mbaud. uart1 node
       exists (`patches/0001`); needs a boot-test.
 - [ ] Add an `hci_bcm` binding for the A11 BT + a `.hcd` from `BlueTool` (hcdpack).
 - [ ] Verify with BlueZ (scan/pair).
+
+Orchard template to follow (`OrchardLinux/hardware`, j71b is the reference):
+- `kernel/patches/j71b/0003-j71b-bluetooth-driver.patch` — in-tree `hci_bcm.c` quirk
+  flags (`wake_before_power_cycle`, `set_baudrate_before_patch`,
+  `broken_read_transmit_power`, `fixup_le_adv_report_evt_type`). The D21 shape is the
+  same: a quirk struct entry for the T8015 BT, selected from the DT compatible.
+- `devices/j71b/firmware.json` — the public firmware **recipe**: IPSW url+sha,
+  `extract_patterns`, and `files[]` with destinations (`BCM.apple,j71b.hcd` →
+  `lib/firmware/brcm/`). For the D21: the BCM4357 `.hcd` from the `iPhone10,2` IPSW
+  (`BlueTool`/hcdpack output), destination `lib/firmware/brcm/BCM.apple,d21.hcd`.
+- `devices/j71b/device.toml` `[support]` flags — flip `bluetooth` when runtime-confirmed.
 
 ### M3 — Wi-Fi
 - [ ] Port the **T8010 PCIe host bridge** (`pcie-apple-h9p.c`) → `apcie,t8015`
@@ -50,14 +76,53 @@ variance** (healthy vs phantom-transient vs half-rate reloads).
 - [ ] `brcmfmac` for **BCM4357** (`wlan-pcie,bcm4357`, PCIe port 3) + firmware (`.bin`/`.clm_blob`/
       `.txcap_blob`) and SysCfg/NVMEM calibration.
 
-### M4 — Omarchy shell
-- [ ] Layer Omarchy opinions on the Arch Linux ARM install (`jondkinney/armarchy`, aarch64).
-- [ ] A touch-adapted compositor/shell (model on henrikklee's iPad `labwc` approach).
-- [ ] Target: `labwc` + software render on `simpledrm`, usable with touch.
+⚠️ Known hazard from the 2026-10-30 session: enabling apcie port 3 + DARTs killed the
+console at t≈62.8 s — bring the hang-proof console (`CONFIG_USB_G_SERIAL=y` +
+`console=ttyGS0`) or bisect the DART map before touching this again.
 
-### M5 — Display / GPU (long-term, out of near-term scope)
+Orchard template to follow:
+- `kernel/patches/j71b/0002-j71b-wifi-driver.patch` — in-tree `brcmfmac` fixes (e.g. the
+  `bus_reset` work cancel before `brcmf_attach()` init). D21 will need its own
+  PCIe-DMA/IOMMU-shaped fixes plus `kernel/configs/d21` `CONFIG_BRCMFMAC` fragment.
+- `devices/j71b/firmware.json` destinations: `brcmfmac4355c1-pcie.apple,j71b.{bin,clm_blob,
+  txcap_blob,txt}` — for the D21: **`brcmfmac4357-pcie.apple,d21.{bin,clm_blob,txcap_blob,txt}`**
+  extracted from the `iPhone10,2` IPSW (`C-4357__s-C1F5E/`), plus the NVMEM/SysCfg txt.
+- `kernel/modules/j71b/power/` shows the out-of-tree module convention if a helper
+  module is preferred over in-tree patches.
+
+### M4 — Adaptive charging
+- [ ] Identify the D21 charging PMIC in the live ADT (`scharge` on i2c; chestnut is the
+      display/touch PMIC, not the charger) and map its charge/input-limit registers.
+- [ ] Out-of-tree policy module following **`kernel/modules/j71b/power/j71b_charge_policy.c`**:
+      a conservative charging *lease* (root-only renewal, input-current limit registers
+      `0xa03`/`0xa0c` on the j71b PMIC, PM notifiers that park renewals and synchronously
+      restore the safe handoff limit before suspend). The D21 module targets the T8015
+      PMIC's equivalent registers from the ADT.
+- [ ] Runtime lease service following **`runtime/j71b/j71b-charge-lease/`**: userspace
+      grants/renews charging leases (thermal-aware / battery-healthy ramps = the
+      "adaptive" part), root-only, rechecks PMIC+battery every renewal.
+- [ ] Verify with a USB power meter if available; never enable a limit we cannot restore.
+
+### M5 — Audio
+- [ ] Map the D21 audio path from the live ADT: the Apple audio controller (MCA/I2S) and
+      the speaker/receiver codec nodes (T8015 codec wiring differs from M-series — no
+      Orchard reference exists, this is the least-charted of the four).
+- [ ] `kernel/configs/d21`: `CONFIG_SND_*` Apple audio options the tree supports.
+- [ ] Kernel patches for any T8015-specific MCA/codec gaps, then a runtime config
+      (PipeWire/WirePlumber) for the simple cases (speaker, receiver, mic).
+- [ ] Usability bar: audio out for the desktop UI + terminal bell before media playback.
+
+### M6 — Omarchy shell polish
+- [x] Layer Omarchy opinions on the Arch Linux ARM install — **done 2026-10-31**: the
+      Orchard CLI installed omarchy-a v0.1.1-d21 with labwc + the Quickshell
+      omarchy-ipad shell, tablet autologin, wvkbd.
+- [ ] Touch-adapted shell polish on the installed system (gestures, on-screen keyboard
+      behavior, rotation).
+- [ ] Target: `labwc` + software render on `simpledrm`, usable with touch — **met**.
+
+### M7 — Display / GPU (long-term, out of near-term scope)
 - Display pipe (`disp0,t8015`) and GPU (`G11P`) have **no mainline driver**; upstream marks them
-  TBA. Not required for M1–M4 (simple-framebuffer is enough).
+  TBA. Not required for M1–M6 (simple-framebuffer is enough).
 
 ## Cross-cutting
 

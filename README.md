@@ -22,9 +22,12 @@ on, and an interrupt drain loop that raced the controller into silence).
 | Pwned boot (checkm8, palera1n rootless) | ✅ reproducible, tethered |
 | Dual-boot: iOS on `nvme0n1p1`, Linux on `nvme0n1p2` | ✅ iOS intact |
 | Display — simple framebuffer 1080×1920, brightness | ✅ (real KMS is TBA upstream) |
-| **Touch** — 6-point multitouch, pressure/tool, palm/hover rejection | ✅ **working** — open: controller's still-contact refresh cadence (~1.9 s), palm rejection for pressed palms |
-| Wi-Fi (BCM4357 over `apcie`) | ❌ parked |
-| Bluetooth (N88 UART + patchram) | ❌ parked |
+| **Touch** — 6-point multitouch, pressure/tool, palm rejection | ✅ **working** — palm rejection (size+area latch) shipped; the old ~1.9 s still-contact cadence turned out to be a drain-loop-era artifact and is closed |
+| **omarchy-a desktop** (Orchard CLI install, labwc + Quickshell) | ✅ **running** — touch live in the desktop via a `d21-touch.service` (gold poke config, auto-loads every boot) |
+| Wi-Fi (BCM4357 over `apcie`) | ❌ next in queue |
+| Bluetooth (N88 UART + patchram) | ❌ next in queue (first up) |
+| Adaptive charging (PMIC lease policy) | ❌ queued |
+| Audio (Apple MCA/I2S + codec) | ❌ queued |
 | GPU | ❌ out of scope (no mainline A11 driver) |
 
 ## How the touch stack works
@@ -42,10 +45,11 @@ iOS — decoded structures are in this repo; no Apple firmware or per-device cal
 
 ## Repository layout
 
-- [`patches/`](patches/) — the kernel patch series (0001–0036) for
+- [`patches/`](patches/) — the kernel patch series (0001–0038) for
   [Hoolock Linux](https://github.com/HoolockLinux/linux), branch `a11-port`. Cumulative;
-  the touch-critical ones are 0020 (chestnut HV + PMIC/DT), 0034 (one frame read per IRQ)
-  and 0035/0036 (pressure-based contact validity).
+  the touch-critical ones are 0020 (chestnut HV + PMIC/DT), 0034 (one frame read per IRQ),
+  0035/0036 (pressure-based contact validity) and 0037/0038 (palm rejection: size + record-area
+  latch).
 - [`docs/`](docs/) — dual-boot guide, hardware map, touch bring-up state, roadmap
 - [`hardware/`](hardware/) — decoded Apple Device Tree / ADT extracts for the D21
 - [`tools/`](tools/) — firmware/container tooling, extraction scripts, deploy helpers
