@@ -1,0 +1,215 @@
+From c35f24bb9ac356861ee7b005a3f6ae5c33bc9021 Mon Sep 17 00:00:00 2001
+From: dugs <dugahol@protonmail.com>
+Date: Mon, 2 Nov 2026 18:42:39 +1030
+Subject: [PATCH] input: apple_z2: fix D21 unload WARN; drop-unused slots for
+ D21
+
+apple_z2_stop() unconditionally cancel_delayed_work_sync()s z2->d21_poll,
+but the work is only INIT_DELAYED_WORK()d when poll_hz>0 (default 0, i.e.
+never).  Cancelling an uninitialised work_struct trips the WARN in
+__flush_work() during module unload and derails rmmod: the module stays
+loaded, keeps the reset GPIO claimed, and every stop/pulse/start recovery
+silently becomes a no-op (observed 2026-11-02: six reroll attempts all
+DEAD, gpioreset.py 'Device or resource busy', insmod 'File exists').
+Initialise the poller work in probe() unconditionally.
+
+Also set INPUT_MT_DROP_UNUSED for D21, matching Orchard's D11 fix: the
+controller omits released contacts from later reports, so without it a
+slot stays down after a release (observed: a 1.3M contact held ~36 s).
+
+Module deployed to /root/apple_z2.ko (sha 9edf47cb), vermagic-patched to
+7.3.0-rc1-g2bde906a7ae3.
+---
+ drivers/input/touchscreen/apple_z2.c | 123 +++++++++++++++++++++++----
+ 1 file changed, 107 insertions(+), 16 deletions(-)
+
+diff --git a/drivers/input/touchscreen/apple_z2.c b/drivers/input/touchscreen/apple_z2.c
+index 301eb3889..46113b18f 100644
+--- a/drivers/input/touchscreen/apple_z2.c
++++ b/drivers/input/touchscreen/apple_z2.c
+@@ -162,6 +162,8 @@ struct apple_z2 {
+ 	u16 last_blob_ack;
+ 	/* D21 palm rejection: one latch bit per MT slot (slots = 10 for D21). */
+ 	DECLARE_BITMAP(d21_palm_latch, 10);
++	/* Consecutive oversized frames per slot (sustained-palm filter). */
++	u8 d21_big_frames[10];
+ };
+ 
+ static bool apple_z2_is_j172(const struct apple_z2 *z2)
+@@ -415,13 +417,16 @@ MODULE_PARM_DESC(verbose, "Per-frame IRQ/packet/touch-parse logging (diagnostic)
+ 
+ /*
+  * D21: minimum pressure (+26) for a 0x44 record to count as an active
+- * contact.  1 (the default) accepts every record with any pressure and
+- * drops hover/rest (pressure 0); 0 passes everything (raw A/B).
++ * contact.  Hover/rest/blips sit at 0-59 (occasional one-frame flickers to
++ * ~86) while every deliberate press ramps past 100 (taps peak ~338, holds to
++ * 1382), so 128 rejects the hover band without losing a tap (a real press's
++ * first 1-2 onset frames can dip below 128, but the next frame is well past
++ * it).  1 accepts any nonzero pressure; 0 passes everything (raw A/B).
+  */
+-static unsigned int d21_pres_min = 64;
+-module_param_named(pres_min, d21_pres_min, uint, 0444);
++static unsigned int d21_pres_min = 128;
++module_param_named(pres_min, d21_pres_min, uint, 0644);
+ MODULE_PARM_DESC(pres_min,
+-		 "D21: minimum 0x44 pressure for an active contact (1=default, 0=raw)");
++		 "D21: minimum 0x44 pressure for an active contact (128=default, 0=raw)");
+ 
+ /*
+  * D21: palm rejection by contact size.  tool_major (+12) measured on the
+@@ -446,14 +451,52 @@ MODULE_PARM_DESC(pres_min,
+  * mashing.  0 disables the area check.
+  */
+ static unsigned int d21_tool_max = 2000;
+-module_param_named(tool_max, d21_tool_max, uint, 0444);
++module_param_named(tool_max, d21_tool_max, uint, 0644);
+ MODULE_PARM_DESC(tool_max,
+ 		 "D21: tool_major that latches a contact as a palm (0=off)");
+ static unsigned int d21_tool_area_max = 2500000;
+-module_param_named(tool_area_max, d21_tool_area_max, uint, 0444);
++module_param_named(tool_area_max, d21_tool_area_max, uint, 0644);
+ MODULE_PARM_DESC(tool_area_max,
+ 		 "D21: tool_major*tool_minor area that latches a palm (0=off)");
+ 
++/*
++ * A real finger press opens with a 3-4 frame size spike (measured on this
++ * panel: tool_major 2265-2482, area 3.5-3.7M) before settling to about
++ * 1550 / 1.85M.  The latch used to fire on the first oversized frame, so
++ * that onset spike latched the entire press and the tap was discarded -
++ * "touch works but not all the time".  Require the oversized condition to
++ * persist for latch_frames consecutive frames before latching: a finger's
++ * onset spike is transient and resets the counter, while a resting palm
++ * stays big and latches.  An unambiguous giant contact (tool_area_hard,
++ * the recurring ~13M phantom/palm blob) still latches immediately so it
++ * never flashes a click.  0 for latch_frames restores the old
++ * latch-on-first-frame behavior; 0 for tool_area_hard disables the
++ * immediate path.
++ */
++static unsigned int d21_latch_frames = 8;
++module_param_named(latch_frames, d21_latch_frames, uint, 0644);
++MODULE_PARM_DESC(latch_frames,
++		 "D21: consecutive oversized frames before latching a palm (0=first)");
++static unsigned int d21_tool_area_hard = 8000000;
++module_param_named(tool_area_hard, d21_tool_area_hard, uint, 0644);
++MODULE_PARM_DESC(tool_area_hard,
++		 "D21: area that latches a palm immediately (0=off)");
++
++/*
++ * D21: latch RELEASE threshold.  The controller reuses tracking ids, so a
++ * latched palm/phantom blob can be immediately followed by a real finger on
++ * the same id.  Every palm/ghost frame measures area >= 2.8M while a real
++ * finger is ~0.8-1.5M, so when a frame falls below this area the slot's
++ * latch is cleared and the finger reports normally.  Without it the reused
++ * id stays latched and the real tap is silently dropped (observed
++ * 2026-11-02: an 11M phantom at the bottom followed by a "5" tap on the same
++ * id, area 1.4M, suppressed).  0 disables the release.
++ */
++static unsigned int d21_tool_area_release = 2000000;
++module_param_named(tool_area_release, d21_tool_area_release, uint, 0644);
++MODULE_PARM_DESC(tool_area_release,
++		 "D21: area below which a latched contact is released (0=off)");
++
+ static void apple_z2_parse_touches(struct apple_z2 *z2,
+ 				   const u8 *msg, size_t msg_len)
+ {
+@@ -527,15 +570,43 @@ static void apple_z2_parse_touches(struct apple_z2 *z2,
+ 			 * is the explicit lift.  d21_pres_min=0 restores the
+ 			 * raw pass-everything behavior for A/B.
+ 			 */
+-			if ((d21_tool_max &&
+-			     le16_to_cpu(fingers[i].tool_major) >= d21_tool_max) ||
+-			    (d21_tool_area_max &&
+-			     (unsigned int)le16_to_cpu(fingers[i].tool_major) *
+-					     le16_to_cpu(fingers[i].tool_minor) >=
+-				     d21_tool_area_max))
++			unsigned int f_area = (unsigned int)
++				le16_to_cpu(fingers[i].tool_major) *
++				le16_to_cpu(fingers[i].tool_minor);
++			/*
++			 * Release a latch when the contact shrinks to finger
++			 * scale: a reused tracking id must not keep a real
++			 * finger suppressed after a palm/phantom blob.
++			 */
++			if (d21_tool_area_release &&
++			    f_area < d21_tool_area_release) {
++				clear_bit(slot, z2->d21_palm_latch);
++				z2->d21_big_frames[slot] = 0;
++			}
++			bool big = (d21_tool_max &&
++				    le16_to_cpu(fingers[i].tool_major) >=
++					    d21_tool_max) ||
++				   (d21_tool_area_max &&
++				    f_area >= d21_tool_area_max);
++
++			if (d21_tool_area_hard &&
++			    f_area >= d21_tool_area_hard) {
++				/* Unambiguous giant blob: latch now. */
+ 				set_bit(slot, z2->d21_palm_latch);
+-			else if (fingers[i].state == 0)
++				z2->d21_big_frames[slot] = 255;
++			} else if (big) {
++				if (z2->d21_big_frames[slot] < 255)
++					z2->d21_big_frames[slot]++;
++				if (z2->d21_big_frames[slot] >=
++				    d21_latch_frames)
++					set_bit(slot, z2->d21_palm_latch);
++			} else {
++				z2->d21_big_frames[slot] = 0;
++			}
++			if (fingers[i].state == 0) {
+ 				clear_bit(slot, z2->d21_palm_latch);
++				z2->d21_big_frames[slot] = 0;
++			}
+ 			__set_bit(slot, &d21_seen);
+ 			slot_valid = fingers[i].state != 0 &&
+ 				     le16_to_cpu(fingers[i].pressure) >=
+@@ -624,8 +695,10 @@ static void apple_z2_parse_touches(struct apple_z2 *z2,
+ 	if (apple_z2_is_d21(z2)) {
+ 		/* Contacts that vanished from the report release their latch. */
+ 		for (i = 0; i < 10; i++)
+-			if (!test_bit(i, &d21_seen))
++			if (!test_bit(i, &d21_seen)) {
+ 				clear_bit(i, z2->d21_palm_latch);
++				z2->d21_big_frames[i] = 0;
++			}
+ 	}
+ 	input_mt_sync_frame(z2->input_dev);
+ 	input_sync(z2->input_dev);
+@@ -4369,6 +4442,15 @@ static int apple_z2_probe(struct spi_device *spi)
+ 						    "apple,z2-no-init-ack");
+ 	init_completion(&z2->boot_irq);
+ 	mutex_init(&z2->io_lock);
++	/*
++	 * Always initialise the poller work here, even though it is only
++	 * queued when poll_hz>0.  apple_z2_stop() unconditionally cancels it,
++	 * and cancel_delayed_work_sync() on an uninitialised work_struct
++	 * trips a WARN in __flush_work() and can derail module unload - which
++	 * leaves the module loaded, the reset line claimed, and the recovery
++	 * scripts unable to reload (observed 2026-11-02).
++	 */
++	INIT_DELAYED_WORK(&z2->d21_poll, apple_z2_d21_poll_work);
+ 	spi_set_drvdata(spi, z2);
+ 
+ 	z2->reset_gpio = devm_gpiod_get(dev, "reset", GPIOD_OUT_HIGH);
+@@ -4509,7 +4591,16 @@ static int apple_z2_probe(struct spi_device *spi)
+ 		 */
+ 		slots = 10;
+ 		mt_flags |= INPUT_MT_TRACK;
+-		if (apple_z2_is_d11(z2))
++		/*
++		 * The D11 (iPhone 7 Plus) controller and its D21 descendant
++		 * (iPhone 8 Plus) omit a released contact from the following
++		 * reports instead of always sending a state==0 lift.  Without
++		 * DROP_UNUSED the slot stays down and the desktop keeps a stuck
++		 * point after a release (observed on D21: a 1.3M contact held
++		 * ~36 s at screen ~(617,1130) with no lift).  Orchard carries
++		 * this for D11; D21 needs it for the same reason.
++		 */
++		if (apple_z2_is_d11(z2) || apple_z2_is_d21(z2))
+ 			mt_flags |= INPUT_MT_DROP_UNUSED;
+ 	} else {
+ 		slots = 256;
+-- 
+2.55.0
+
