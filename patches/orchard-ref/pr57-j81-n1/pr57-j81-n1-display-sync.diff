@@ -1,0 +1,184 @@
+diff --git a/docs/integration/j81.md b/docs/integration/j81.md
+index 30c301a3..06753873 100644
+--- a/docs/integration/j81.md
++++ b/docs/integration/j81.md
+@@ -103,11 +103,23 @@ Martin's port reached the touch controller's SPI bus, not the touchscreen: his S
+ | Analog supply: D2207 register `0x84` bit 2 (bits 0 and 1 shared) | ADT `pmuL(0x20e)`, decoded with iOS's D2207 LDO table; the same decoding gives the iPhone 6's working `0x85` bit 1 |
+ | Touch clock: PMGR `0x1e000`, 32768 Hz | ADT `KLCT` arguments and PMGR range identical to the iPhone 6's |
+ | Driver: the iPad 5's N1 runtime with `fll-mval` 6068 | iOS personality `C1F15,2` ("J82"): the same driver class, touch-size-id, parser and N1 defaults as the iPad 5's `C1F15,1`, whose `fll-mval` 6089 matches the iPad 5 entry |
+-| Display sync (GPIO 55) left alone | iOS function code 2 makes it an input; the iPad 5's code 3 routes it |
++| Display sync (GPIO 55) left alone | The ADT uses function code 2, unlike the iPad 5's code 3. The live iPadOS pad mode and waveform have not been measured. |
+ | Firmware: `z2fw-from-z2-packet@1`, `C1F15,2`, calibration at `0x10009000`, 1024 bytes | `J81.mtprops` (identical to `J82.mtprops`), the personality's `cal-dl-addr`, the ADT's `MtCl` size |
+ 
+ Not confirmed: the inverted Y axis, taken from the iPad 5.
+ 
++### J81 runtime findings (2026-11-03)
++
++On a J81 running stock iPadOS 15.8.5, `AppleMultitouchN1SPI` reports **family 22**, interface 1, a 40×30 sensor, firmware version `0x382`, region parameters `00 00 05 00 00 02` and a 14745×19657 surface. A separate Linux diagnostic using the 15.8.8 `0x382` firmware returned family 22 as well. The Air 2 match data previously expected family 21, which would reject this controller during discovery; the correction here removes that known mismatch. J82 has not been tested.
++
++The diagnostic used an experimental SPI transport module, firmware upload and calibration sequence, and GPIO55 function 1 at the firmware's wake-to-dummy transition. Its first reads of region parameters and surface geometry were zero. Waiting six seconds before those reads returned the same nonzero values as iPadOS and let the input driver finish probe without a substituted descriptor or queue polling. Six seconds is an observed test delay, not a measured minimum or a production timing recommendation.
++
++Touch still did not report: during two confirmed 30-second swipes after valid geometry, GPIO84's interrupt count did not increase and the input device emitted no events. A 100 ms wake-assisted reader found no queued contact frames in at least 600 reads. This points past the family mismatch and delayed descriptor toward scan or report generation; a missing interrupt alone does not explain the empty queue. The live iPadOS GPIO55 waveform is still unknown. The experimental transport and delay are not part of Orchard's shipped driver, and this patch does not qualify touch as working.
++
++GPIO84 read `0x00070381` before the Linux probe and `0x0000038f` after module removal. In `pinctrl-apple-gpio`, IRQ startup selects group 0 and IRQ masking selects mode 7, accounting for the changed bits; the input data bit remained high. The released pad word is expected Linux IRQ state, not evidence that ATN is held low.
++
++A later RAM boot with the bounded T7000 SPI path found a separate early probe failure: J81 has no display-sync pinctrl states, and `devm_pinctrl_get()` returned `-ENODEV`. A temporary module accepting this absent state and expecting family 22 completed probe and registered the touchscreen input device. During a confirmed 45-second swipe, `/dev/input/event1` produced 46 contact starts and 46 releases with changing X/Y coordinates, but each contact lasted about 10 ms: runtime `-EBADMSG` errors repeatedly triggered resynchronisation. A diagnostic capture showed that some 16-byte runtime replies put `e1` at byte 1 with a `00` or `01` leading byte; only the low checksum byte then fits in the transfer. A J81-specific parser change accepts this form when that byte matches the sum. With that change, a confirmed 30-second swipe produced 2,914 synchronized reports (about 97/s), 2,826 X updates and 2,861 Y updates, with no new frame errors. The combined changes have been tested as a temporary module on the exact #60 SPI kernel; a rebuilt Orchard image and desktop touch interaction remain to be tested.
++
+ ## 6. Bluetooth (untested)
+ 
+ Martin's port brought UART3 up as a plain transport and found the UART's 3 Mbit/s sampling factor (now the `apple,t7000-uart` compatible); it had no Bluetooth driver yet.
+diff --git a/kernel/patches/drivers/input/0014-Input-apple_z2-Add-iPad-Air-2-touchscreen-support.patch b/kernel/patches/drivers/input/0014-Input-apple_z2-Add-iPad-Air-2-touchscreen-support.patch
+index 0c335c79..73b68fd3 100644
+--- a/kernel/patches/drivers/input/0014-Input-apple_z2-Add-iPad-Air-2-touchscreen-support.patch
++++ b/kernel/patches/drivers/input/0014-Input-apple_z2-Add-iPad-Air-2-touchscreen-support.patch
+@@ -8,10 +8,11 @@ both with AppleMultitouchN1SPI, and its personality C1F15,2 ("J82",
+ iPadOS 15.8) differs from the iPad 5's C1F15,1 only in fll-mval. The
+ touch-size-id, parser type and options are the same, so the descriptor
+ values are too. Add it as match data of the iPad 5's N1 runtime.
++The live J81 N1 family report is 22, not the iPad 5's 21.
+ 
+-iOS leaves the Air 2's display-sync pin an input (GPIO function code 2,
+-mask 0x270 value 0x210) where the iPad 5 routes it to the controller
+-(code 3, route 2). Make the display-sync pin states optional: a board
++The Air 2 ADT gives display sync function code 2, while the iPad 5
++routes it to the controller with code 3. The live iPadOS pad mode has
++not been measured. Make the display-sync pin states optional: a board
+ without them keeps the pin as it is.
+ 
+ Signed-off-by: Henrik Klee <henrik@goat-code.com>
+@@ -85,7 +86,7 @@ index c0f0003..19d9f36 100644
+ +	.device_info_attempts = 4,
+ +	.device_info_retry_us = 3000,
+ +	.interface = 1,
+-+	.family = 21,
+++	.family = 22,
+ +	.rows = 40,
+ +	.columns = 30,
+ +	.surface_width = 14745,
+diff --git a/kernel/patches/drivers/input/0016-Input-apple_z2-Allow-boards-without-display-sync-pin.patch b/kernel/patches/drivers/input/0016-Input-apple_z2-Allow-boards-without-display-sync-pin.patch
+new file mode 100644
+index 00000000..c66a43b1
+--- /dev/null
++++ b/kernel/patches/drivers/input/0016-Input-apple_z2-Allow-boards-without-display-sync-pin.patch
+@@ -0,0 +1,66 @@
++From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
++From: =?UTF-8?q?Martin=20Pu=C5=A1k=C3=A1=C4=8D?= <martin@icebear.sk>
++Date: Tue, 3 Nov 2026 14:51:06 +0100
++Subject: [PATCH] Input: apple_z2: Allow boards without display sync pinctrl
++
++J81 keeps display sync as an input and has no pinctrl states. devm_pinctrl_get() therefore returns -ENODEV before the existing optional-state handling runs. Treat that result as an absent display sync route while retaining other pinctrl errors.
++
++Assisted-by: LLM
++---
++ drivers/input/touchscreen/apple_z2.c | 39 ++++++++++++++++------------
++ 1 file changed, 22 insertions(+), 17 deletions(-)
++
++diff --git a/drivers/input/touchscreen/apple_z2.c b/drivers/input/touchscreen/apple_z2.c
++index f68295c76..b74eed9c7 100644
++--- a/drivers/input/touchscreen/apple_z2.c
+++++ b/drivers/input/touchscreen/apple_z2.c
++@@ -4155,27 +4155,32 @@ static int apple_z2_probe(struct spi_device *spi)
++ 					     "unable to get analog supply\n");
++ 
++ 		z2->sync_pinctrl = devm_pinctrl_get(dev);
++-		if (IS_ERR(z2->sync_pinctrl))
++-			return dev_err_probe(dev, PTR_ERR(z2->sync_pinctrl),
++-					     "unable to get display-sync pins\n");
+++		if (IS_ERR(z2->sync_pinctrl)) {
+++			if (PTR_ERR(z2->sync_pinctrl) != -ENODEV)
+++				return dev_err_probe(dev, PTR_ERR(z2->sync_pinctrl),
+++						     "unable to get display-sync pins\n");
+++			z2->sync_pinctrl = NULL;
+++		}
++ 		/*
++ 		 * Where iOS leaves display sync an input instead of routing it
++ 		 * to the controller (J81), the board describes no states.
++ 		 */
++-		z2->sync_active = pinctrl_lookup_state(z2->sync_pinctrl,
++-						       "display-sync-active");
++-		if (PTR_ERR_OR_ZERO(z2->sync_active) == -ENODEV) {
++-			z2->sync_active = NULL;
++-		} else if (IS_ERR(z2->sync_active)) {
++-			return dev_err_probe(dev, PTR_ERR(z2->sync_active),
++-					     "missing display-sync-active state\n");
++-		} else {
++-			z2->sync_inactive =
++-				pinctrl_lookup_state(z2->sync_pinctrl,
++-						     "display-sync-inactive");
++-			if (IS_ERR(z2->sync_inactive))
++-				return dev_err_probe(dev, PTR_ERR(z2->sync_inactive),
++-						     "missing display-sync-inactive state\n");
+++		if (z2->sync_pinctrl) {
+++			z2->sync_active = pinctrl_lookup_state(z2->sync_pinctrl,
+++							       "display-sync-active");
+++			if (PTR_ERR_OR_ZERO(z2->sync_active) == -ENODEV) {
+++				z2->sync_active = NULL;
+++			} else if (IS_ERR(z2->sync_active)) {
+++				return dev_err_probe(dev, PTR_ERR(z2->sync_active),
+++						     "missing display-sync-active state\n");
+++			} else {
+++				z2->sync_inactive =
+++					pinctrl_lookup_state(z2->sync_pinctrl,
+++							     "display-sync-inactive");
+++				if (IS_ERR(z2->sync_inactive))
+++					return dev_err_probe(dev, PTR_ERR(z2->sync_inactive),
+++							     "missing display-sync-inactive state\n");
+++			}
++ 		}
++ 	}
++ 
+diff --git a/kernel/patches/drivers/input/0017-Input-apple_z2-Accept-one-byte-late-J81-runtime-head.patch b/kernel/patches/drivers/input/0017-Input-apple_z2-Accept-one-byte-late-J81-runtime-head.patch
+new file mode 100644
+index 00000000..367ecf23
+--- /dev/null
++++ b/kernel/patches/drivers/input/0017-Input-apple_z2-Accept-one-byte-late-J81-runtime-head.patch
+@@ -0,0 +1,49 @@
++From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
++From: =?UTF-8?q?Martin=20Pu=C5=A1k=C3=A1=C4=8D?= <martin@icebear.sk>
++Date: Tue, 3 Nov 2026 15:21:06 +0100
++Subject: [PATCH] Input: apple_z2: Accept one-byte-late J81 runtime headers
++
++J81 sometimes returns E1 at offset one in a 16-byte interrupt response. Validate its available low checksum byte and use the shifted payload length without adding SPI clocks. A 20-second hardware capture advanced from one 10-ms contact per second to more than 2,000 position updates and multi-second contacts.
++
++Assisted-by: LLM
++---
++ drivers/input/touchscreen/apple_z2.c | 19 +++++++++++++++++--
++ 1 file changed, 17 insertions(+), 2 deletions(-)
++
++diff --git a/drivers/input/touchscreen/apple_z2.c b/drivers/input/touchscreen/apple_z2.c
++index b74eed9c7..018ec6ea5 100644
++--- a/drivers/input/touchscreen/apple_z2.c
+++++ b/drivers/input/touchscreen/apple_z2.c
++@@ -852,6 +852,7 @@ static int apple_z2_read_packet(struct apple_z2 *z2)
++ 	bool strict_counter;
++ 	bool resynced = false;
++ 	int error;
+++	int i;
++ 	size_t pkt_len;
++ 	size_t wire_len;
++ 	u16 payload_len;
++@@ -885,8 +886,22 @@ static int apple_z2_read_packet(struct apple_z2 *z2)
++ 	 */
++ 	if (apple_z2_is_j71t(z2)) {
++ 		if ((z2->rx_buf[0] & 0xf0) != 0xe0 ||
++-		    !apple_z2_z2_checksum_valid(z2->rx_buf, APPLE_Z2_CMD_SIZE))
++-			return -EBADMSG;
+++		    !apple_z2_z2_checksum_valid(z2->rx_buf, APPLE_Z2_CMD_SIZE)) {
+++			u8 checksum = 0;
+++
+++			/* J81 can return E1 one byte late, leaving only the low checksum byte. */
+++			if (!of_device_is_compatible(z2->spidev->dev.of_node,
+++						     "apple,j81-touchscreen") ||
+++			    z2->rx_buf[0] > 1 ||
+++			    z2->rx_buf[1] != APPLE_Z2_REPLY_INTERRUPT_DATA)
+++				return -EBADMSG;
+++			for (i = 1; i < APPLE_Z2_CMD_SIZE - 1; i++)
+++				checksum += z2->rx_buf[i];
+++			if (checksum != z2->rx_buf[APPLE_Z2_CMD_SIZE - 1])
+++				return -EBADMSG;
+++			payload_len = get_unaligned_le16(z2->rx_buf + 2);
+++			goto data_phase;
+++		}
++ 	} else if (z2->rx_buf[0] != APPLE_Z2_REPLY_INTERRUPT_DATA) {
++ 		return 0;
++ 	}
