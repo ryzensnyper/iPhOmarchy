@@ -175,7 +175,57 @@ Predictions if true:
   `quiet_ms` in the recovery code (Orchard PR #52's control-reply-run detector is
   the sibling heuristic for the control-stall family).
 
-## 4. Sources recap (local)
+## 3.5 E0 RESULTS — LIVE (dance #10, 2026-11-04 3rd session)
+
+Dance #10's fresh boot **landed family B again** (2nd boot in a row: dance #9 was
+nfingers=4, dance #10 nfingers=3). Sampled BEFORE any reload, phone hands-off on
+the desk (`/root/phantom-sample.log`, decoded on the host):
+
+- **The ghost records are FROZEN:** 3 contacts at identical coordinates every frame
+  — f1 raw (559,9158) tool 3237, f3 raw (4162,**−236**) tool ~21300, f5 raw
+  (1527,11313) tool 1001 — all **pres 0, st 4** (hover-class). f3's y is EXACTLY the
+  surface descriptor's min_y (−236): a clamped, out-of-surface artifact. Tool 21300
+  is between finger (~1000) and palm-blob (25000+) scale.
+- **0x72 high-level state = 1 (Active) during the phantom roll.** The guard state is
+  NOT visible in the HL report (or the driver's byte pick is not the fwconfig
+  offset — the healthy contrast will tell).
+- **0x7f critical-errors: the surface-config mirror is ZEROED** (`03 08 50 04` +
+  zeros; healthy 10-29 reference was `03 08 50 00 | 79 2f … | 20 ff | 14 ff | d0 19
+  | 78 2e` with the full surface mirror). **The 2026-10-29 zeroed-mirror signature
+  is now correlated with the blind mode.** The controller has lost (or never
+  applied) its runtime surface config.
+- **0xf8 counters captured twice 5 s apart** (raw hex in /root/phantom-sample.log):
+  three counters climb in lockstep (Δ222/5.05 s each ≈ 44/s), one is FROZEN
+  (3739→3739), two climb at different rates (Δ206, Δ152), one byte flag = 1.
+  Semantic mapping pending the healthy-roll contrast sample (counters are at
+  fwconfig offsets 1..61 per §1.4; the reply payload alignment is still to be
+  pinned — differences identify the channels without it).
+- **The mode EVOLVES:** nf=3 frozen → (minutes later) nf=1 drifting ghost at raw
+  (2674–3307, 1176–2367), tool ~4000 (resting-hand scale), pres 0–1, still st=4.
+  Slowly wanders; never crosses pres_min → the driver correctly drops it (ZERO
+  palm-latch messages — the ghost is never an active contact because pres < 128).
+- **★ REAL FINGERS WERE REPORTED IN THIS MODE.** During a tap/hold/swipe test the
+  controller emitted **7 clean real-touch lifecycles** (pres 119–463, finger-scale
+  tool 563–725, st 1/3/7/4), interleaved with the ghost. The "blind" mode is
+  PARTIAL delivery, not total: some gestures arrive (the 2 long ones fully),
+  several taps delivered only 1-2 frames or nothing — the §1L delivery-loss
+  pattern, present here too.
+- **★ The "no touch response" was an INFRA failure, not the mode:**
+  **d21-touchfix was NOT running** (unit enabled, v3 binary present, journal shows
+  NO start attempt this boot — a silent auto-start failure, same class as the
+  d21-touch auto-start quirk in §1M). The driver forwarded real taps to event1;
+  the desktop reads event2 (touchfix output) → dead screen. `systemctl start
+  d21-touchfix` fixed it instantly: user verdict "yes … seems more responsive"
+  (top half better than bottom — the known regional asymmetry).
+  **ADD TO THE POST-DANCE CHECKLIST: `systemctl is-active d21-touchfix` (and start
+  it) — the auto-start is not trustworthy.**
+- **★ USB-net death TIMING CORRELATION:** `systemctl restart d21-touch` (rBK3
+  OFF→ON cycle) at T; within ~25 s the IP link was dead (gadget still enumerated);
+  re-plug attempts → device VANISHED from the bus → dance #10. This is the
+  strongest live evidence yet for the **smc_cut_rail=0 experiment** (§3 next-step
+  1): the reload's rail cycle is timed exactly against the link death.
+
+
 
 - D21 ADT: `~/omarchy-iphone/adt/adt.txt` (multi-touch node, prox node, PxCl).
 - iOS 16.7.16 D21 kernelcache: `~/a11-fw/kc/20H392__iPhone10,2/…` — kext strings
