@@ -219,4 +219,55 @@ threshold/enable, not the interval). Note: the 0xf8 report layout MUTATES with f
 - Health check (passive, ~15 s): capture kmsg, decode with `decode44-full.py`; healthy =
   hover st=4 records at p50 ≤ 50 ms, zero gaps > 500 ms after startup.
 
+## 2026-11-04 — touchfix v3 (shape gate) + the OSK delivery-loss measurement
+
+Full session detail lives in the project docs (`TOUCH-STATE.md` §1L). The short form:
+
+### touchfix v3 — thin-sliver gate + owned BTN_TOUCH (userspace, `diamond/touchfix/`)
+
+Measured on a HEALTHY roll, the EVDEV touch dimensions (ABS_MT_TOUCH_MAJOR/MINOR =
+raw record +18/+20) separate artifacts from fingers **cleanly and non-overlapping**:
+
+| contact class | touch dims | min dim |
+|---|---|---|
+| blob slivers (bottom band, pr spikes) | 1033×153, 824×148, 978×147 | ≤157 |
+| hover artifact next to a real tap | 257×122 | 122 |
+| real finger taps (anywhere) | 1736×287 … 998×1259 | ≥274 |
+| drag starts | 1045×787, 1329×795 | ≥787 |
+
+Two mechanisms die with a `min(dim) < 220` gate on FRESH contacts:
+
+1. **Ghost clicks**: the bottom-band blob's 1-frame pressure spikes (pr 185–369) pass
+   `pres_min=128` and land as solo phantom downs at the OSK rows.
+2. **"Tap did nothing"**: a hover artifact downs 0–50 ms BEFORE the real tap → the real
+   tap becomes contact #2 → the compositor discards the pair as a two-finger gesture.
+   (Measured directly: artifact down at (949,1527) at t, real tap down at (970,56) at
+   t+50 ms — the tap's events were all there, the desktop just refused the pair.)
+
+v3 cancels a sliver's down inside its own evdev frame (libinput never sees it),
+re-downs if it fattens within 150 ms, and computes BTN_TOUCH itself from the live
+forwarded slots (the driver's BTN_TOUCH is dropped). Verify capture: 17 raw downs →
+16 forwarded, the only difference the one thin artifact; 2-finger taps forward as
+clean simultaneous pairs; 0 real taps eaten. NEW controller quirk found the same day:
+fresh contacts can arrive `touch_minor=0` (2122×0) and fatten a frame later — the
+cancel/resurrect pair absorbs it (~70–140 ms down delay, imperceptible).
+
+### The blocker that remains: controller-side tap-delivery loss
+
+Number-row protocol (30 intended taps, roll HEALTHY, poke `0x10003058=3`):
+
+- only ~4–6 real contact lifecycles exist in the RAW kmsg stream; 2–3 clicks landed
+  (7–10%). The missing taps are absent before `pres_min` — **the controller never
+  reports them**. Idle fps is identical (15–17) in tap-responsive and deaf rolls, so
+  rollcheck cannot see this mode.
+- a blob (tool ~11.9M, pr 2) parks ON the OSK rows (screen (549,1582)) in every frame.
+- poke sweep attempt `=5`: 1–2 clicks/30 (worse-or-equal); stopped per the
+  known-good-boot caveat — every reload roll that day was a low-delivery mode.
+  `=3` restored. The sweep needs a dance-boot reference roll to mean anything.
+- practical post-test recovery: reload ×N (up to 4 landed HEALTHY on 2026-11-04);
+  the 30 s rails-off pulse path as fallback.
+- USB-gadget IP link can drop after tap-heavy tests (phone alive, USB enumerated,
+  no host bus events): re-plug the cable, do NOT dance.
+
+
 

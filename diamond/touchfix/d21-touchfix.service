@@ -1,0 +1,15 @@
+[Unit]
+Description=D21 touch fixer (stale-contact release -> clean single-finger taps)
+# Sits between the apple_z2 driver and libinput. See tools/README-touchfix.md.
+# Restarts freely when the module reloads (event1 disappears during recoveries).
+After=d21-touch.service
+
+[Service]
+Type=simple
+ExecStartPre=/usr/bin/modprobe uinput
+ExecStart=/root/d21-touchfix -t 1500 /dev/input/event1
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target

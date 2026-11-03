@@ -1,0 +1,5 @@
+# d21-touchfix: bench the raw apple_z2 evdev node so libinput only sees the
+# fixed virtual device (see tools/README-touchfix.md).
+# NOTE: the kernel device name is "iPhone10,2 Touchscreen" on this install
+# (the older docs' ATTRS{name}=="apple-z2" does NOT match).
+SUBSYSTEM=="input", ATTRS{name}=="iPhone10,2 Touchscreen", ENV{LIBINPUT_IGNORE_DEVICE}="1"

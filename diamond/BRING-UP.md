@@ -86,6 +86,7 @@ expects:
 | stream | IRQs ticking (the phantom idles at ~15 fps bursts; touches add records) |
 | reload | `systemctl restart d21-touch` → preamble `1f 01 1f 01` + live roll, 5/5 |
 | desktop | labwc at scale 2.0 (`/usr/local/libexec/arch-ipad-scale-output tablet` after VT changes) |
+| touchfix | `diamond/touchfix/` v3 daemon active — see its README; the thin-sliver gate is REQUIRED (kills blob ghost clicks + hover artifacts that pair with real taps as "2-finger gestures") |
 
 ## Troubleshooting map (each symptom = one known cause)
 
@@ -97,6 +98,7 @@ expects:
 | boots, garbage frames, silent, then fine on manual retry | HV raced the core rail | the 500 ms settle in `power_on` (already in the patch) |
 | reload dead, preamble OK, init completes | OFF→ON drain too short (rare) | `systemctl stop` → sleep 5 → `start`; report if persistent |
 | touch works, desktop doesn't react | touchfix not running, or the stale-scale | `systemctl enable --now d21-touchfix`; run the scale tool |
+| ghost clicks near bottom-centre / real taps "eaten" | v3 gate not deployed (blob pr-spikes + hover artifacts pair with real taps as 2-finger gestures) | deploy `diamond/touchfix/` v3 (thin-sliver gate + owned BTN_TOUCH) |
 | "Invalid module format" on insmod | vermagic mismatch | rebuild from `patches/0040` against YOUR kernel (full vermagic string, NUL-padded) |
 
 ## Rebuilding for another device / kernel
