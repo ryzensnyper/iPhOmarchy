@@ -243,6 +243,41 @@ the desk (`/root/phantom-sample.log`, decoded on the host):
   `/dev/nvme0n3` read-only under Linux; kboot copies touch cal blobs from the
   live ADT (`apple,z2-cal-blob` et al.).
 
+## 3.7 ★ THE POCKET-GUARD VERDICT (dance #13, 2026-11-04 — the calibrated boot)
+
+The first fully-calibrated boot ever on D21 Linux (correct DTB polarity 0x8 +
+all four cals + **the prox calibration accepted**, same `e1 0e` ack as the
+regular cals) **fixed the controller-side tap-delivery loss**:
+
+- **Measured** (10 number-row taps, the §1L protocol): **15 raw contact
+  lifecycles in the stream (positions + pressures 257-1077, every tap
+  present)** → **23 BTN_TOUCH downs / 22 ups forwarded on event1**. The §1L
+  baseline was 4-6 raw lifecycles per 30 taps and 2-3 clicks (7-10%).
+  User verdict: "Improved" (not yet perfect — multi-finger ghost records
+  still mix into the stream; the touchfix v3 gate handles them).
+- **The in-driver recovery also performed live end-to-end**: the roll went
+  silent at boot (this rootfs unit lacks the poll=1 kick — known), the
+  watchdog fired, 3 resyncs failed, **the full in-driver restart succeeded**
+  (fw + cals + prox reload), the stream returned, and the **USB link
+  survived the restart** (smc_cut_rail=0). Pre-recovery 0x7f byte3 = 04
+  (critical bit), post-recovery = 00.
+- **Conclusion: the user's pocket-guard intuition was substantially right.**
+  The Z2's in-pocket baseline subsystem runs on the prox calibration
+  (syscfg PxCl) that iOS downloads and we never did; without it the panel's
+  contact detection degraded (bottom region worst — the pocket-gradient
+  signature; the §1L OSK loss; the phantom/guard boots). Feeding PxCl +
+  completing the cal set + the IRQ-polarity fix restored delivery.
+- Boot-time IRQ flip now logs the true no-op: `D21: touch IRQ -> level-low
+  (was 8)`; live DTB = 24 102 8. The -22 mismatch class is closed at the
+  root (the 2026-11-03 "fix" had written 0x4 = LEVEL_HIGH — decode error;
+  see diamond/payload/README-irqlevel.md).
+- Also resolved: the "missing cal acks" scare was a kmsg-ring artifact —
+  the 12-second ring under frame_dump flood plus truncated greps. The full
+  boot window shows the complete sequence: fw blobs → container boot
+  sequence (5 pokes `4a d1`, `1F 01`=`49 69`, `10003400:1`=`00 00`) → the
+  unit's poke replay (5× len=20 `e1 0e`) → **the four cals (1040/1008/1492/
+  224 B)** → **the prox blob (160 B)** → poke_after → init → flip no-op.
+
 ## 3.6 SESSION RESULTS CONTINUED (dance #11, same session)
 
 - **The 0xf8 counters do NOT discriminate** — decoded both rolls with the reply
