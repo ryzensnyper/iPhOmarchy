@@ -1,0 +1,14 @@
+[ 4079.711698] apple-z2 spi0.0: touch parse: nfingers=1 msg_len=54
+[ 4079.736031] apple-z2 spi0.0: irq-pkt valid: report=0x44
+[ 4079.736039] apple-z2 spi0.0: touch parse: nfingers=1 msg_len=54
+[ 4079.760393] apple-z2 spi0.0: irq-pkt valid: report=0x44
+[ 4079.760401] apple-z2 spi0.0: touch parse: nfingers=1 msg_len=54
+[ 4079.784702] apple-z2 spi0.0: D21: resynchronisation 2 failed (-5)
+[ 4080.823794] apple-z2 spi0.0: D21: header in the data phase (56 bytes pending): resynchronising
+[ 4080.863685] apple-z2 spi0.0: irq-pkt valid: report=0x44
+[ 4080.863693] apple-z2 spi0.0: touch parse: nfingers=1 msg_len=54
+[ 4080.888027] apple-z2 spi0.0: irq-pkt valid: report=0x44
+[ 4080.888035] apple-z2 spi0.0: touch parse: nfingers=1 msg_len=54
+[ 4080.912181] apple-z2 spi0.0: irq-pkt valid: report=0x44
+[ 4080.912189] apple-z2 spi0.0: touch parse: nfingers=1 msg_len=54
+[ 4080.936526] apple-z2 spi0.0: D21: resynchronisation 3 failed (-5)

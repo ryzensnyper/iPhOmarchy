@@ -1,0 +1,17 @@
+[ 4081.954590] apple-z2 spi0.0: smc rBK3 OFF 0x05020000 state=0
+[ 4081.963804] apple-z2 spi0.0: smc rBK3 ON attempt 0 0x05020001 state=1
+[ 4082.004088] apple-z2 spi0.0: D21 boot preamble reply: 1f 01 1f 01
+
+# The boot-edge storm + the hung boot (measured on D21, 2026-11-03):
+#   /proc/interrupts delta for apple-z2-irq under a dead controller:
+#     irq/s: 44140  (and 43835 on a second sample) -- the level IRQ re-firing
+#     while booted=0. The boot thread is crowded out: after
+#       [215.523] smc rBK3 OFF ...  [215.533] smc rBK3 ON state=1
+#     the boot produced NO further lines for 45+ s (healthy boots print the
+#     preamble within ~2 s): the fw-upload step never finished. A second
+#     occurrence wedged rmmod in an unkillable D-state flush_work (waiting on
+#     the hung boot) and systemd's stop timeout SIGKILLed it mid-delete_module
+#     -> lsmod refcount -1, the module a zombie until a full power cycle.
+# Guard (ported to D21): complete() <=1/jiffy in the !booted path; after
+# ~200k storm edges mask the IRQ so the remaining waits time out BOUNDED;
+# a 60 s boot_deadline is checked per firmware-loader step.

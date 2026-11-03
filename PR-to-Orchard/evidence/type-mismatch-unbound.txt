@@ -1,0 +1,27 @@
+# Transcribed from the live dmesg on D21, 2026-11-03 (the ring was later
+# cleared by rollcheck; captured in the session transcript). The sequence
+# shows: the probe fails -EINVAL (hwirq type mismatch) with insmod exiting 0
+# (async probe), leaving the driver UNBOUND while systemd shows the unit
+# "active (exited)". Recurred across five consecutive reloads; cleared only
+# by a full power cycle (the stale mapping lives in the pinctrl GPIO domain).
+
+[ 1009.670006] irq: type mismatch, failed to map hwirq-102 for pinctrl@233100000!
+[ 1009.673775] apple-z2 spi0.0: D21 host-config: ip-delay=1000 dma-min=0 mode=3
+[ 1009.674146] apple-z2 spi0.0: SMC bound: rail key rBK3 available
+[ 1009.674183] apple-z2 spi0.0: error -EINVAL: request_irq(0) 0x0 apple_z2_irq [apple_z2] apple-z2-irq
+[ 1009.674209] apple-z2 spi0.0: error -EINVAL: unable to request IRQ
+[ 1009.674213] apple-z2 spi0.0: probe with driver apple-z2 failed with error -22
+
+# systemd side (host observation at the same moment):
+#   ActiveState=active, ExecMainStatus=0, lsmod shows the module loaded with
+#   refcount 0, but NO spi0.0 binding, NO input device, NO frames, NO logs.
+#   rollcheck: frames=0 fps=0.0 verdict=DEAD -- with the module "loaded".
+
+# Root cause chain (driver-side): the runtime IRQ-type flip to LEVEL_LOW
+# (saved_irq_type/irq_type_changed, restored only in the unload path) was left
+# applied by a boot that was raced by removal; the GPIO irq domain mapping
+# kept the level-low type while every later probe requested the DT's edge
+# type -> refuse -> spi->irq = 0 -> -EINVAL forever. Fix: restore the type in
+# the boot error path as well, skip the flip when a stop is in flight, and
+# describe the runtime polarity in the DT (done on D21: interrupts-extended
+# flags 2 -> 4; the class is dead).
