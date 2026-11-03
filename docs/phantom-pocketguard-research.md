@@ -417,3 +417,48 @@ is not:
   is data); evdev event timestamps are absolute (tv_sec = the phone's epoch
   clock) — align them against kmsg uptime via the first event's frame, not
   against the capture launch time.
+
+## 3.9 ★ DANCE #15 (2026-11-04 4th session, evening): the prox fix LIVE at
+### 0x00400180 — correct but not sufficient on one roll; the drift is the story
+
+Patch 0044 (the prox target corrected from the GEN_1 guess 0x10009600 to the
+kext default 0x00400180, extracted from the 20H392 kernelcache's Z2 defaults
+initializer along with cal_dl_addr=0x00400200 / fw_execute_addr=0x10001800 /
+fll_mval=0x16e4@0x10001c04; the D21 ADT declares none of the overriding DT
+properties, so iOS runs the defaults) shipped and boot-verified:
+`D21: prox calibration -> 0x00400180 (160 bytes)` on dance #15.
+
+- **Delivery on #15**: 15 taps → 8 raw lifecycles → 9 downs → 7 desktop.
+  BOTTOM taps now read FINGER-SCALE (tool 875-896, pres 481-764 — #13-class
+  healthy shapes) where #14's bottom was absent — but only 2/10 arrived raw.
+  User verdict: "no real change".
+- **The tool scale is REGION- and ROLL-dependent**: #15's TOP taps read tool
+  5000-5498 (pres up to 879 — genuine strong touches) while the bottom reads
+  ~880; #13-era taps read 560-725 everywhere; the palm class stays ≥25000.
+  The unit's tool_max=3000 was eating every longer top tap mid-press
+  (latched after 8 oversized frames before pres peaked).
+- **Latch gates raised live via sysfs** (no reload): tool_max 3000→12000,
+  tool_area_max 5M→8M, tool_area_hard stays 12M (palm blobs 868M still
+  hard-latch; the idle blob tool ~4100 passes the gate now but its pres sits
+  0-1 idle). PERSISTED in the unit's ExecStartPost + daemon-reload.
+- **★ THE ROLL DRIFTS WITHIN A BOOT**: four minutes after the 8-lifecycle
+  window, the same boot with the same params gave 3 lifecycles / 2 downs in
+  the re-test window, with the stream collapsing into hover-noise (79 ghost
+  lifecycles pres < 128, fps sagging to ~2.4 metronome cadence). The mode
+  lottery is not just per-boot, it is PER-MINUTE — any single-boot A/B of a
+  fix is confounded by drift; only multi-boot distributions are meaningful.
+- **The reload USB link-death count is now 2/4 cut-skipped** (dance #14 and
+  the reload3->#15 transition both died; re-plug 0/2, both needed dances).
+  The reload as a re-roll lever is USB-expensive; WiFi (PR #55 port) remains
+  the unlock.
+- **The vermagic rule**: modules must carry the running kernel's git-hash
+  vermagic (payload kernel = hoolock 2bde906a7); same-length hash swap in
+  the .ko works, NUL-truncation does NOT (the kernel strcmps the full
+  string incl. flags). See patches/REBUILD-VERMAGIC.md.
+- **Bottom line**: the prox target is now CORRECT (a real bug fixed — the
+  data lands where the fw reads it), but one roll cannot show its effect on
+  the lottery distribution; the bottom-region deafness persists per-roll.
+  Next levers: E1 (the uniform-cover trigger test — reproduce the deaf mode
+  on demand), multi-boot roll statistics with the fix in place, patch 0045
+  (latch pres-gating), and the USB-net/PMP investigation to make reloads
+  cheap.
