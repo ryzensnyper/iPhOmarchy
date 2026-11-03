@@ -1,0 +1,93 @@
+From 2d3642e9600b863b6f08582fdb42937c0660592e Mon Sep 17 00:00:00 2001
+From: dugs <dugahol@protonmail.com>
+Date: Wed, 4 Nov 2026 05:23:25 +1030
+Subject: [PATCH] input: apple_z2: send D21 prox calibration to the kext's
+ default prox_cal_addr 0x00400180
+
+The 0x10009600 target (makez2fw GEN_1 slot guess) acks e1 0e but is a
+region the firmware never reads: three fully-calibrated boots still
+rolled the bottom-region-deaf mode lottery with the in-pocket baseline
+effectively absent.  The target comes from iOS's Z2 defaults
+initializer in the 20H392 kernelcache (AppleMultitouchSPI): prox_cal_addr
+= 0x00400180, cal_dl_addr = 0x00400200, fw_execute_addr = 0x10001800,
+fll_mval(_addr) = 0x16e4 @ 0x10001c04.  The D21 ADT declares none of the
+overriding properties (fll-mval, fll-mval-addr, cal-dl-addr,
+fw-execute-addr, prox-cal-addr), so iOS runs these defaults; the
+container declares no prox provider either.  Measured on-device:
+measured top-region delivery changes and raw-lifecycle counts per boot
+are the A/B signal (docs/phantom-pocketguard-research.md section 3.8).
+
+Assisted-by: LLM
+---
+ drivers/input/touchscreen/apple_z2.c | 34 +++++++++++++++++++---------
+ 1 file changed, 23 insertions(+), 11 deletions(-)
+
+diff --git a/drivers/input/touchscreen/apple_z2.c b/drivers/input/touchscreen/apple_z2.c
+index 803ee5f02..75e3fe336 100644
+--- a/drivers/input/touchscreen/apple_z2.c
++++ b/drivers/input/touchscreen/apple_z2.c
+@@ -3187,7 +3187,7 @@ module_param_named(skip_j172_writes, d21_skip_j172_writes, bool, 0444);
+ static bool d21_prox_cal = true;
+ module_param_named(prox_cal, d21_prox_cal, bool, 0444);
+ MODULE_PARM_DESC(prox_cal,
+-		 "D21: download the in-pocket prox calibration (syscfg PxCl -> 0x10009600) at bootload");
++		 "D21: download the in-pocket prox calibration (syscfg PxCl -> 0x00400180) at bootload");
+ MODULE_PARM_DESC(skip_j172_writes, "Skip the J172 0x9d/0xbf mode-setup writes");
+ static int d21_af_val = 0;
+ module_param_named(af_val, d21_af_val, int, 0444);
+@@ -4472,14 +4472,26 @@ static int apple_z2_send_late_calibration(struct apple_z2 *z2,
+ 
+ 	/*
+ 	 * D21: iOS's AppleMultitouchZ2SPI also bootloads the in-pocket prox
+-	 * calibration (syscfg PxCl, 144 B on this unit) to controller SRAM
+-	 * 0x10009600 (the makez2fw GEN_1 container emits it in exactly that
+-	 * slot, ahead of multi-touch-calibration; the kext sends it for
+-	 * every Z2 bootload).  The C1F5E,4 container declares no prox
+-	 * provider, so the fw-loop never carries it; send it here through
+-	 * the same proven post-boot blob path as the four cals above.
+-	 * Without it the firmware's in-pocket baseline subsystem runs on
+-	 * absent data - the lead suspect for the phantom/guard boot modes
++	 * calibration (syscfg PxCl, 144 B on this unit) to controller SRAM.
++	 * The target address comes from the kext's Z2 defaults initializer
++	 * (kernelcache 20H392, MTSPI defaults fn): prox_cal_addr = 0x00400180
++	 * (in DTCM's calibration region, below orb-gap-cal at 0x400568),
++	 * alongside cal_dl_addr = 0x00400200 and fw_execute_addr =
++	 * 0x10001800.  The DT properties that could override these
++	 * (fll-mval, fll-mval-addr, cal-dl-addr, fw-execute-addr,
++	 * prox-cal-addr) are ABSENT from the D21 ADT, so iOS on this unit
++	 * runs the defaults, and the container (C1F5E,3) declares no prox
++	 * provider - the fw-loop never carries it.  The kext sends PxCl as
++	 * HBPP DATA packets (hdr 0xe118, <= 0x3f0 chunks, status 0x4bc1)
++	 * BEFORE the EXECUTE packet; post-boot is our proven equivalent
++	 * (the four cals land and take effect through the same path).
++	 * The earlier target 0x10009600 (the makez2fw GEN_1 slot guess)
++	 * acked e1 0e but is a region the firmware never reads - three
++	 * fully-calibrated boots still rolled the bottom-region-deaf
++	 * mode lottery with the in-pocket baseline effectively absent.
++	 * Without PxCl the firmware's in-pocket baseline subsystem runs
++	 * on absent data - the lead suspect for the phantom/guard boot
++	 * modes and the bottom-region (pocket-gradient) delivery loss
+ 	 * (docs/phantom-pocketguard-research.md).  Optional and non-fatal:
+ 	 * with neither the DT property nor apple/z2-proxcal.bin present,
+ 	 * or on a rejected send, the boot proceeds exactly as before.
+@@ -4506,7 +4518,7 @@ static int apple_z2_send_late_calibration(struct apple_z2 *z2,
+ 		} else {
+ 			px = apple_z2_build_iphone7_cal(z2,
+ 							PROX_CAL_PROP_NAME,
+-							0x10009600, 0x400,
++							0x00400180, 0x400,
+ 							&pxlen);
+ 			if (IS_ERR(px)) {
+ 				dev_warn(&z2->spidev->dev,
+@@ -4522,7 +4534,7 @@ static int apple_z2_send_late_calibration(struct apple_z2 *z2,
+ 						 perr);
+ 				else
+ 					dev_info(&z2->spidev->dev,
+-						 "D21: prox calibration -> 0x10009600 (%zu bytes)\n",
++						 "D21: prox calibration -> 0x00400180 (%zu bytes)\n",
+ 						 pxlen);
+ 			}
+ 		}
+-- 
+2.55.0
+
