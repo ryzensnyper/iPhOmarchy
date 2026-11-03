@@ -145,11 +145,15 @@ Predictions if true:
 
 ## 3. Experiment battery (cheap → deep; next Linux session)
 
-- **E0 (zero code):** the driver's `read=` knob already does raw report reads.
-  On the NEXT phantom roll (no reload first!): `read=72:4`, `read=f8:83`,
-  `read=7f:16`, and a `recdump.py` window of the phantom records. Then reload and
-  repeat on the healthy roll for the contrast table. (Capture dmesg BEFORE
-  rollcheck per the standing rule; hands off the panel during sampling.)
+- **E0 (zero code):** the driver's runtime `read_now` knob (0644) does raw report
+  reads without a reload: `echo 7f:16 > /sys/module/apple_z2/parameters/read_now`
+  and the dump lands in dmesg (`D21 read <id> len ...` + hex). Ready-made sampler:
+  **`/tmp/opencode/phantom-sample.sh`** (host copy; push to /root, run
+  `sh /root/phantom-sample.sh phantom` on the NEXT phantom roll BEFORE any reload,
+  then `... healthy` after a good reload for the contrast table — it samples
+  72:4 + f8:83 twice 5 s apart + 7f:16 and appends to /root/phantom-sample.log).
+  Add a `recdump.py` window of the phantom records if the roll persists.
+  (Hands off the panel during sampling.)
 - **E1 (zero code, the hypothesis test):** on a HEALTHY roll, cover the panel
   uniformly (thin fabric layer + light flat hand or a book) for ~10 s, remove,
   then tap. If Family B can be triggered on demand, the mechanism is confirmed
