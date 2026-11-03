@@ -462,3 +462,42 @@ properties, so iOS runs the defaults) shipped and boot-verified:
   on demand), multi-boot roll statistics with the fix in place, patch 0045
   (latch pres-gating), and the USB-net/PMP investigation to make reloads
   cheap.
+
+## 3.10 ★ E5 — THE STATE-TRANSITION EXPERIMENT (the FIRST item of session 5)
+
+**Hypothesis**: the deaf/degraded rolls are a latched guard state in the Z2's
+0x72 high-level state machine (Unknown(0)/Active(1)/Ready(2)/UILock(4)/
+FaceDet(5)/PreReady(8)/Anticip(9)/Diag(10), fwconfig report 114). iOS drives
+a lock→unlock transition every wake; Linux writes state 1 (Active) ONCE at
+boot and never touches the machinery again — a latched guard would therefore
+persist forever, which is exactly the observed behavior.
+
+- **E5a — verify the 0x72 byte pick first.** The mid-flood read_now(72:4)
+  reads returned interleaved garbage on 2026-11-04; sample 0x72 only when the
+  stream is quiet or right after boot (the boot probe reads it cleanly:
+  "D21 probe d21-72-after: high-level state index=1"). Establish: does the
+  state byte change spontaneously during a deaf roll?
+- **E5b — the runtime knob (patch 0045).** The driver has a 0x72 set-state
+  path (boot: "72 set-state 1 err=0"); expose it as a runtime parameter
+  (e.g. `echo 4 > /sys/module/apple_z2/parameters/hl_state_set` re-runs the
+  set-state transaction with the given state). Fold into the SAME rebuild as
+  the latch pres-gating fix (big_frames should only count frames passing
+  pres_min) — one reload tests both; their effects are distinguishable
+  (state = the raw stream, latch = forwarding). **The rebuild MUST re-apply
+  the vermagic swap (patches/REBUILD-VERMAGIC.md).**
+- **E5c — the transition ladder (the actual test).** On a deaf/degraded roll
+  (or after E1 reproduces one): 10-tap protocol → drive UILock(4) →
+  Active(1) → 10-tap protocol → drive PreReady(8) → Active(1) → 10-tap
+  protocol. The raw-stream lifecycle decode is the verdict (forwarded
+  BTN_TOUCH counts are the user-visible check). Also try Anticip(9) and
+  Ready(2) → Active if the first ladder shows movement.
+- **E5d — the feedback loop we never replicate.** The kext receives
+  external-message dynamic-cal updates from the controller ("Updated dynamic
+  cal entry <%s> with external message type 0x%X", incl. the in-pocket
+  baseline), stores them with hashes, and feeds dynamic-cal back at
+  bootload. Check whether our driver receives/drops those frames during a
+  deaf roll, and whether the controller behaves differently once the
+  baseline push is ACKed/served.
+- **Measurement discipline (from §3.9)**: the roll drifts within minutes —
+  every E5c rung needs its own before/after tap protocol back-to-back, and
+  conclusions need repetition across rolls. Single runs are confounded.
