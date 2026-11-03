@@ -1,0 +1,532 @@
+From 66e711cab58cf118aa8a660f2d2f2a137f22b601 Mon Sep 17 00:00:00 2001
+From: Eduardo Martins <372861+edulmartins@users.noreply.github.com>
+Date: Mon, 2 Nov 2026 16:43:39 -0600
+Subject: [PATCH] d221: describe the T8015 PCIe controller, its DARTs and the
+ Wi-Fi port
+
+Describe the two apcie DARTs and the H9P host bridge from the runtime
+ADT, model pcie_ref and pcie_aux as clock gates on T8015, and wire the
+d221 Wi-Fi slot on root port 3. The series is 0002-0005 in devices/t8015
+(the backlight patch takes 0001), plus the T8015 compatible for the DART
+and PCIe bindings.
+
+The controller, its DARTs and the Wi-Fi port stay disabled by default;
+the d221 board enables them in a later patch.
+
+Co-Authored-By: Claude Code <noreply@anthropic.com>
+---
+ ...Model-the-PCIe-clocks-as-clock-gates.patch |  74 +++++++++
+ ...4-dts-apple-t8015-Add-the-PCIe-DARTs.patch |  64 ++++++++
+ ...apple-t8015-Add-the-PCIe-host-bridge.patch |  87 ++++++++++
+ ...pple-t8015-x-Describe-the-Wi-Fi-port.patch |  60 +++++++
+ ...-apple-dart-Add-the-T8015-compatible.patch |  29 ++++
+ ...ple-t8010-pcie-Add-the-T8015-variant.patch | 151 ++++++++++++++++++
+ 6 files changed, 465 insertions(+)
+ create mode 100644 kernel/patches/devices/t8015/0002-arm64-dts-apple-t8015-Model-the-PCIe-clocks-as-clock-gates.patch
+ create mode 100644 kernel/patches/devices/t8015/0003-arm64-dts-apple-t8015-Add-the-PCIe-DARTs.patch
+ create mode 100644 kernel/patches/devices/t8015/0004-arm64-dts-apple-t8015-Add-the-PCIe-host-bridge.patch
+ create mode 100644 kernel/patches/devices/t8015/0005-arm64-dts-apple-t8015-x-Describe-the-Wi-Fi-port.patch
+ create mode 100644 kernel/patches/drivers/iommu/0010-dt-bindings-iommu-apple-dart-Add-the-T8015-compatible.patch
+ create mode 100644 kernel/patches/drivers/pci/0028-dt-bindings-PCI-apple-t8010-pcie-Add-the-T8015-variant.patch
+
+diff --git a/kernel/patches/devices/t8015/0002-arm64-dts-apple-t8015-Model-the-PCIe-clocks-as-clock-gates.patch b/kernel/patches/devices/t8015/0002-arm64-dts-apple-t8015-Model-the-PCIe-clocks-as-clock-gates.patch
+new file mode 100644
+index 00000000..0333a88c
+--- /dev/null
++++ b/kernel/patches/devices/t8015/0002-arm64-dts-apple-t8015-Model-the-PCIe-clocks-as-clock-gates.patch
+@@ -0,0 +1,74 @@
++From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
++From: Eduardo Martins <372861+edulmartins@users.noreply.github.com>
++Date: Sat, 31 Oct 2026 16:40:31 -0500
++Subject: [PATCH] arm64: dts: apple: t8015: Model the PCIe clocks as clock
++ gates
++
++The T8015 PMGR exposes pcie_ref and pcie_aux as clock gates that the
++PCIe controller drives itself, but t8015-pmgr.dtsi describes them as
++power domains. t8010-pmgr.dtsi already uses the clock-gate model for
++the same two gates.
++
++Drop the power-domain and reset cells from ps_pcie_ref and ps_pcie_aux,
++make them clock controllers with apple,clock-gate-only, and mark ps_pcie
++with apple,manual-pm so the PCIe driver owns the power-up sequence,
++matching the A10.
++
++This is not inert on boards that leave PCIe disabled. Until the apcie
++node is enabled, pcie_ref and pcie_aux have no consumer and no
++CLK_IGNORE_UNUSED, so clk_disable_unused gates them at late init if
++firmware left them on, and ps_pcie no longer keeps them in step with
++its own genpd state. It lands with the h9p T8015 match data, and the
++boot test reports 0x80148, 0x80320 and 0x80318 before and after.
++
++Signed-off-by: Eduardo Martins <372861+edulmartins@users.noreply.github.com>
++---
++ arch/arm64/boot/dts/apple/t8015-pmgr.dtsi | 17 ++++++++++-------
++ 1 file changed, 10 insertions(+), 7 deletions(-)
++
++diff --git a/arch/arm64/boot/dts/apple/t8015-pmgr.dtsi b/arch/arm64/boot/dts/apple/t8015-pmgr.dtsi
++index 1d8da9c..480e54c 100644
++--- a/arch/arm64/boot/dts/apple/t8015-pmgr.dtsi
+++++ b/arch/arm64/boot/dts/apple/t8015-pmgr.dtsi
++@@ -129,12 +129,13 @@
++ 		apple,always-on; /* Core device */
++ 	};
++ 
++-	ps_pcie_ref: power-controller@80148 {
+++	ps_pcie_ref: clock-controller@80148 {
++ 		compatible = "apple,t8015-pmgr-pwrstate", "apple,pmgr-pwrstate";
++ 		reg = <0x80148 4>;
++-		#power-domain-cells = <0>;
++-		#reset-cells = <0>;
+++		#clock-cells = <0>;
++ 		label = "pcie_ref";
+++		apple,clock-gate-only;
+++		apple,manual-pm;
++ 	};
++ 
++ 	ps_mca0: power-controller@80170 {
++@@ -658,15 +659,17 @@
++ 		#power-domain-cells = <0>;
++ 		#reset-cells = <0>;
++ 		label = "pcie";
++-		power-domains = <&ps_pcie_aux>, <&ps_pcie_direct>, <&ps_pcie_ref>;
+++		power-domains = <&ps_pcie_direct>;
+++		apple,manual-pm;
++ 	};
++ 
++-	ps_pcie_aux: power-controller@80320 {
+++	ps_pcie_aux: clock-controller@80320 {
++ 		compatible = "apple,t8015-pmgr-pwrstate", "apple,pmgr-pwrstate";
++ 		reg = <0x80320 4>;
++-		#power-domain-cells = <0>;
++-		#reset-cells = <0>;
+++		#clock-cells = <0>;
++ 		label = "pcie_aux";
+++		apple,clock-gate-only;
+++		apple,manual-pm;
++ 	};
++ 
++ 	ps_vdec0: power-controller@80388 {
++-- 
++2.56.0
++
+diff --git a/kernel/patches/devices/t8015/0003-arm64-dts-apple-t8015-Add-the-PCIe-DARTs.patch b/kernel/patches/devices/t8015/0003-arm64-dts-apple-t8015-Add-the-PCIe-DARTs.patch
+new file mode 100644
+index 00000000..bd6fb0d9
+--- /dev/null
++++ b/kernel/patches/devices/t8015/0003-arm64-dts-apple-t8015-Add-the-PCIe-DARTs.patch
+@@ -0,0 +1,64 @@
++From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
++From: Eduardo Martins <372861+edulmartins@users.noreply.github.com>
++Date: Sat, 31 Oct 2026 16:40:31 -0500
++Subject: [PATCH] arm64: dts: apple: t8015: Add the PCIe DARTs
++
++The APCIE root complex has two DARTs in the runtime ADT, dart-apcie2 and
++dart-apcie3 at 0x603008000 and 0x604008000, with one interrupt each (347
++and 350) and a 0x3ffff000 vm-size.
++
++Their fetch-config matches the s5l8960x generation, so describe them with
++the s5l8960x fallback. Their diag-config is 0x80000100, which differs
++from the 0x00000100 of the s5l8960x, t7001 and s8003 DARTs; it and the
++error-reflector are carried as the ADT gives them.
++
++They are disabled by default; the d221 board enables dart-apcie3 for the
++Wi-Fi.
++
++Signed-off-by: Eduardo Martins <372861+edulmartins@users.noreply.github.com>
++---
++ arch/arm64/boot/dts/apple/t8015.dtsi | 28 ++++++++++++++++++++++++++++
++ 1 file changed, 28 insertions(+)
++
++diff --git a/arch/arm64/boot/dts/apple/t8015.dtsi b/arch/arm64/boot/dts/apple/t8015.dtsi
++index 85ab9bf..3ddce22 100644
++--- a/arch/arm64/boot/dts/apple/t8015.dtsi
+++++ b/arch/arm64/boot/dts/apple/t8015.dtsi
++@@ -684,6 +684,34 @@
++ 			power-domains = <&ps_ans2>;
++ 		};
++ 
+++		dart_apcie2: iommu@603008000 {
+++			compatible = "apple,t8015-dart", "apple,s5l8960x-dart";
+++			reg = <0x6 0x03008000 0x0 0x4000>;
+++			#iommu-cells = <5>;
+++			interrupt-parent = <&aic>;
+++			interrupts = <AIC_IRQ 347 IRQ_TYPE_LEVEL_HIGH>;
+++			power-domains = <&ps_pcie>;
+++			/* ADT dart-apcie2: error-reflector, fetch-config, diag-config */
+++			apple,error-reflector = /bits/ 64 <0x233ffc000>;
+++			apple,fetch-config = <0x000e0303>;
+++			apple,diag-config = <0x80000100>;
+++			status = "disabled";
+++		};
+++
+++		dart_apcie3: iommu@604008000 {
+++			compatible = "apple,t8015-dart", "apple,s5l8960x-dart";
+++			reg = <0x6 0x04008000 0x0 0x4000>;
+++			#iommu-cells = <5>;
+++			interrupt-parent = <&aic>;
+++			interrupts = <AIC_IRQ 350 IRQ_TYPE_LEVEL_HIGH>;
+++			power-domains = <&ps_pcie>;
+++			/* ADT dart-apcie3: error-reflector, fetch-config, diag-config */
+++			apple,error-reflector = /bits/ 64 <0x233ffc000>;
+++			apple,fetch-config = <0x000e0303>;
+++			apple,diag-config = <0x80000100>;
+++			status = "disabled";
+++		};
+++
++ 		nvme@259cc0000 {
++ 			compatible = "apple,t8015-nvme-ans2";
++ 			reg = <0x2 0x59cc0000 0x0 0x40000>,
++-- 
++2.56.0
++
+diff --git a/kernel/patches/devices/t8015/0004-arm64-dts-apple-t8015-Add-the-PCIe-host-bridge.patch b/kernel/patches/devices/t8015/0004-arm64-dts-apple-t8015-Add-the-PCIe-host-bridge.patch
+new file mode 100644
+index 00000000..46b22829
+--- /dev/null
++++ b/kernel/patches/devices/t8015/0004-arm64-dts-apple-t8015-Add-the-PCIe-host-bridge.patch
+@@ -0,0 +1,87 @@
++From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
++From: Eduardo Martins <372861+edulmartins@users.noreply.github.com>
++Date: Sat, 31 Oct 2026 16:40:52 -0500
++Subject: [PATCH] arm64: dts: apple: t8015: Add the PCIe host bridge
++
++The A11 has the same four-port H8P/H9P root complex as the A10, but with a
++per-port NVMMU window and no storage port. The runtime ADT places the ECAM
++window at 0x610000000, the port registers at 0x60N000000 with a 0x4000
++window at 0x60N004000, and the PHY at 0x600080000. The four port state
++interrupts are 340/343/346/349, and the MSI block starts at 352.
++
++The ADT reg entries are unnamed, so the portN and portN-nvmmu names are
++this series' reading of that layout rather than ADT properties; the driver
++does not consume them yet.
++
++Describe the controller but leave it disabled by default; the d221 board
++enables it.
++
++Signed-off-by: Eduardo Martins <372861+edulmartins@users.noreply.github.com>
++---
++ arch/arm64/boot/dts/apple/t8015.dtsi | 50 ++++++++++++++++++++++++++++
++ 1 file changed, 50 insertions(+)
++
++diff --git a/arch/arm64/boot/dts/apple/t8015.dtsi b/arch/arm64/boot/dts/apple/t8015.dtsi
++index 3ddce22..6f07e9a 100644
++--- a/arch/arm64/boot/dts/apple/t8015.dtsi
+++++ b/arch/arm64/boot/dts/apple/t8015.dtsi
++@@ -725,6 +725,56 @@
++ 			power-domain-names = "ans", "apcie0";
++ 			resets = <&ps_ans2>;
++ 		};
+++
+++		apcie: pcie@610000000 {
+++			compatible = "apple,t8015-pcie";
+++			device_type = "pci";
+++
+++			reg = <0x6 0x10000000 0x0 0x1000000>,
+++			      <0x6 0x01000000 0x0 0x4000>,
+++			      <0x6 0x01004000 0x0 0x4000>,
+++			      <0x6 0x02000000 0x0 0x4000>,
+++			      <0x6 0x02004000 0x0 0x4000>,
+++			      <0x6 0x03000000 0x0 0x4000>,
+++			      <0x6 0x03004000 0x0 0x4000>,
+++			      <0x6 0x04000000 0x0 0x4000>,
+++			      <0x6 0x04004000 0x0 0x4000>,
+++			      <0x6 0x00000000 0x0 0x50000>,
+++			      <0x6 0x00080000 0x0 0x4000>,
+++			      <0x6 0x000c0000 0x0 0x40000>;
+++			reg-names = "config", "port0", "port0-nvmmu",
+++				    "port1", "port1-nvmmu",
+++				    "port2", "port2-nvmmu",
+++				    "port3", "port3-nvmmu",
+++				    "rc", "phy", "phy-ip";
+++
+++			interrupt-parent = <&aic>;
+++			interrupts = <AIC_IRQ 340 IRQ_TYPE_LEVEL_HIGH>,
+++				     <AIC_IRQ 343 IRQ_TYPE_LEVEL_HIGH>,
+++				     <AIC_IRQ 346 IRQ_TYPE_LEVEL_HIGH>,
+++				     <AIC_IRQ 349 IRQ_TYPE_LEVEL_HIGH>;
+++			interrupt-names = "port0", "port1", "port2", "port3";
+++
+++			msi-controller;
+++			msi-parent = <&apcie>;
+++			msi-ranges = <&aic AIC_IRQ 352 IRQ_TYPE_EDGE_RISING 32>;
+++			apple,msi-doorbell = <0xbffff000>;
+++
+++			#address-cells = <3>;
+++			#size-cells = <2>;
+++			#interrupt-cells = <1>;
+++			interrupt-controller;
+++			bus-range = <0x00 0x08>;
+++			ranges = <0x43000000 0x6 0x20000000
+++				  0x6 0x20000000 0x0 0x20000000>,
+++				 <0x02000000 0x0 0x40000000
+++				  0x6 0x40000000 0x0 0x40000000>;
+++
+++			power-domains = <&ps_pcie>;
+++			clocks = <&ps_pcie_aux>, <&ps_pcie_ref>;
+++			clock-names = "aux", "ref";
+++			status = "disabled";
+++		};
++ 	};
++ 
++ 	timer {
++-- 
++2.56.0
++
+diff --git a/kernel/patches/devices/t8015/0005-arm64-dts-apple-t8015-x-Describe-the-Wi-Fi-port.patch b/kernel/patches/devices/t8015/0005-arm64-dts-apple-t8015-x-Describe-the-Wi-Fi-port.patch
+new file mode 100644
+index 00000000..184a63dc
+--- /dev/null
++++ b/kernel/patches/devices/t8015/0005-arm64-dts-apple-t8015-x-Describe-the-Wi-Fi-port.patch
+@@ -0,0 +1,60 @@
++From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
++From: Eduardo Martins <372861+edulmartins@users.noreply.github.com>
++Date: Sat, 31 Oct 2026 16:41:07 -0500
++Subject: [PATCH] arm64: dts: apple: t8015-x: Describe the Wi-Fi port
++
++The iPhone X has a BCM4357 on APCIE port 3. The runtime ADT gives the
++port's CLKREQ# as GPIO 163, PERST# as GPIO 167 and the device-wake line
++as GPIO 40, and the port's DART is dart-apcie3.
++
++The h9p driver hides ports that are not enabled from config space and the
++host bridge renumbers buses, so with only this port enabled it enumerates
++as bus 1 and its requester ID is 0x100. The iommu-map entry follows that,
++with a 0xff00 mask so every function of the port is mapped.
++
++The port is active only once the controller is enabled on the d221 board,
++with dart-apcie3. The endpoint device node is left to the power-control
++patch that follows; the BCM4357 enumerates as 14e4:440a.
++
++Signed-off-by: Eduardo Martins <372861+edulmartins@users.noreply.github.com>
++---
++ arch/arm64/boot/dts/apple/t8015-x.dtsi | 26 ++++++++++++++++++++++++++
++ 1 file changed, 26 insertions(+)
++
++diff --git a/arch/arm64/boot/dts/apple/t8015-x.dtsi b/arch/arm64/boot/dts/apple/t8015-x.dtsi
++index 41134ed..2318d58 100644
++--- a/arch/arm64/boot/dts/apple/t8015-x.dtsi
+++++ b/arch/arm64/boot/dts/apple/t8015-x.dtsi
++@@ -11,3 +11,29 @@
++ / {
++ 	chassis-type = "handset";
++ };
+++
+++&apcie {
+++	iommu-map = <0x100 &dart_apcie3 0 0x0 0x80000000 0x0 0x3ffff000 1>;
+++	iommu-map-mask = <0xff00>;
+++	pinctrl-0 = <&wifi_clkreq>;
+++	pinctrl-names = "default";
+++
+++	pci@3,0 {
+++		device_type = "pci";
+++		reg = <0x1800 0x0 0x0 0x0 0x0>;
+++		bus-range = <1 1>;
+++		max-link-speed = <2>;
+++		apple,manual-availability-iommu = <&dart_apcie3 0>;
+++		reset-gpios = <&pinctrl_ap 167 GPIO_ACTIVE_LOW>;
+++
+++		#address-cells = <3>;
+++		#size-cells = <2>;
+++		ranges;
+++	};
+++};
+++
+++&pinctrl_ap {
+++	wifi_clkreq: wifi-clkreq-pins {
+++		pinmux = <APPLE_PINMUX(163, 1)>;
+++	};
+++};
++-- 
++2.56.0
++
+diff --git a/kernel/patches/drivers/iommu/0010-dt-bindings-iommu-apple-dart-Add-the-T8015-compatible.patch b/kernel/patches/drivers/iommu/0010-dt-bindings-iommu-apple-dart-Add-the-T8015-compatible.patch
+new file mode 100644
+index 00000000..6a3c8fd1
+--- /dev/null
++++ b/kernel/patches/drivers/iommu/0010-dt-bindings-iommu-apple-dart-Add-the-T8015-compatible.patch
+@@ -0,0 +1,29 @@
++From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
++From: Eduardo Martins <372861+edulmartins@users.noreply.github.com>
++Date: Sat, 31 Oct 2026 16:40:31 -0500
++Subject: [PATCH] dt-bindings: iommu: apple,dart: Add the T8015 compatible
++
++The T8015 DARTs use the same s5l8960x register programming as the T7000,
++S8000 and T8010, but the fallback enum does not list a T8015 compatible.
++Add it so the SoC can use the existing driver and quirk data.
++
++Signed-off-by: Eduardo Martins <372861+edulmartins@users.noreply.github.com>
++---
++ Documentation/devicetree/bindings/iommu/apple,dart.yaml | 1 +
++ 1 file changed, 1 insertion(+)
++
++diff --git a/Documentation/devicetree/bindings/iommu/apple,dart.yaml b/Documentation/devicetree/bindings/iommu/apple,dart.yaml
++index 95f4843..df72722 100644
++--- a/Documentation/devicetree/bindings/iommu/apple,dart.yaml
+++++ b/Documentation/devicetree/bindings/iommu/apple,dart.yaml
++@@ -37,6 +37,7 @@ properties:
++               - apple,t7000-dart
++               - apple,s8000-dart
++               - apple,t8010-dart
+++              - apple,t8015-dart
++           - const: apple,s5l8960x-dart
++ 
++   reg:
++-- 
++2.56.0
++
+diff --git a/kernel/patches/drivers/pci/0028-dt-bindings-PCI-apple-t8010-pcie-Add-the-T8015-variant.patch b/kernel/patches/drivers/pci/0028-dt-bindings-PCI-apple-t8010-pcie-Add-the-T8015-variant.patch
+new file mode 100644
+index 00000000..b0116878
+--- /dev/null
++++ b/kernel/patches/drivers/pci/0028-dt-bindings-PCI-apple-t8010-pcie-Add-the-T8015-variant.patch
+@@ -0,0 +1,151 @@
++From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
++From: Eduardo Martins <372861+edulmartins@users.noreply.github.com>
++Date: Sat, 31 Oct 2026 16:40:46 -0500
++Subject: [PATCH] dt-bindings: pci: apple,t8010-pcie: Add the T8015 variant
++
++The T8015 keeps the four-port H8P/H9P register map but gives each port its
++own NVMMU window (portN and portN-nvmmu) and has no storage port, so its
++NVMe controller is the separate ANS2 block. It therefore has twelve reg
++entries, four port interrupts, and none of the storage-port properties:
++no apple,nvmmu-iova and no apple,nvme-hmb.
++
++Describe that layout in the Apple PCIe binding so the T8015 node can be
++validated. The per-SoC constraints become independent allOf entries so
++the T8010 branch keeps its nine-register and five-interrupt limits and
++the derivative boards still match it.
++
++Signed-off-by: Eduardo Martins <372861+edulmartins@users.noreply.github.com>
++---
++ .../bindings/pci/apple,t8010-pcie.yaml        | 74 ++++++++++++++++---
++ 1 file changed, 63 insertions(+), 11 deletions(-)
++
++diff --git a/Documentation/devicetree/bindings/pci/apple,t8010-pcie.yaml b/Documentation/devicetree/bindings/pci/apple,t8010-pcie.yaml
++index 83db67f..e70f009 100644
++--- a/Documentation/devicetree/bindings/pci/apple,t8010-pcie.yaml
+++++ b/Documentation/devicetree/bindings/pci/apple,t8010-pcie.yaml
++@@ -4,17 +4,17 @@
++ $id: http://devicetree.org/schemas/pci/apple,t8010-pcie.yaml#
++ $schema: http://devicetree.org/meta-schemas/core.yaml#
++ 
++-title: Apple S8003, T7000 and T8010 PCIe host controller
+++title: Apple S8003, T7000, T8010 and T8015 PCIe host controller
++ 
++ maintainers:
++   - Paul Praschl <praschlpaul@g-p.at>
++ 
++ description: |
++-  Apple A9/S8003 (TSMC) and A10/T8010 devices use the H8P/H9P PCIe root
++-  complex for internal storage and Wi-Fi. It exposes one ECAM window shared
++-  by up to four root ports, controller-specific PHY and port register
++-  windows, and a local MSI block. Both SoCs share this register map but
++-  need different power-up and link training sequences.
+++  Apple A9/S8003 (TSMC), A10/T8010 and A11/T8015 devices use the H8P/H9P
+++  PCIe root complex for internal storage and Wi-Fi. It exposes one ECAM
+++  window shared by up to four root ports, controller-specific PHY and port
+++  register windows, and a local MSI block. The SoCs share this register map
+++  but need different power-up and link training sequences.
++ 
++   The storage port also contains an NVMMU which translates the proprietary
++   Apple ANS FlatDMA format. Unlike a general-purpose IOMMU, this block uses a
++@@ -22,6 +22,10 @@ description: |
++   window. The PCIe driver owns that NVMMU state and exposes it only to the ANS
++   NVMe glue.
++ 
+++  The T8015 has no PCIe storage port: its NVMe controller is the separate
+++  ANS2 block. Each T8015 root port instead has its own NVMMU window, so the
+++  T8015 does not use the storage-port NVMMU properties.
+++
++   Apple A8/A8X (T7000/T7001) devices use an earlier version of the same root
++   complex, with the same ECAM layout, port register block and MSI block. It
++   has no separate PHY register windows and no NVMMU, and its reference and
++@@ -65,11 +69,58 @@ allOf:
++         apple,nvmmu-iova: false
++         apple,nvme-hmb: false
++         apple,preinit-phy-port-mask: false
++-    else:
+++  - if:
+++      properties:
+++        compatible:
+++          contains:
+++            const: apple,t8015-pcie
+++    then:
+++      properties:
+++        reg:
+++          minItems: 12
+++          maxItems: 12
+++        reg-names:
+++          items:
+++            - const: config
+++            - const: port0
+++            - const: port0-nvmmu
+++            - const: port1
+++            - const: port1-nvmmu
+++            - const: port2
+++            - const: port2-nvmmu
+++            - const: port3
+++            - const: port3-nvmmu
+++            - const: rc
+++            - const: phy
+++            - const: phy-ip
+++        interrupts:
+++          minItems: 4
+++          maxItems: 4
+++        interrupt-names:
+++          minItems: 4
+++          maxItems: 4
+++        power-domains:
+++          maxItems: 1
+++        apple,nvmmu-iova: false
+++        apple,nvme-hmb: false
+++      required:
+++        - clocks
+++        - clock-names
+++  - if:
+++      not:
+++        properties:
+++          compatible:
+++            contains:
+++              enum:
+++                - apple,t7000-pcie
+++                - apple,t8015-pcie
+++    then:
++       properties:
++         reg:
++           minItems: 9
+++          maxItems: 9
++         reg-names:
+++          maxItems: 9
++           items:
++             - const: config
++             - const: rc
++@@ -99,22 +150,23 @@ properties:
++           - apple,s8003-pcie
++           - apple,t7000-pcie
++           - apple,t8010-pcie
+++          - apple,t8015-pcie
++       - items:
++           - const: apple,j172-pcie
++           - const: apple,t8010-pcie
++ 
++   reg:
++     minItems: 6
++-    maxItems: 9
+++    maxItems: 12
++ 
++   reg-names:
++     minItems: 6
++-    maxItems: 9
+++    maxItems: 12
++ 
++   interrupts:
++     description:
++-      One state interrupt for each root port followed, on T8010, by the
++-      storage-port NVMMU fault interrupt.
+++      One state interrupt for each root port followed, on the SoCs with a
+++      storage-port NVMMU, by its fault interrupt.
++     minItems: 4
++     maxItems: 5
++ 
++-- 
++2.56.0
++

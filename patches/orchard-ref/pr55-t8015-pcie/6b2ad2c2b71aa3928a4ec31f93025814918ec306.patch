@@ -1,0 +1,145 @@
+From 6b2ad2c2b71aa3928a4ec31f93025814918ec306 Mon Sep 17 00:00:00 2001
+From: Eduardo Martins <372861+edulmartins@users.noreply.github.com>
+Date: Mon, 2 Nov 2026 16:43:44 -0600
+Subject: [PATCH] arm64: dts: apple: t8015: enable the D221 PCIe and power the
+ Wi-Fi endpoint
+
+Enable the controller and dart-apcie3 on the d221 board, and give the
+endpoint its power rail: a fixed regulator on the SMC PMU GPIO 14
+("gP0e", active-high) plus a pci-pwrctrl node the h9p driver powers before
+it brings the port up. The endpoint claims the BCM4357's PCI ID,
+pci14e4,440a.
+
+Co-Authored-By: Claude Code <noreply@anthropic.com>
+---
+ ...-dts-apple-t8015-Enable-PCIe-on-D221.patch | 35 +++++++++
+ ...ple-t8015-x-Power-the-Wi-Fi-endpoint.patch | 76 +++++++++++++++++++
+ 2 files changed, 111 insertions(+)
+ create mode 100644 kernel/patches/devices/t8015/0006-arm64-dts-apple-t8015-Enable-PCIe-on-D221.patch
+ create mode 100644 kernel/patches/devices/t8015/0007-arm64-dts-apple-t8015-x-Power-the-Wi-Fi-endpoint.patch
+
+diff --git a/kernel/patches/devices/t8015/0006-arm64-dts-apple-t8015-Enable-PCIe-on-D221.patch b/kernel/patches/devices/t8015/0006-arm64-dts-apple-t8015-Enable-PCIe-on-D221.patch
+new file mode 100644
+index 0000000..ee6921d
+--- /dev/null
++++ b/kernel/patches/devices/t8015/0006-arm64-dts-apple-t8015-Enable-PCIe-on-D221.patch
+@@ -0,0 +1,35 @@
++From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
++From: Eduardo Martins <372861+edulmartins@users.noreply.github.com>
++Date: Mon, 2 Nov 2026 11:00:00 -0600
++Subject: [PATCH] arm64: dts: apple: t8015: Enable the PCIe controller on the D221
++
++The controller and its DARTs are described in t8015.dtsi but left
++disabled by default. Enable the controller and dart-apcie3 on the d221
++board so its Wi-Fi port comes up.
++
++The Wi-Fi port's DART must be enabled as well: the h9p driver reloads its
++configuration by hand, and a disabled DART node has no platform device to
++find, which the driver reports as a silent -EPROBE_DEFER.
++
++Signed-off-by: Eduardo Martins <372861+edulmartins@users.noreply.github.com>
++---
++ arch/arm64/boot/dts/apple/t8015-d221.dts | 8 ++++++++
++ 1 file changed, 8 insertions(+)
++
++diff --git a/arch/arm64/boot/dts/apple/t8015-d221.dts b/arch/arm64/boot/dts/apple/t8015-d221.dts
++--- a/arch/arm64/boot/dts/apple/t8015-d221.dts
+++++ b/arch/arm64/boot/dts/apple/t8015-d221.dts
++@@ -12,3 +12,11 @@
++ 	compatible = "apple,d221", "apple,t8015", "apple,arm-platform";
++ 	model = "Apple iPhone X (GSM)";
++ };
+++
+++&apcie {
+++	status = "okay";
+++};
+++
+++&dart_apcie3 {
+++	status = "okay";
+++};
++-- 
++2.56.0
+\ No newline at end of file
+diff --git a/kernel/patches/devices/t8015/0007-arm64-dts-apple-t8015-x-Power-the-Wi-Fi-endpoint.patch b/kernel/patches/devices/t8015/0007-arm64-dts-apple-t8015-x-Power-the-Wi-Fi-endpoint.patch
+new file mode 100644
+index 0000000..bd9c802
+--- /dev/null
++++ b/kernel/patches/devices/t8015/0007-arm64-dts-apple-t8015-x-Power-the-Wi-Fi-endpoint.patch
+@@ -0,0 +1,76 @@
++From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
++From: Eduardo Martins <372861+edulmartins@users.noreply.github.com>
++Date: Mon, 2 Nov 2026 13:10:00 -0600
++Subject: [PATCH] arm64: dts: apple: t8015-x: Power the Wi-Fi endpoint
++
++The D221 runtime ADT powers the BCM4357 through SMC PMU GPIO 14 ("gP0e")
++and drives the device-wake line on AP GPIO 40. Without that rail the
++endpoint never answers PERST# and the port's LTSSM stays in
++Detect.Quiet.
++
++Model the rail as a fixed regulator on the SMC PMU GPIO and give the
++endpoint a pci-pwrctrl node, which apple-h9p powers before it sets up
++the port. The t8015 SMC has no apple,smc-gpio child yet, so add it here.
++
++The endpoint claims the BCM4357's PCI ID, pci14e4,440a, enumerated at
++5.0 GT/s x1. Its REG_ON is active-high and its power sequence is the
++j172 one this driver already ships.
++
++Signed-off-by: Eduardo Martins <372861+edulmartins@users.noreply.github.com>
++Co-Authored-By: Claude Code <noreply@anthropic.com>
++---
++ arch/arm64/boot/dts/apple/t8015-x.dtsi | 29 +++++++++++++++++++++++++++++
++ 1 file changed, 29 insertions(+)
++
++diff --git a/arch/arm64/boot/dts/apple/t8015-x.dtsi b/arch/arm64/boot/dts/apple/t8015-x.dtsi
++--- a/arch/arm64/boot/dts/apple/t8015-x.dtsi
+++++ b/arch/arm64/boot/dts/apple/t8015-x.dtsi
++@@ -10,6 +10,20 @@
++ 
++ / {
++ 	chassis-type = "handset";
+++
+++	/*
+++	 * The BCM4357's REG_ON is driven through the SMC PMU GPIO 14
+++	 * ("gP0e"), active-high, on the gpio controller added below.
+++	 * gpiolib takes the polarity from enable-active-high, so that
+++	 * property alone sets the physical level.
+++	 */
+++	wlan_vdd: regulator-wlan-vdd {
+++		compatible = "regulator-fixed";
+++		regulator-name = "wlan-vdd";
+++		gpio = <&smc_gpio 14 GPIO_ACTIVE_HIGH>;
+++		enable-active-high;
+++		off-on-delay-us = <2500>;
+++	};
++ };
++ 
++ &apcie {
++@@ -29,6 +43,13 @@
++ 		#address-cells = <3>;
++ 		#size-cells = <2>;
++ 		ranges;
+++
+++		wifi@0,0 {
+++			compatible = "apple,d221-bcm4357-wifi", "pci14e4,440a";
+++			reg = <0x10000 0x0 0x0 0x0 0x0>;
+++			device-wake-gpios = <&pinctrl_ap 40 GPIO_ACTIVE_HIGH>;
+++			vdd-supply = <&wlan_vdd>;
+++		};
++ 	};
++ };
++ 
++@@ -37,3 +58,11 @@
++ 		pinmux = <APPLE_PINMUX(163, 1)>;
++ 	};
++ };
+++
+++&smc {
+++	smc_gpio: gpio {
+++		compatible = "apple,smc-gpio";
+++		gpio-controller;
+++		#gpio-cells = <2>;
+++	};
+++};
++-- 
++2.56.0
+\ No newline at end of file

@@ -5,6 +5,28 @@ Last commit touching drivers/wifi: 5ca0cc5f (2026-10-29, "Disable Wi-Fi P2P on
 J71b/J71t"); the stack landed 2026-10-29 in 538395f ("Add the A8X (T7000) drivers
 from Martin Puškáč's port") on top of the earlier J71b (iPad 6) bring-up.
 
+## PR mirrors (2026-11-03 evening — the T8015 puzzle pieces)
+- **pr55-t8015-pcie/** — OPEN PR #55 (edulmartins, 5 commits, HARDWARE-TESTED on
+  iPhone X d221): T8015 PCIe bring-up. pcie_ref/pcie_aux as clock gates, the TWO
+  apcie DARTs, the H9P host bridge (devices/t8015 0002-0005 + DART/PCIe binding
+  compatibles), apple-h9p T8015 match data + tunables + power-up sequence
+  DECODED FROM AppleT8015PCIe + the D221 ADT, the WiFi port on ROOT PORT 3,
+  pwrctrl for **BCM4357 (14e4:440a)** (same REG_ON + 100 ms as the j172 BCM4355),
+  and the endpoint power = fixed regulator on SMC PMU GPIO 14 ("gP0e",
+  active-high). Result on d221: port 3 trains to L0 (LTSSM 0x11, 102 ms), the
+  endpoint enumerates 14e4:440a at 5.0 GT/s x1. Remaining upstream: host-wake
+  wiring + a brcmfmac BCM4357 entry. Bring-up doc: docs/bring-up/d221-pcie.md
+  (in the PR branch). THIS IS 90% OF OUR WIFI TASK, FOR OUR EXACT SoC.
+- **pr52-stall-recovery/** — DRAFT PR #52 (jarodlee, commit 80513cc): J71b
+  "sustained control-only stalls" recovery — the J71b ANALOG OF OUR HALF-BOOT
+  (issue #24: touch stops while IRQ + SPI continue; rebind restores). Their
+  detector: >=64 consecutive control replies over 2 s, no gap >250 ms -> release
+  contacts, mask IRQ, reboot the controller from work context, <=3 boot retries.
+  Cross-device confirmation of our wedge class. They have NO true rail cut (we
+  do, via rBK3) and no silence watchdog (their trigger is the control-reply run —
+  a candidate refinement for our watch: fire on a sustained control-reply run
+  INSTEAD of waiting quiet_ms).
+
 ## Why mirrored
 D21 (iPhone 8 Plus, T8015/A11) has the apcie node in DTB (pcie@610000000) but
 lspci shows NOTHING and brcmfmac is not in the kernel: the host-driver/DART/
