@@ -1,0 +1,141 @@
+From b9bebaa0a0202a2a2c93633f97eb49d0870cded1 Mon Sep 17 00:00:00 2001
+From: dugs <dugahol@protonmail.com>
+Date: Wed, 4 Nov 2026 06:16:13 +1030
+Subject: [PATCH] input: apple_z2: D21 runtime 0x72 state knob + latch frames
+ gated on pressure
+
+Two changes, one rebuild (research doc section 3.10 E5):
+
+hl_state_set: runtime write-only knob that re-runs the boot 72
+set-state transaction (8-byte report, state in byte 1) and logs the
+readback.  The boot path writes Active(1) once and never touches the
+state machinery again, while iOS drives lock->unlock transitions on
+every wake - a controller that latched a guard state (UILock(4),
+PreReady(8), Anticip(9)) would stay there forever on Linux.  This is
+the experiment lever for driving transitions on a live roll.
+
+Latch pres gate: big_frames counted every oversized frame regardless
+of pressure, so a slow-onset strong touch ramped its tool size while
+the pressure was still below pres_min and latched the whole contact
+before its pressure crossed the gate (dance #14, measured via
+absolute-timestamp evdev decode: top taps tool_major 3797-4332 with
+the pressure ramping were latched after 8 oversized frames and
+forwarded zero events, while the one finger-scale tap, tool 736 pres
+529, forwarded instantly).  Only count frames that would forward
+(pressure >= pres_min); hold the counter on sub-gate frames instead of
+resetting it, or a long ramp would never reach latch_frames.  The
+giant-blob class still hard-latches on tool_area_hard, whose pressure
+is irrelevant (area >> 12M).
+
+Assisted-by: LLM
+---
+ drivers/input/touchscreen/apple_z2.c | 70 +++++++++++++++++++++++++++-
+ 1 file changed, 68 insertions(+), 2 deletions(-)
+
+diff --git a/drivers/input/touchscreen/apple_z2.c b/drivers/input/touchscreen/apple_z2.c
+index 75e3fe336..dc59993b3 100644
+--- a/drivers/input/touchscreen/apple_z2.c
++++ b/drivers/input/touchscreen/apple_z2.c
+@@ -672,24 +672,42 @@ static void apple_z2_parse_touches(struct apple_z2 *z2,
+ 				clear_bit(slot, z2->d21_palm_latch);
+ 				z2->d21_big_frames[slot] = 0;
+ 			}
++			/*
++			 * big_frames must only count frames that would
++			 * forward: a slow-onset strong touch ramps its tool
++			 * size while the pressure is still below pres_min,
++			 * and counting those frames latched the whole tap
++			 * before its pressure ever crossed the gate
++			 * (measured 2026-11-04: top taps tool_major
++			 * 3797-4332 with the pressure ramping, latched after
++			 * 8 frames with zero evdev events, while the one
++			 * finger-scale tap, tool 736, forwarded instantly).
++			 * Hold the counter on sub-gate frames instead of
++			 * resetting it, or a long ramp would never reach
++			 * latch_frames.  The giant-blob class still
++			 * hard-latches on tool_area_hard, whose pressure is
++			 * irrelevant.
++			 */
+ 			bool big = (d21_tool_max &&
+ 				    le16_to_cpu(fingers[i].tool_major) >=
+ 					    d21_tool_max) ||
+ 				   (d21_tool_area_max &&
+ 				    f_area >= d21_tool_area_max);
++			bool forwards = le16_to_cpu(fingers[i].pressure) >=
++					d21_pres_min;
+ 
+ 			if (d21_tool_area_hard &&
+ 			    f_area >= d21_tool_area_hard) {
+ 				/* Unambiguous giant blob: latch now. */
+ 				set_bit(slot, z2->d21_palm_latch);
+ 				z2->d21_big_frames[slot] = 255;
+-			} else if (big) {
++			} else if (big && forwards) {
+ 				if (z2->d21_big_frames[slot] < 255)
+ 					z2->d21_big_frames[slot]++;
+ 				if (z2->d21_big_frames[slot] >=
+ 				    d21_latch_frames)
+ 					set_bit(slot, z2->d21_palm_latch);
+-			} else {
++			} else if (!big) {
+ 				z2->d21_big_frames[slot] = 0;
+ 			}
+ 			if (fingers[i].state == 0) {
+@@ -3470,6 +3488,54 @@ MODULE_PARM_DESC(read_now,
+ 		 "D21: write 'id:len,id:len' to read reports immediately, no reload "
+ 		 "(e.g. echo 7f:16 > .../parameters/read_now)");
+ 
++/*
++ * Runtime 0x72 high-level state transition: write the state index to
++ * re-run the boot set-state transaction and log the readback.  The boot
++ * path (hl_state=) writes Active(1) once; iOS drives lock->unlock
++ * transitions every wake and never leaves the state machinery alone, so
++ * a controller that latched a guard state (UILock(4), PreReady(8),
++ * Anticip(9)) would stay there forever on Linux - this knob is the
++ * experiment lever for driving transitions on a live roll.
++ */
++static int d21_hl_state_set_set(const char *val, const struct kernel_param *kp)
++{
++	struct apple_z2 *z2 = apple_z2_d21_now_get();
++	u8 high_level[8] = { };
++	int state, error;
++
++	if (!z2)
++		return -ENODEV;
++
++	error = kstrtoint(val, 0, &state);
++	if (error || state < 0 || state > 255) {
++		apple_z2_d21_now_put();
++		return error ?: -EINVAL;
++	}
++
++	mutex_lock(&z2->io_lock);
++	high_level[1] = state;
++	error = apple_z2_write_report_locked(z2, APPLE_Z2_REPORT_HIGH_LEVEL,
++					     high_level, sizeof(high_level),
++					     "d21-72-set");
++	dev_info(&z2->spidev->dev, "D21: 72 set-state %u err=%d\n",
++		 state, error);
++	if (!error)
++		apple_z2_d21_probe_report(z2, APPLE_Z2_REPORT_HIGH_LEVEL,
++					  "d21-72-set-after");
++	mutex_unlock(&z2->io_lock);
++
++	apple_z2_d21_now_put();
++	return 0;
++}
++
++static const struct kernel_param_ops d21_hl_state_set_ops = {
++	.set = d21_hl_state_set_set,
++};
++module_param_cb(hl_state_set, &d21_hl_state_set_ops, NULL, 0644);
++MODULE_PARM_DESC(hl_state_set,
++		 "D21: write the 0x72 high-level state index (0-255) to run the "
++		 "set-state transaction now (e.g. echo 1 > .../parameters/hl_state_set)");
++
+ /*
+  * Runtime HBPP register read: 'echo addr[,addr...] > .../parameters/regread'
+  * reads each 32-bit word through the kext's register-read packet and logs
+-- 
+2.55.0
+

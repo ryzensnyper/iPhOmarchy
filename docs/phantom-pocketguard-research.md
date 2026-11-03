@@ -501,3 +501,54 @@ persist forever, which is exactly the observed behavior.
 - **Measurement discipline (from §3.9)**: the roll drifts within minutes —
   every E5c rung needs its own before/after tap protocol back-to-back, and
   conclusions need repetition across rolls. Single runs are confounded.
+
+### 3.10.1 E5a RESULTS (session 5, pre-reload sampling) + two tooling lessons
+
+E5a answered on the dance #15 boot (before the reload): **the 0x72 byte pick
+is consistent and the HL state does NOT move.** Six read_now samples of
+72:4 across a healthy 15-fps roll AND a quiet (no-IRQ) phase, all
+identical: `e6 72 00 00 01 …` → state index 1 (Active), matching the boot
+probe's decode (rx_buf[4]). Together with dance #10's phantom roll (also
+01): the state byte sits at Active through healthy, degraded, and
+phantom/dead rolls — it never changes spontaneously. The simple
+"guard latched in 0x72" form is closed; whether a latched guard shows up
+only in behavior (and clears via the E5c transitions) is what the ladder
+still tests.
+
+- **E5d first data (healthy roll)**: 27,741 irq-pkt lines this boot were
+  report 0x44; the ONLY non-0x44 reports were two 0x50s at boot/restart
+  moments. No external-message/dynamic-cal traffic is visible on a
+  healthy roll — either we never enable that channel or it only flows
+  once the dynamic-cal subsystem is active. Re-check on a deaf roll.
+- **★ kmsg-ring artifact, second strike**: `dmesg | grep -c "touch parse"`
+  twice N s apart returning delta≈0 does NOT mean the stream died — the
+  ~12-s flood ring makes grep -c a FIXED-WINDOW count (constant ≈180 at
+  15 fps, delta 0 ± rotation jitter; a -1 delta at full cadence
+  triggered a false "stream dead" alarm this session). Count parse lines
+  via the JOURNAL (`journalctl -k --since "-12 s" | grep -c`), which does
+  not rotate. The same artifact produced the "frames stopped at 1388 s"
+  misread; the journal showed 25,359 parse lines flowing continuously.
+- **★ read_now "lost" reads were the same artifact**: every echo to
+  read_now works (time 0.015 s, log line unconditional in
+  apple_z2_d21_read_list); under the 15-fps flood a grep >5-6 s later
+  misses lines rotated out of the ring. Grep within ~1 s or use the
+  journal.
+- **★ d21_watch skip-path disarms the watchdog**: the quiet_ms=0 probe
+  (a safe liveness test) printed "D21 watch: skipped" ONCE and the skip
+  path returns WITHOUT re-arming — the watchdog stays off until the next
+  boot/ladder. Never set quiet_ms=0 on a live boot; if the watchdog
+  must be tested, restore quiet_ms and re-arm via a recovery ladder or
+  reload.
+- **Patch 0045 shipped** (hoolock b9bebaa0a, module sha b823ca01…, pushed
+  + verified): the runtime `hl_state_set` knob (re-runs the boot 72
+  set-state transaction + readback) and the latch pres-gate (big_frames
+  counts only pres ≥ pres_min frames; hold on sub-gate ramp frames,
+  reset only on genuinely small frames; tool_area_hard unchanged).
+  Vermagic swapped per REBUILD-VERMAGIC.md — build AFTER committing or
+  the utsrelease picks up "-dirty" and insmod fails (new failure mode,
+  same strcmp class).
+- **Reload USB-death count 3/5** (dance #14, reload→#15, the 0045
+  reload): the restart command hung mid-insmod and the link died; phone
+  recovered via the dance. Note: after any dance the phone boots
+  /root/apple_z2.ko = the NEW module, so the dance lands the 0045 module
+  loaded automatically with the ExecStartPost gates re-applied.
