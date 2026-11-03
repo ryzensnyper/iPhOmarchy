@@ -9,7 +9,11 @@ Type=oneshot
 # GOLD line (verbatim). First poke after boot is the most reliable; a rejected
 # poke must never be retried (the driver logs it and proceeds - do not re-roll
 # inside the same load).
-ExecStart=/usr/bin/insmod /root/apple_z2.ko write=70:08 poll=1 probe_times=40 frame_dump=1 verbose=1 poke_readback=1 poke=10003060:17d3,1000305c:2,10003058:3,10003000:3,10003518:1 poke_after=10003400:1
+ExecStart=/usr/bin/insmod /root/apple_z2.ko write=70:08 frame_dump=1 verbose=1 poke_readback=1 poke=10003060:17d3,1000305c:2,10003058:3,10003000:3,10003518:1 poke_after=10003400:1
+# 2026-11-03: poke_after CORRECTED 10003300 -> 10003400 — the container's own Boot
+# Sequence (D21.mtprops C1F5E,3, 7 entries: 5 pokes + RequestCalibration +
+# 0x10003400=1) says 0x10003400; the old 10003300 was a transcription error and
+# appears NOWHERE in the built container. Decisive test: fresh boot + this line.
 # poke sweep 2026-11-02 night: 0x10003058 6->3 (candidate; clicks land per tap even in
 # metronome cadence, ~2x the click rate of 6; C1/C1b captures). 0x10003058=2 KILLS
 # streaming (3/3 DEAD). Remaining candidates: 0x10003058 5/7/12/24, 0x1000305c 1/4.
@@ -20,6 +24,11 @@ ExecStartPost=/usr/bin/dmesg -n 1
 # d21-recover.sh, so a plain boot ran the module defaults 2000/2500000 — TOUCH-STATE §2H)
 ExecStartPost=/bin/sh -c 'echo 3000    > /sys/module/apple_z2/parameters/tool_max; echo 5000000 > /sys/module/apple_z2/parameters/tool_area_max; echo 2000000 > /sys/module/apple_z2/parameters/tool_area_release; echo 12000000 > /sys/module/apple_z2/parameters/tool_area_hard'
 # restart = rmmod + insmod = re-roll of the delivery-mode lottery (healthy ~1/6)
+# 2026-11-03: stop can legitimately take ~10-20 s when an in-driver recovery
+# restart is mid-boot (stop waits for it); the default 90 s + SIGKILL mid-
+# delete_module leaves the module a refcount -1 zombie (measured). Give the
+# unload room and never kill rmmod.
+TimeoutStopSec=180
 ExecStop=/usr/bin/rmmod apple_z2
 RemainAfterExit=yes
 
