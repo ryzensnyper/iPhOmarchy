@@ -1,4 +1,4 @@
-From 323abb7b18f6cc7ee563746d5fe38f8d395d0e5a Mon Sep 17 00:00:00 2001
+From 170831592b6aaab992789e791af69ea00a77b097 Mon Sep 17 00:00:00 2001
 From: dugs <dugahol@protonmail.com>
 Date: Tue, 3 Nov 2026 19:44:00 +1030
 Subject: [PATCH] input: apple_z2: D21 bounded runtime recovery (Orchard
@@ -37,14 +37,14 @@ half-boot, and whether the in-driver restart clears it.
 
 Assisted-by: LLM
 ---
- drivers/input/touchscreen/apple_z2.c | 401 ++++++++++++++++++++++++++-
- 1 file changed, 388 insertions(+), 13 deletions(-)
+ drivers/input/touchscreen/apple_z2.c | 476 ++++++++++++++++++++++++++-
+ 1 file changed, 462 insertions(+), 14 deletions(-)
 
 diff --git a/drivers/input/touchscreen/apple_z2.c b/drivers/input/touchscreen/apple_z2.c
-index 83f6cfb1d..ef72e5607 100644
+index 83f6cfb1d..95021fbdf 100644
 --- a/drivers/input/touchscreen/apple_z2.c
 +++ b/drivers/input/touchscreen/apple_z2.c
-@@ -170,6 +170,19 @@ struct apple_z2 {
+@@ -170,6 +170,23 @@ struct apple_z2 {
  	DECLARE_BITMAP(d21_palm_latch, 10);
  	/* Consecutive oversized frames per slot (sustained-palm filter). */
  	u8 d21_big_frames[10];
@@ -61,20 +61,25 @@ index 83f6cfb1d..ef72e5607 100644
 +	bool d21_recovering;
 +	bool stopping;
 +	bool irq_on;
++	/* Boot-edge storm guard + boot deadline (see apple_z2_irq). */
++	unsigned int boot_edges;
++	unsigned long boot_edge_jiffy;
++	unsigned long boot_deadline;
  };
  
  static bool apple_z2_is_j172(const struct apple_z2 *z2)
-@@ -251,6 +264,9 @@ static void apple_z2_post_z2_xfer_delay(struct apple_z2 *z2);
+@@ -251,6 +268,10 @@ static void apple_z2_post_z2_xfer_delay(struct apple_z2 *z2);
  static void apple_z2_set_gpio(struct gpio_desc *gpio, int value);
  static void apple_z2_z2_checksum(u8 *cmd, unsigned int len);
  static bool apple_z2_z2_checksum_valid(const u8 *cmd, unsigned int len);
 +static int apple_z2_boot(struct apple_z2 *z2);
 +static void apple_z2_platform_power_off(struct apple_z2 *z2);
 +static void apple_z2_d21_start_recovery(struct apple_z2 *z2, int error);
++static void apple_z2_irq_off_nosync(struct apple_z2 *z2);
  
  static bool apple_z2_float_to_integer(const u8 *raw, s64 *value)
  {
-@@ -515,6 +531,18 @@ module_param_named(smc_on_retries, d21_smc_on_retries, uint, 0644);
+@@ -515,6 +536,18 @@ module_param_named(smc_on_retries, d21_smc_on_retries, uint, 0644);
  MODULE_PARM_DESC(smc_on_retries,
  		 "D21: retry OFF->1s->ON this many times when the post-ON rBK3 state != 01 (0 = probe-and-log only)");
  
@@ -93,7 +98,7 @@ index 83f6cfb1d..ef72e5607 100644
  
  /*
   * D21: read the rBK3 FUNCTION state via the RW_KEY transaction.  A bare
-@@ -974,6 +1002,7 @@ static int apple_z2_read_packet(struct apple_z2 *z2)
+@@ -974,6 +1007,7 @@ static int apple_z2_read_packet(struct apple_z2 *z2)
  {
  	struct spi_transfer xfer = { };
  	bool strict_counter;
@@ -101,7 +106,7 @@ index 83f6cfb1d..ef72e5607 100644
  	int error;
  	size_t pkt_len;
  	size_t wire_len;
-@@ -1070,6 +1099,42 @@ static int apple_z2_read_packet(struct apple_z2 *z2)
+@@ -1070,6 +1104,42 @@ static int apple_z2_read_packet(struct apple_z2 *z2)
  	if (apple_z2_is_iphone7_plus(z2))
  		apple_z2_post_z2_xfer_delay(z2);
  
@@ -144,7 +149,7 @@ index 83f6cfb1d..ef72e5607 100644
  	if (apple_z2_is_d21(z2) && !z2->rx_buf[0]) {
  		/* Nothing pending on the queue: keep the tag, emit nothing. */
  		z2->runtime_queue_empty = true;
-@@ -1105,6 +1170,15 @@ static int apple_z2_read_packet(struct apple_z2 *z2)
+@@ -1105,6 +1175,15 @@ static int apple_z2_read_packet(struct apple_z2 *z2)
  	z2->runtime_frame_valid =
  		apple_z2_gen2_packet_valid(z2->rx_buf, pkt_len, counter,
  					   strict_counter);
@@ -160,7 +165,7 @@ index 83f6cfb1d..ef72e5607 100644
  	if (!z2->runtime_frame_valid) {
  		if (z2_verbose)
  			dev_info(&z2->spidev->dev,
-@@ -1689,6 +1763,7 @@ static int apple_z2_j172_init_writes_locked(struct apple_z2 *z2)
+@@ -1689,6 +1768,7 @@ static int apple_z2_j172_init_writes_locked(struct apple_z2 *z2)
  static irqreturn_t apple_z2_irq(int irq, void *data)
  {
  	struct apple_z2 *z2 = data;
@@ -168,7 +173,37 @@ index 83f6cfb1d..ef72e5607 100644
  	int error;
  
  	/*
-@@ -1720,12 +1795,28 @@ static irqreturn_t apple_z2_irq(int irq, void *data)
+@@ -1701,6 +1781,29 @@ static irqreturn_t apple_z2_irq(int irq, void *data)
+ 			     z2->booted);
+ 
+ 	if (!z2->booted) {
++		/*
++		 * Boot-edge storm guard: a dead controller that holds ATN
++		 * asserted re-fires this level IRQ ~44k times a second
++		 * (measured 2026-11-03), and the handler thread crowds out
++		 * the boot thread — a firmware-upload step then never
++		 * finishes and the whole boot hangs.  Complete at most once
++		 * per jiffy (phase waits still satisfy), and after ~200k
++		 * edges (~4.5 s of continuous storm — a healthy boot's
++		 * assert phase stays far below) mask the IRQ for good: the
++		 * remaining boot waits time out BOUNDED, the boot fails,
++		 * and the recovery ladder backs off instead of hanging.
++		 */
++		z2->boot_edges++;
++		if (time_after(jiffies, z2->boot_edge_jiffy)) {
++			z2->boot_edge_jiffy = jiffies;
++			complete(&z2->boot_irq);
++		}
++		if (z2->boot_edges == 200000 && z2->irq_on) {
++			dev_warn(&z2->spidev->dev,
++				 "D21: boot-edge storm (%u edges), masking IRQ until the boot fails\n",
++				 z2->boot_edges);
++			apple_z2_irq_off_nosync(z2);
++		}
+ 		return IRQ_HANDLED;
+ 	} else if (apple_z2_is_d21(z2)) {
+ 		/*
+@@ -1720,12 +1823,28 @@ static irqreturn_t apple_z2_irq(int irq, void *data)
  		 * transactions.
  		 */
  		mutex_lock(&z2->io_lock);
@@ -199,7 +234,7 @@ index 83f6cfb1d..ef72e5607 100644
  	} else {
  		mutex_lock(&z2->io_lock);
  		error = apple_z2_read_packet(z2);
-@@ -1793,6 +1884,252 @@ static void apple_z2_d21_poll_work(struct work_struct *work)
+@@ -1793,6 +1912,257 @@ static void apple_z2_d21_poll_work(struct work_struct *work)
  				      msecs_to_jiffies(1000 / d21_poll_hz));
  }
  
@@ -430,8 +465,13 @@ index 83f6cfb1d..ef72e5607 100644
 +	struct apple_z2 *z2 = container_of(to_delayed_work(work),
 +					   struct apple_z2, d21_watch);
 +
-+	if (z2->stopping || !z2->booted || !d21_recover || !d21_quiet_ms)
++	if (z2->stopping || !z2->booted || !d21_recover || !d21_quiet_ms) {
++		dev_info_ratelimited(&z2->spidev->dev,
++				     "D21 watch: skipped (stopping=%d booted=%d recover=%d quiet_ms=%u)\n",
++				     z2->stopping, z2->booted, d21_recover,
++				     d21_quiet_ms);
 +		return;
++	}
 +
 +	if (z2->d21_recovering)
 +		return; /* the ladder is active; it re-arms us */
@@ -452,7 +492,7 @@ index 83f6cfb1d..ef72e5607 100644
  static void apple_z2_set_gpio(struct gpio_desc *gpio, int value)
  {
  	if (gpio)
-@@ -2543,7 +2880,7 @@ static int apple_z2_send_firmware_blob(struct apple_z2 *z2, const u8 *data,
+@@ -2543,7 +2913,7 @@ static int apple_z2_send_firmware_blob(struct apple_z2 *z2, const u8 *data,
  
  	if (defer_irq_wait && z2->upload_irq_masked) {
  		z2->upload_irq_masked = false;
@@ -461,7 +501,7 @@ index 83f6cfb1d..ef72e5607 100644
  	}
  
  	if (!defer_irq_wait)
-@@ -3162,8 +3499,8 @@ static int d21_kick_set(const char *val, const struct kernel_param *kp)
+@@ -3162,8 +3532,8 @@ static int d21_kick_set(const char *val, const struct kernel_param *kp)
  
  	if (!z2)
  		return -ENODEV;
@@ -472,7 +512,44 @@ index 83f6cfb1d..ef72e5607 100644
  	apple_z2_d21_now_put();
  	return 0;
  }
-@@ -4232,9 +4569,9 @@ static int apple_z2_upload_firmware(struct apple_z2 *z2)
+@@ -3286,7 +3656,7 @@ static int apple_z2_d21_init_locked(struct apple_z2 *z2)
+ 		 * probes 0x9d and skips them when the image does not
+ 		 * implement it.
+ 		 */
+-		if (d21_irq_level) {
++		if (d21_irq_level && !z2->stopping) {
+ 			z2->saved_irq_type = irq_get_trigger_type(z2->spidev->irq);
+ 			if (!z2->saved_irq_type ||
+ 			    irq_set_irq_type(z2->spidev->irq, IRQ_TYPE_LEVEL_LOW)) {
+@@ -4043,6 +4413,13 @@ static int apple_z2_send_late_calibration(struct apple_z2 *z2,
+ 	while (fw_idx < fw->size) {
+ 		if (fw->size - fw_idx < 2 * sizeof(__le32))
+ 			return -EINVAL;
++		if (z2->stopping || time_after(jiffies, z2->boot_deadline)) {
++			dev_warn(&z2->spidev->dev,
++				 "firmware load aborted (%s at %u/%u)\n",
++				 z2->stopping ? "stopping" : "boot deadline",
++				 (unsigned int)fw_idx, (unsigned int)fw->size);
++			return -ETIMEDOUT;
++		}
+ 
+ 		load_cmd = get_unaligned_le32(fw->data + fw_idx);
+ 		fw_idx += sizeof(__le32);
+@@ -4119,6 +4496,13 @@ static int apple_z2_upload_firmware(struct apple_z2 *z2)
+ 	while (fw_idx < fw->size) {
+ 		if (fw->size - fw_idx < 2 * sizeof(__le32))
+ 			return -EINVAL;
++		if (z2->stopping || time_after(jiffies, z2->boot_deadline)) {
++			dev_warn(&z2->spidev->dev,
++				 "firmware load aborted (%s at %u/%u)\n",
++				 z2->stopping ? "stopping" : "boot deadline",
++				 (unsigned int)fw_idx, (unsigned int)fw->size);
++			return -ETIMEDOUT;
++		}
+ 
+ 		load_cmd = get_unaligned_le32(fw->data + fw_idx);
+ 		fw_idx += sizeof(__le32);
+@@ -4232,9 +4616,9 @@ static int apple_z2_upload_firmware(struct apple_z2 *z2)
  			if (error)
  				return error;
  			if (apple_z2_is_j172(z2)) {
@@ -484,17 +561,33 @@ index 83f6cfb1d..ef72e5607 100644
  				if (error)
  					return error;
  			}
-@@ -4433,6 +4770,9 @@ static int apple_z2_boot(struct apple_z2 *z2)
+@@ -4341,6 +4725,13 @@ static int apple_z2_apply_initial_config(struct apple_z2 *z2)
+ 	while (fw_idx < fw->size) {
+ 		if (fw->size - fw_idx < 2 * sizeof(__le32))
+ 			return -EINVAL;
++		if (z2->stopping || time_after(jiffies, z2->boot_deadline)) {
++			dev_warn(&z2->spidev->dev,
++				 "firmware load aborted (%s at %u/%u)\n",
++				 z2->stopping ? "stopping" : "boot deadline",
++				 (unsigned int)fw_idx, (unsigned int)fw->size);
++			return -ETIMEDOUT;
++		}
+ 
+ 		load_cmd = get_unaligned_le32(fw->data + fw_idx);
+ 		fw_idx += sizeof(__le32);
+@@ -4433,6 +4824,11 @@ static int apple_z2_boot(struct apple_z2 *z2)
  	int error;
  
  	z2->booted = false;
 +	if (z2->stopping)
 +		/* Teardown won the race with a recovery restart. */
 +		return -ENODEV;
++	z2->boot_edges = 0;
++	z2->boot_deadline = jiffies + msecs_to_jiffies(60000);
  	apple_z2_reset_protocol(z2);
  	error = apple_z2_platform_power_on(z2);
  	if (error)
-@@ -4462,7 +4802,7 @@ static int apple_z2_boot(struct apple_z2 *z2)
+@@ -4462,7 +4858,7 @@ static int apple_z2_boot(struct apple_z2 *z2)
  	}
  
  	reinit_completion(&z2->boot_irq);
@@ -503,7 +596,7 @@ index 83f6cfb1d..ef72e5607 100644
  	irq_enabled = true;
  	if (apple_z2_is_j172(z2)) {
  		error = apple_z2_pulse_reset(z2);
-@@ -4496,24 +4836,44 @@ static int apple_z2_boot(struct apple_z2 *z2)
+@@ -4496,24 +4892,61 @@ static int apple_z2_boot(struct apple_z2 *z2)
  	}
  
  	if (apple_z2_is_j172(z2) || apple_z2_is_iphone7_plus(z2)) {
@@ -531,15 +624,32 @@ index 83f6cfb1d..ef72e5607 100644
 +	if (apple_z2_is_d21(z2) && !z2->stopping) {
 +		z2->d21_last_frame = jiffies;
 +		z2->d21_recovering = false;
-+		if (d21_recover)
++		if (d21_recover) {
++			dev_info(&z2->spidev->dev,
++				 "D21: recovery watchdog armed (quiet_ms=%u)\n",
++				 d21_quiet_ms);
 +			schedule_delayed_work(&z2->d21_watch,
 +					      msecs_to_jiffies(APPLE_Z2_D21_WATCH_PERIOD_MS));
++		}
 +	}
 +
  	return 0;
  
  err_stop:
  	z2->booted = false;
++	/*
++	 * A failed or teardown-raced boot must leave NO trace: the runtime
++	 * level-low flip survives rmmod in the pinctrl/GPIO domain, and the
++	 * next probe then fails with "type mismatch, failed to map hwirq"
++	 * (-EINVAL) - the driver never binds again until a reboot.  This is
++	 * the root cause of the "d21-touch auto-start is flaky" symptom
++	 * (measured 2026-11-03: every reload after a raced in-driver restart
++	 * failed -22 with an unbound module).
++	 */
++	if (z2->irq_type_changed) {
++		irq_set_irq_type(z2->spidev->irq, z2->saved_irq_type);
++		z2->irq_type_changed = false;
++	}
  	if (z2->upload_irq_masked) {
  		z2->upload_irq_masked = false;
 -		enable_irq(z2->spidev->irq);
@@ -551,7 +661,7 @@ index 83f6cfb1d..ef72e5607 100644
  	gpiod_set_value_cansleep(z2->reset_gpio, 1);
  	apple_z2_platform_power_off(z2);
  	apple_z2_reset_protocol(z2);
-@@ -4645,6 +5005,10 @@ static int apple_z2_probe(struct spi_device *spi)
+@@ -4645,6 +5078,10 @@ static int apple_z2_probe(struct spi_device *spi)
  	 * scripts unable to reload (observed 2026-11-02).
  	 */
  	INIT_DELAYED_WORK(&z2->d21_poll, apple_z2_d21_poll_work);
@@ -562,7 +672,7 @@ index 83f6cfb1d..ef72e5607 100644
  	spi_set_drvdata(spi, z2);
  
  	z2->reset_gpio = devm_gpiod_get(dev, "reset", GPIOD_OUT_HIGH);
-@@ -4835,10 +5199,20 @@ static void apple_z2_stop(struct apple_z2 *z2)
+@@ -4835,10 +5272,20 @@ static void apple_z2_stop(struct apple_z2 *z2)
  	/*
  	 * The poller re-arms itself only while booted, but a work item may
  	 * already be queued or running; drain it before the IRQ/protocol go
@@ -585,7 +695,7 @@ index 83f6cfb1d..ef72e5607 100644
  	if (z2->irq_type_changed) {
  		irq_set_irq_type(z2->spidev->irq, z2->saved_irq_type);
  		z2->irq_type_changed = false;
-@@ -4876,6 +5250,7 @@ static int apple_z2_resume(struct device *dev)
+@@ -4876,6 +5323,7 @@ static int apple_z2_resume(struct device *dev)
  {
  	struct apple_z2 *z2 = spi_get_drvdata(to_spi_device(dev));
  
