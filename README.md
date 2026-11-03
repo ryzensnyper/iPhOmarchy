@@ -22,7 +22,7 @@ on, and an interrupt drain loop that raced the controller into silence).
 | Pwned boot (checkm8, palera1n rootless) | ✅ reproducible, tethered |
 | Dual-boot: iOS on `nvme0n1p1`, Linux on `nvme0n1p2` | ✅ iOS intact |
 | Display — simple framebuffer 1080×1920, brightness | ✅ (real KMS is TBA upstream) |
-| **Touch** — 6-point multitouch, pressure/tool, palm rejection | ✅ **working** — palm rejection (size+area latch) shipped; the old ~1.9 s still-contact cadence turned out to be a drain-loop-era artifact and is closed |
+| **Touch** — 6-point multitouch, pressure/tool, palm rejection | ✅ **DIAMOND build** — deterministic reloads (the SMC `rBK3` function call decoded: ON=`0x05020001` / OFF=`0x05020000` plain writes, HV-settle, poll-kick), 5/5 live reloads, user-verified on the desktop |
 | **omarchy-a desktop** (Orchard CLI install, labwc + Quickshell) | ✅ **running** — touch live in the desktop via a `d21-touch.service` (gold poke config, auto-loads every boot) |
 | Wi-Fi (BCM4357 over `apcie`) | ❌ next in queue |
 | Bluetooth (N88 UART + patchram) | ❌ next in queue (first up) |
@@ -54,6 +54,7 @@ iOS — decoded structures are in this repo; no Apple firmware or per-device cal
 - [`hardware/`](hardware/) — decoded Apple Device Tree / ADT extracts for the D21
 - [`tools/`](tools/) — firmware/container tooling, extraction scripts, deploy helpers
 - [`scripts/`](scripts/) — device-side helpers
+- [`diamond/`](diamond/) — **the DIAMOND touch build**: the reproducible bring-up recipe (`diamond/BRING-UP.md`), the systemd unit, prebuilt modules (same-kernel only), diagnostic tools and the `verify-diamond.sh` checklist. Kernel side = `patches/0040`.
 
 ## Use
 

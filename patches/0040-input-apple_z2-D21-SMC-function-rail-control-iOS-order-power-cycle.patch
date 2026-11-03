@@ -1,0 +1,259 @@
+From b2533c59a2a087ca60aff89d576d1cc2f0c4688d Mon Sep 17 00:00:00 2001
+From: dugs <dugahol@protonmail.com>
+Date: Tue, 3 Nov 2026 14:29:55 +1030
+Subject: [PATCH] input: apple_z2: D21 SMC function rail control + iOS-order
+ power cycle
+
+The D21 touch digital-core rail is SMC function-power_ldo = pKW4('rBK3',
+0x5020000).  Decoded from AppleSMCEmbeddedFunctions.cpp (iOS 16.7.16
+kernelcache) and validated live:
+
+- the FUNCTION call is a PLAIN SMC_MSG_WRITE_KEY of the 4-byte code
+  (dt_value & 0xffff0000) | enable:  ON = 0x05020001, OFF = 0x05020000
+  (iOS writes OFF on every screen lock); a raw 0 write is an INVALID code
+  and trips the SMC's systemic protection (full reset, twice measured);
+  RW_KEY's write phase is inert, its read phase returns the state byte.
+- the chestnut touch-HV regulator (native, i2c-0 pmic@27 reg 0x05 bit
+  0x10) must be STABLE before the core rail comes up: a 1-2 ms gap boots
+  the controller into a 2-frame-then-silent state; 500 ms is the tested
+  settle.
+- power_off cuts the SMC rail FIRST, then the HV regulator (iOS's off
+  order); power_on raises the HV, settles, then asserts the rail, reset
+  and clock.  systemctl-restart reloads are now a true power cycle and
+  land live 5/5 (verdict HEALTHY 15.9 fps).
+
+Params: smc_on_val (0x05020001), smc_off_val (0x05020000),
+smc_cut_rail (default on), all runtime-writable.
+---
+ drivers/input/touchscreen/apple_z2.c | 165 +++++++++++++++++++++++++++
+ 1 file changed, 165 insertions(+)
+
+diff --git a/drivers/input/touchscreen/apple_z2.c b/drivers/input/touchscreen/apple_z2.c
+index 46113b18f..4a8b9c35f 100644
+--- a/drivers/input/touchscreen/apple_z2.c
++++ b/drivers/input/touchscreen/apple_z2.c
+@@ -19,7 +19,9 @@
+ #include <linux/interrupt.h>
+ #include <linux/math64.h>
+ #include <linux/module.h>
++#include <linux/mfd/macsmc.h>
+ #include <linux/mutex.h>
++#include <linux/platform_device.h>
+ #include <linux/of.h>
+ #include <linux/pinctrl/consumer.h>
+ #include <linux/regulator/consumer.h>
+@@ -123,6 +125,8 @@ struct apple_z2 {
+ 	struct pinctrl_state *j172_sync_active_state;
+ 	struct regulator *hv_supply;
+ 	struct regulator *core_supply;
++	struct regulator *ldo_supply;
++	struct apple_smc *smc;
+ 	struct clk *clk;
+ 	struct input_dev *input_dev;
+ 	struct completion boot_irq;
+@@ -142,6 +146,8 @@ struct apple_z2 {
+ 	bool j172_sync_pinctrl_active;
+ 	bool hv_enabled;
+ 	bool core_enabled;
++	bool ldo_enabled;
++	bool smc_rail_up;
+ 	enum apple_z2_protocol_state protocol_state;
+ 	unsigned int bpw16_min_len;
+ 	unsigned int dma_min_len;
+@@ -482,6 +488,29 @@ module_param_named(tool_area_hard, d21_tool_area_hard, uint, 0644);
+ MODULE_PARM_DESC(tool_area_hard,
+ 		 "D21: area that latches a palm immediately (0=off)");
+ 
++/*
++ * D21: the touch digital-core rail is SMC key 'rBK3' (ADT function-power_ldo
++ * = 75:pKW4('rBK3', 0x5020000), provider = the smc-pmu nub of the SMC IOP;
++ * the Asahi macsmc driver is bound on T8015 and apple_smc_write is exported).
++ * power_on / power_off run the SMC FUNCTION call as an RW_KEY transaction
++ * with code = (dt_value & 0xffff0000) | enable (decoded from
++ * AppleSMCEmbeddedFunctions.cpp, 2026-11-03): ON = 0x05020001,
++ * OFF = 0x05020000 (iOS-proven values — the phone does this every screen
++ * lock).  A raw 0 write is an INVALID code and trips systemic protection.
++ */
++static bool d21_smc_cut_rail = true;
++module_param_named(smc_cut_rail, d21_smc_cut_rail, bool, 0644);
++MODULE_PARM_DESC(smc_cut_rail,
++		 "D21: RW smc_off_val (0x05020000 = iOS off) to rBK3 on power_off");
++static unsigned int d21_smc_on_val = 0x05020001;
++module_param_named(smc_on_val, d21_smc_on_val, uint, 0644);
++MODULE_PARM_DESC(smc_on_val,
++		 "D21: rBK3 function ON code (0x05020001 = dt_value | enable=1)");
++static unsigned int d21_smc_off_val = 0x05020000;
++module_param_named(smc_off_val, d21_smc_off_val, uint, 0644);
++MODULE_PARM_DESC(smc_off_val,
++		 "D21: rBK3 function OFF code (0x05020000 = the raw dt_value, iOS-proven)");
++
+ /*
+  * D21: latch RELEASE threshold.  The controller reuses tracking ids, so a
+  * latched palm/phantom blob can be immediately followed by a real finger on
+@@ -1899,6 +1928,44 @@ static void apple_z2_platform_power_off(struct apple_z2 *z2)
+ 			z2->hv_enabled = false;
+ 		}
+ 	}
++	/*
++	 * Cut the touch digital-core rail (D21 ADT function-power_ldo =
++	 * SMC key 'rBK3') FIRST — iOS's off order (kext enable=0 path: LDO
++	 * call, then ana) — then the HV regulator, letting the charge stored
++	 * on the die drain: the half-booted/blind core state is rail-backed
++	 * and survives a plain probe cycle, so a reload must be a TRUE power
++	 * cut (measured 2026-11-03, TOUCH-STATE 1E/2H).
++	 *
++	 * The SMC cut is a PLAIN SMC_MSG_WRITE_KEY of the function code:
++	 * OFF = 0x05020000 (iOS-proven, every screen lock).  A raw 0 write is
++	 * an INVALID code and trips systemic protection (twice, 2026-11-03).
++	 */
++	if (z2->smc && d21_smc_cut_rail) {
++		u32 v = d21_smc_off_val;
++		u8 rb[4] = {};
++
++		error = apple_smc_write(z2->smc, SMC_KEY(rBK3), &v, 4);
++		if (error)
++			dev_warn(&z2->spidev->dev,
++				 "smc rBK3 off-write failed: %d\n", error);
++		else {
++			z2->smc_rail_up = false;
++			apple_smc_read(z2->smc, SMC_KEY(rBK3), rb, 4);
++			dev_info(&z2->spidev->dev, "smc rBK3 OFF 0x%08x state=%*phN\n",
++				 v, 4, rb);
++		}
++		usleep_range(3000, 5000);
++	}
++	if (z2->ldo_enabled) {
++		usleep_range(3000, 5000);
++		error = regulator_disable(z2->ldo_supply);
++		if (error) {
++			dev_warn(&z2->spidev->dev,
++				 "failed to disable LDO supply: %d\n", error);
++		} else {
++			z2->ldo_enabled = false;
++		}
++	}
+ 	if (apple_z2_is_iphone7_plus(z2)) {
+ 		z2->platform_powered = false;
+ 		return;
+@@ -1962,6 +2029,28 @@ static int apple_z2_j172_power_on(struct apple_z2 *z2)
+ 					 APPLE_Z2_STATE_POWERED);
+ }
+ 
++/*
++ * D21: fetch the SMC (smc-pmu provider of the touch rail) — the Asahi macsmc
++ * driver binds the t8015 SMC at smc@236000100; its drvdata is the apple_smc.
++ */
++static struct apple_smc *apple_z2_d21_smc(struct device *dev)
++{
++	struct device_node *np;
++	struct device *sdev;
++	struct apple_smc *smc;
++
++	np = of_find_compatible_node(NULL, NULL, "apple,t8015-smc");
++	if (!np)
++		return NULL;
++	sdev = bus_find_device_by_of_node(&platform_bus_type, np);
++	of_node_put(np);
++	if (!sdev)
++		return NULL;
++	smc = dev_get_drvdata(sdev);
++	put_device(sdev);
++	return smc;
++}
++
+ static int apple_z2_d21_power_on(struct apple_z2 *z2)
+ {
+ 	int error;
+@@ -1980,6 +2069,64 @@ static int apple_z2_d21_power_on(struct apple_z2 *z2)
+ 		usleep_range(1000, 2000);
+ 	}
+ 
++	/*
++	 * The ADT sequence is power_ana -> power_ldo -> clock_enable; the
++	 * digital-core rail (SMC key 'rBK3') is wired as the optional
++	 * "power-ldo" supply.  power_off has already cut it, so enabling
++	 * it here completes a true core power cycle on every transition.
++	 */
++	if (z2->ldo_supply) {
++		error = regulator_enable(z2->ldo_supply);
++		if (error) {
++			if (z2->hv_enabled) {
++				regulator_disable(z2->hv_supply);
++				z2->hv_enabled = false;
++			}
++			return error;
++		}
++		z2->ldo_enabled = true;
++		/*
++		 * The chestnut HV must be STABLE before the controller's core
++		 * rail comes up, or the Z2 boots, scans 1-2 garbage frames and
++		 * goes silent (measured 2026-11-03: a 1-2 ms gap produced a
++		 * boot-then-quiet roll; a 12 s settle produced continuous
++		 * streaming).  iOS inserts power-ana-enable-delay-us here;
++		 * the D21 ADT does not carry it; 50 ms still raced (1.5/5
++		 * reloads), 500 ms is the tested-safe settle.
++		 */
++		usleep_range(500000, 600000);
++	}
++
++	/*
++	 * Re-assert the core rail through the SMC (what iOS does on every
++	 * power-up of this function).  power_off below cuts it.
++	 *
++	 * 2026-11-03 decode + measurement (AppleSMCEmbeddedFunctions.cpp and
++	 * live tests): a PLAIN SMC_MSG_WRITE_KEY of the 4-byte code EXECUTES
++	 * the function:  code = (dt_value & 0xffff0000) | enable
++	 * -> ON = 0x05020001 (boots the controller, preamble 1f 01 1f 01),
++	 *    OFF = 0x05020000 (iOS does this on every screen lock),
++	 *    raw 0 = INVALID code -> systemic protection reboot (twice).
++	 * RW_KEY's write phase is inert; its read phase returns the function
++	 * state (00 = off, 01 = on) — use it only as the status readback.
++	 */
++	if (z2->smc) {
++		u32 v = d21_smc_on_val;
++		u8 rb[4] = {};
++
++		error = apple_smc_write(z2->smc, SMC_KEY(rBK3), &v, 4);
++		if (error)
++			dev_warn(&z2->spidev->dev,
++				 "smc rBK3 on-write failed: %d\n", error);
++		else {
++			z2->smc_rail_up = true;
++			apple_smc_read(z2->smc, SMC_KEY(rBK3), rb, 4);
++			dev_info(&z2->spidev->dev, "smc rBK3 ON 0x%08x state=%*phN\n",
++				 v, 4, rb);
++		}
++		usleep_range(2000, 4000);
++	}
++
+ 	gpiod_set_value_cansleep(z2->reset_gpio, 1);
+ 
+ 	error = apple_z2_enable_clock(z2);
+@@ -4481,6 +4628,24 @@ static int apple_z2_probe(struct spi_device *spi)
+ 		z2->hv_supply = devm_regulator_get_optional(dev, "hv");
+ 		if (IS_ERR(z2->hv_supply))
+ 			z2->hv_supply = NULL;
++
++		/*
++		 * function-power_ldo = 75:pKW4('rBK3', 0x5020000) - the touch
++		 * digital-core rail, provided by the SMC (smc-pmu).  Wired as
++		 * an optional "power-ldo" supply so a reload is a true core
++		 * power cycle; without a backing regulator this is a no-op.
++		 */
++		z2->ldo_supply = devm_regulator_get_optional(dev, "power-ldo");
++		if (IS_ERR(z2->ldo_supply))
++			z2->ldo_supply = NULL;
++
++		/* the SMC owns the rail (macsmc); direct key writes beat a
++		 * DTB regulator for the same purpose */
++		z2->smc = apple_z2_d21_smc(dev);
++		if (z2->smc)
++			dev_info(dev, "SMC bound: rail key rBK3 available\n");
++		else
++			dev_warn(dev, "SMC not found; rail key writes disabled\n");
+ 	}
+ 
+ 	z2->power_ana_gpio =
+-- 
+2.55.0
+

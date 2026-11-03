@@ -1,0 +1,27 @@
+[Unit]
+Description=D21 apple_z2 touchscreen driver (gold config)
+# d21-gold-3 (2bde906a7): one frame per IRQ, pressure>=pres_min(64) validity,
+# poke_delay_ms=50 default. NEVER add poll_hz>0 / dma_min= / ip_delay= (wedge).
+After=multi-user.target
+
+[Service]
+Type=oneshot
+# GOLD line (verbatim). First poke after boot is the most reliable; a rejected
+# poke must never be retried (the driver logs it and proceeds - do not re-roll
+# inside the same load).
+ExecStart=/usr/bin/insmod /root/apple_z2.ko write=70:08 poll=1 probe_times=40 frame_dump=1 verbose=1 poke_readback=1 poke=10003060:17d3,1000305c:2,10003058:3,10003000:3,10003518:1 poke_after=10003400:1
+# poke sweep 2026-11-02 night: 0x10003058 6->3 (candidate; clicks land per tap even in
+# metronome cadence, ~2x the click rate of 6; C1/C1b captures). 0x10003058=2 KILLS
+# streaming (3/3 DEAD). Remaining candidates: 0x10003058 5/7/12/24, 0x1000305c 1/4.
+# `tools/poke-sweep.sh restore` returns to the 2026-10-30 gold (=6) line.
+# console must go quiet BEFORE any framebuffer UI renders the frame_dump flood
+ExecStartPost=/usr/bin/dmesg -n 1
+# re-apply the tuned latch params on EVERY load (they used to be applied only by
+# d21-recover.sh, so a plain boot ran the module defaults 2000/2500000 — TOUCH-STATE §2H)
+ExecStartPost=/bin/sh -c 'echo 3000    > /sys/module/apple_z2/parameters/tool_max; echo 5000000 > /sys/module/apple_z2/parameters/tool_area_max; echo 2000000 > /sys/module/apple_z2/parameters/tool_area_release; echo 12000000 > /sys/module/apple_z2/parameters/tool_area_hard'
+# restart = rmmod + insmod = re-roll of the delivery-mode lottery (healthy ~1/6)
+ExecStop=/usr/bin/rmmod apple_z2
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
