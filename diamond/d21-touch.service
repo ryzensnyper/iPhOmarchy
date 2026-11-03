@@ -9,7 +9,7 @@ Type=oneshot
 # GOLD line (verbatim). First poke after boot is the most reliable; a rejected
 # poke must never be retried (the driver logs it and proceeds - do not re-roll
 # inside the same load).
-ExecStart=/usr/bin/insmod /root/apple_z2.ko write=70:08 frame_dump=1 verbose=1 poke_readback=1 poke=10003060:17d3,1000305c:2,10003058:3,10003000:3,10003518:1 poke_after=10003400:1
+ExecStart=/usr/bin/insmod /root/apple_z2.ko write=70:08 poll=1 probe_times=40 frame_dump=1 verbose=1 poke_readback=1 poke=10003060:17d3,1000305c:2,10003058:3,10003000:3,10003518:1 poke_after=10003400:1
 # 2026-11-03: poke_after CORRECTED 10003300 -> 10003400 — the container's own Boot
 # Sequence (D21.mtprops C1F5E,3, 7 entries: 5 pokes + RequestCalibration +
 # 0x10003400=1) says 0x10003400; the old 10003300 was a transcription error and
