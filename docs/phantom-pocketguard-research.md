@@ -268,17 +268,22 @@ the desk (`/root/phantom-sample.log`, decoded on the host):
   "still seems degraded". The loss persists across rolls and the 7f bit →
   consistent with the §1L **bottom artifact parked on the OSK region jamming
   controller-side contact detection** (12.7M-class blob, recurs across boots).
-- **★ USB-net A/B RESULT (the handoff's #1 experiment, answered):**
-  `systemctl restart d21-touch` with `smc_cut_rail=1` (default, the unload-time
-  rBK3 SMC cut) killed the IP link within ~30 s BOTH times (the dance #10
-  session's first reload, and the prox-test reload — one self-recovered to
-  enumeration-loss requiring a dance). The ONE reload run with
-  `smc_cut_rail=0` (set before the stop) kept the link up (ping 1.7 ms straight
-  after the restart). **Stage-1 fix: unit drop-in sets smc_cut_rail=0 after
-  insmod (`/tmp/opencode/usb-rail.conf` → d21-touch.service.d/). Stage-2 fix
-  (patch 0044): decouple the unload-time cut from the in-driver restart's true
-  cut (they share the param today — apple_z2_platform_power_off gates the rBK3
-  write on d21_smc_cut_rail, and the recovery ladder calls that same path).**
+- **★ USB-net A/B RESULT (updated — NOT conclusive):** reload A/B so far:
+  cut-enabled (`smc_cut_rail=1`) reloads 2/2 link-death (one → enumeration
+  vanish, both needing a dance); cut-skipped (`smc_cut_rail=0`) reloads 1/3
+  clean (one survived, one died to no-IP, one → vanish). **The unload-time
+  rail cut alone is NOT the killer.** Every touch probe additionally does the
+  SMC ON write + RW state probe + chestnut HV enable + reset/clock regardless
+  of the param. Lead for the vanish class: the dance #11 boot logged
+  `udc 230100000.usbdev: failed to start g_multi: -22` AT t=0 — the phone-side
+  UDC failing once at boot then recovering; a UDC that flunks at boot may be
+  fragile for the whole boot. NEXT DIAGNOSTIC (no reload needed): during the
+  NEXT touch boot, watch phone-side dmesg for UDC/gadget reset events
+  timestamped against the touch probe's SMC transactions — if the UDC logs a
+  disconnect at the SMC-write moment, the cause is phone-side and the
+  PMP/PMIC domain (§1M: the touch rail is PMP-private) becomes the suspect.
+  Mitigation kept: the usb-rail drop-in (harmless), reloads minimized until
+  WiFi lands.
 - **★ E3 SHIPPED (patch 0043): the driver downloads the in-pocket prox
   calibration.** SysCfg (`/dev/nvme0n3`, 128 KB, sha 4765d8da…) parsed
   (datakey FourCCs are byte-REVERSED in the data dictionary: lCxP=PxCl,
@@ -302,6 +307,12 @@ the desk (`/root/phantom-sample.log`, decoded on the host):
   touchfix output, so a missing touchfix = "touch dead" even when the driver
   forwards taps. Post-dance checklist: `systemctl is-active d21-touchfix ||
   systemctl start d21-touchfix`.
+- **★ /root writes are lost by HARD POWER CUTS unless synced**: the ec97a9c9
+  module write (16:07) reverted to the older da849cb2 across the dance #11
+  power cycle, while the proxcal firmware file (pushed minutes earlier with
+  idle time to flush) survived. **RULE: run `sync` (twice) immediately after
+  every push, and verify the sha before relying on it after any dance.**
+  /root/touch-revive.sh remains unexamined (suspect #1 for reversion).
 - `/proc/interrupts` on this kernel: the AIC count column is STATIC (65828 on
   two different boots, per-CPU columns 0) — do not use it for irq rate; count
   `touch parse` lines per wall time instead.
