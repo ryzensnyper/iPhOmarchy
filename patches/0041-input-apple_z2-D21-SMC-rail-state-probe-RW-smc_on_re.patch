@@ -1,0 +1,138 @@
+From b570c134309f60502f5a8ff91de6d8a96b34d6cd Mon Sep 17 00:00:00 2001
+From: dugs <dugahol@protonmail.com>
+Date: Tue, 3 Nov 2026 19:42:50 +1030
+Subject: [PATCH 41/42] input: apple_z2: D21 SMC rail-state probe (RW) +
+ smc_on_retries
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+§1M (2026-11-04): d21_smc_rail_state() reads the rBK3 FUNCTION state via
+the RW_KEY transaction (a bare apple_smc_read() of a function key ALWAYS
+fails with EIO — err=4 from apple_smc_rw means SUCCESS, the read size).
+The driver log now shows the TRUE rail state:
+  smc rBK3 ON attempt 0 0x05020001 state=1
+smc_on_retries=N (default 0) = OFF->1s->ON retry loop when the post-ON
+state != 01.  Measured live 2026-11-04: OFF -> 00, ON -> 01, 01 <=> roll.
+Module: /root/apple_z2.ko sha f778d45b (deployed, phone still running the
+old eeb5a4a7 at next reload).
+
+Assisted-by: LLM
+---
+ drivers/input/touchscreen/apple_z2.c | 75 ++++++++++++++++++++++------
+ 1 file changed, 61 insertions(+), 14 deletions(-)
+
+diff --git a/drivers/input/touchscreen/apple_z2.c b/drivers/input/touchscreen/apple_z2.c
+index 4a8b9c35f..83f6cfb1d 100644
+--- a/drivers/input/touchscreen/apple_z2.c
++++ b/drivers/input/touchscreen/apple_z2.c
+@@ -510,6 +510,32 @@ static unsigned int d21_smc_off_val = 0x05020000;
+ module_param_named(smc_off_val, d21_smc_off_val, uint, 0644);
+ MODULE_PARM_DESC(smc_off_val,
+ 		 "D21: rBK3 function OFF code (0x05020000 = the raw dt_value, iOS-proven)");
++static unsigned int d21_smc_on_retries;
++module_param_named(smc_on_retries, d21_smc_on_retries, uint, 0644);
++MODULE_PARM_DESC(smc_on_retries,
++		 "D21: retry OFF->1s->ON this many times when the post-ON rBK3 state != 01 (0 = probe-and-log only)");
++
++
++/*
++ * D21: read the rBK3 FUNCTION state via the RW_KEY transaction.  A bare
++ * apple_smc_read() of a function key always fails (SMC result != 0 -> EIO);
++ * the RW form's read phase returns the state byte.  Write phase is inert
++ * (we pass the ON code).  Returns the state byte, or -1 if the RW itself
++ * failed.  Measured 2026-11-04: OFF -> 00, ON -> 01, 01 <=> healthy roll.
++ */
++static int d21_smc_rail_state(struct apple_z2 *z2)
++{
++	u32 wv = d21_smc_on_val;
++	u8 rb[4] = {};
++	int err;
++
++	if (!z2->smc)
++		return -1;
++	err = apple_smc_rw(z2->smc, SMC_KEY(rBK3), &wv, 4, rb, 4);
++	if (err != 4)   /* success returns the read size */
++		return -1;
++	return rb[0];
++}
+ 
+ /*
+  * D21: latch RELEASE threshold.  The controller reuses tracking ids, so a
+@@ -1942,7 +1968,6 @@ static void apple_z2_platform_power_off(struct apple_z2 *z2)
+ 	 */
+ 	if (z2->smc && d21_smc_cut_rail) {
+ 		u32 v = d21_smc_off_val;
+-		u8 rb[4] = {};
+ 
+ 		error = apple_smc_write(z2->smc, SMC_KEY(rBK3), &v, 4);
+ 		if (error)
+@@ -1950,9 +1975,8 @@ static void apple_z2_platform_power_off(struct apple_z2 *z2)
+ 				 "smc rBK3 off-write failed: %d\n", error);
+ 		else {
+ 			z2->smc_rail_up = false;
+-			apple_smc_read(z2->smc, SMC_KEY(rBK3), rb, 4);
+-			dev_info(&z2->spidev->dev, "smc rBK3 OFF 0x%08x state=%*phN\n",
+-				 v, 4, rb);
++			dev_info(&z2->spidev->dev, "smc rBK3 OFF 0x%08x state=%d\n",
++				 v, d21_smc_rail_state(z2));
+ 		}
+ 		usleep_range(3000, 5000);
+ 	}
+@@ -2109,20 +2133,43 @@ static int apple_z2_d21_power_on(struct apple_z2 *z2)
+ 	 *    raw 0 = INVALID code -> systemic protection reboot (twice).
+ 	 * RW_KEY's write phase is inert; its read phase returns the function
+ 	 * state (00 = off, 01 = on) — use it only as the status readback.
++	 *
++	 * 2026-11-04 (§1L): apple_smc_read() on a FUNCTION key ALWAYS fails
++	 * with EIO (the SMC returns a nonzero result for a bare READ of a
++	 * function key), so the old state log was meaningless noise.  The
++	 * true state comes from the RW_KEY transaction: write phase inert
++	 * (we pass the ON code), read phase = state byte.  Measured live:
++	 * OFF -> 00, ON -> 01, 01 <=> healthy roll.
++	 *
++	 * d21_smc_on_retries: when >0 and the post-ON state reads != 01,
++	 * power_on retries OFF -> 1 s drain -> ON up to N times inside the
++	 * probe.  Default 0 (probe-and-log only).
+ 	 */
+ 	if (z2->smc) {
+ 		u32 v = d21_smc_on_val;
+-		u8 rb[4] = {};
++		int attempt, state = -1;
+ 
+-		error = apple_smc_write(z2->smc, SMC_KEY(rBK3), &v, 4);
+-		if (error)
+-			dev_warn(&z2->spidev->dev,
+-				 "smc rBK3 on-write failed: %d\n", error);
+-		else {
+-			z2->smc_rail_up = true;
+-			apple_smc_read(z2->smc, SMC_KEY(rBK3), rb, 4);
+-			dev_info(&z2->spidev->dev, "smc rBK3 ON 0x%08x state=%*phN\n",
+-				 v, 4, rb);
++		for (attempt = 0; attempt <= d21_smc_on_retries; attempt++) {
++			error = apple_smc_write(z2->smc, SMC_KEY(rBK3), &v, 4);
++			if (error) {
++				dev_warn(&z2->spidev->dev,
++					 "smc rBK3 on-write failed: %d\n",
++					 error);
++			} else {
++				z2->smc_rail_up = true;
++				state = d21_smc_rail_state(z2);
++				dev_info(&z2->spidev->dev,
++					 "smc rBK3 ON attempt %d 0x%08x state=%d\n",
++					 attempt, v, state);
++				if (state == 1)
++					break;
++			}
++			if (attempt < d21_smc_on_retries) {
++				u32 off = d21_smc_off_val;
++
++				apple_smc_write(z2->smc, SMC_KEY(rBK3), &off, 4);
++				msleep(1000);
++			}
+ 		}
+ 		usleep_range(2000, 4000);
+ 	}
+-- 
+2.55.0
+

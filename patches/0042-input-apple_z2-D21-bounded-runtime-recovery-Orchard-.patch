@@ -1,0 +1,598 @@
+From 323abb7b18f6cc7ee563746d5fe38f8d395d0e5a Mon Sep 17 00:00:00 2001
+From: dugs <dugahol@protonmail.com>
+Date: Tue, 3 Nov 2026 19:44:00 +1030
+Subject: [PATCH] input: apple_z2: D21 bounded runtime recovery (Orchard
+ 79f5e69 port)
+
+Port Orchard's 'Bound and recover the iPad 5 runtime like the N1 driver'
+(79f5e69, with 45784d7 irq-enabled tracking and the 5fb60c0 J71b
+data-phase resync) to D21, for the runtime wedge (TOUCH-STATE 1M):
+the half-boot is SILENT (rail up, SPI ACKs, preamble, ZERO 0x44 frames),
+so Orchard's frame-error trigger alone never fires on D21.
+
+- Normal service keeps the kext-faithful ONE frame read per IRQ: the
+  Orchard bounded drain is the transaction class that wedges a healthy
+  D21 (poll_hz, 2026-10-30), so it runs only inside the recovery ladder.
+- Frame retries: a failed read is retried 3x, 1-2 ms apart, in the IRQ
+  thread; persistent failure starts the ladder.
+- NEW trigger, the no-frames watchdog: quiet_ms (default 15 s) without
+  a genuinely valid frame (gen2 header+checksum; the half-boot's e1 38
+  status frames fail gen2_packet_valid and never refresh it) on a roll
+  that streams 15-25 fps idle = the half-boot/DEAD signature.
+- Ladder: release contacts + mask IRQ, then 3 bounded-drain resyncs
+  1 s apart; if frames return, re-enable and stop.  Otherwise the FULL
+  IN-DRIVER RESTART: power_off (cuts the rBK3 digital-core rail via the
+  SMC - the true power cycle the wedged core state needs) + reset +
+  apple_z2_boot() (fw/cal reload).  Replaces a module reload without
+  tearing down the input device.
+- 5fb60c0 port: a queue header answering the D21 data phase = driver and
+  controller a transfer apart; re-run the data phase once instead of
+  livelocking (touch dead, IRQ firing) until rebind.
+- 45784d7 port: irq_on/irq_off tracking everywhere; stop() cancels the
+  recovery works first (stopping flag), resume() clears it.
+
+Params: recover=1 (default on), quiet_ms=15000.
+Measure next: how many reloads a fresh boot tolerates before the first
+half-boot, and whether the in-driver restart clears it.
+
+Assisted-by: LLM
+---
+ drivers/input/touchscreen/apple_z2.c | 401 ++++++++++++++++++++++++++-
+ 1 file changed, 388 insertions(+), 13 deletions(-)
+
+diff --git a/drivers/input/touchscreen/apple_z2.c b/drivers/input/touchscreen/apple_z2.c
+index 83f6cfb1d..ef72e5607 100644
+--- a/drivers/input/touchscreen/apple_z2.c
++++ b/drivers/input/touchscreen/apple_z2.c
+@@ -170,6 +170,19 @@ struct apple_z2 {
+ 	DECLARE_BITMAP(d21_palm_latch, 10);
+ 	/* Consecutive oversized frames per slot (sustained-palm filter). */
+ 	u8 d21_big_frames[10];
++	/*
++	 * D21 runtime recovery (Orchard 79f5e69/45784d7 port): the rearm
++	 * ladder, the no-frames watchdog, and the IRQ-enabled tracker.
++	 */
++	struct delayed_work d21_rearm;
++	struct delayed_work d21_watch;
++	unsigned int d21_rearm_attempts;
++	unsigned int d21_boot_fails;
++	unsigned int d21_dead_restarts;
++	unsigned long d21_last_frame;
++	bool d21_recovering;
++	bool stopping;
++	bool irq_on;
+ };
+ 
+ static bool apple_z2_is_j172(const struct apple_z2 *z2)
+@@ -251,6 +264,9 @@ static void apple_z2_post_z2_xfer_delay(struct apple_z2 *z2);
+ static void apple_z2_set_gpio(struct gpio_desc *gpio, int value);
+ static void apple_z2_z2_checksum(u8 *cmd, unsigned int len);
+ static bool apple_z2_z2_checksum_valid(const u8 *cmd, unsigned int len);
++static int apple_z2_boot(struct apple_z2 *z2);
++static void apple_z2_platform_power_off(struct apple_z2 *z2);
++static void apple_z2_d21_start_recovery(struct apple_z2 *z2, int error);
+ 
+ static bool apple_z2_float_to_integer(const u8 *raw, s64 *value)
+ {
+@@ -515,6 +531,18 @@ module_param_named(smc_on_retries, d21_smc_on_retries, uint, 0644);
+ MODULE_PARM_DESC(smc_on_retries,
+ 		 "D21: retry OFF->1s->ON this many times when the post-ON rBK3 state != 01 (0 = probe-and-log only)");
+ 
++/*
++ * D21 runtime recovery knobs (Orchard 79f5e69 port, 2026-11-05).  See the
++ * recovery block below apple_z2_d21_poll_work() for the full design.
++ */
++static bool d21_recover = true;
++module_param_named(recover, d21_recover, bool, 0644);
++MODULE_PARM_DESC(recover,
++		 "D21: in-driver runtime recovery (watchdog + resync ladder + full restart)");
++static unsigned int d21_quiet_ms = 15000;
++module_param_named(quiet_ms, d21_quiet_ms, uint, 0644);
++MODULE_PARM_DESC(quiet_ms,
++		 "D21: start recovery after this many ms without a valid frame (0=off)");
+ 
+ /*
+  * D21: read the rBK3 FUNCTION state via the RW_KEY transaction.  A bare
+@@ -974,6 +1002,7 @@ static int apple_z2_read_packet(struct apple_z2 *z2)
+ {
+ 	struct spi_transfer xfer = { };
+ 	bool strict_counter;
++	bool d21_resynced = false;
+ 	int error;
+ 	size_t pkt_len;
+ 	size_t wire_len;
+@@ -1070,6 +1099,42 @@ static int apple_z2_read_packet(struct apple_z2 *z2)
+ 	if (apple_z2_is_iphone7_plus(z2))
+ 		apple_z2_post_z2_xfer_delay(z2);
+ 
++	/*
++	 * Orchard 5fb60c0 port (J71b — same HBPP generation as D21): when
++	 * the data phase answers with a queue header instead of frame
++	 * data, the controller and the driver are a transfer apart.
++	 * Ignored, every later read got a header back and touch stayed
++	 * dead with the interrupt still firing until the driver was
++	 * rebound (omarchy-a#25).  Take it as the next frame's header and
++	 * run the data phase for it, once per read.
++	 */
++	if (apple_z2_is_d21(z2) && !d21_resynced &&
++	    z2->rx_buf[0] == APPLE_Z2_REPLY_INTERRUPT_DATA) {
++		payload_len = get_unaligned_le16(z2->rx_buf + 1);
++		if (payload_len) {
++			dev_info(&z2->spidev->dev,
++				 "D21: header in the data phase (%u bytes pending): resynchronising\n",
++				 payload_len);
++			d21_resynced = true;
++			pkt_len = max_t(size_t, APPLE_Z2_CMD_SIZE,
++					(size_t)payload_len + 5);
++			if (pkt_len > APPLE_Z2_RX_BUF_SIZE)
++				return -EMSGSIZE;
++			wire_len = pkt_len;
++			memset(z2->tx_buf, 0, wire_len);
++			z2->tx_buf[0] = APPLE_Z2_CMD_READ_INTERRUPT_DATA;
++			z2->tx_buf[1] = counter;
++			z2->tx_buf[2] = 1;
++			apple_z2_z2_checksum(z2->tx_buf,
++					     z2_pull_cksum_end ? wire_len :
++								 APPLE_Z2_CMD_SIZE);
++			memset(z2->rx_buf, 0, wire_len);
++			error = apple_z2_gen1_exchange(z2, wire_len);
++			if (error)
++				return error;
++		}
++	}
++
+ 	if (apple_z2_is_d21(z2) && !z2->rx_buf[0]) {
+ 		/* Nothing pending on the queue: keep the tag, emit nothing. */
+ 		z2->runtime_queue_empty = true;
+@@ -1105,6 +1170,15 @@ static int apple_z2_read_packet(struct apple_z2 *z2)
+ 	z2->runtime_frame_valid =
+ 		apple_z2_gen2_packet_valid(z2->rx_buf, pkt_len, counter,
+ 					   strict_counter);
++	/*
++	 * D21 recovery: remember the last genuinely valid frame (gen2
++	 * header + checksum).  The half-boot's status frames never set
++	 * this, which is what makes the no-frames watchdog unambiguous.
++	 */
++	if (z2->runtime_frame_valid) {
++		z2->d21_last_frame = jiffies;
++		z2->d21_dead_restarts = 0;
++	}
+ 	if (!z2->runtime_frame_valid) {
+ 		if (z2_verbose)
+ 			dev_info(&z2->spidev->dev,
+@@ -1689,6 +1763,7 @@ static int apple_z2_j172_init_writes_locked(struct apple_z2 *z2)
+ static irqreturn_t apple_z2_irq(int irq, void *data)
+ {
+ 	struct apple_z2 *z2 = data;
++	unsigned int attempt;
+ 	int error;
+ 
+ 	/*
+@@ -1720,12 +1795,28 @@ static irqreturn_t apple_z2_irq(int irq, void *data)
+ 		 * transactions.
+ 		 */
+ 		mutex_lock(&z2->io_lock);
+-		error = apple_z2_read_packet(z2);
++		/*
++		 * Orchard 79f5e69 frame retries: a failed read is retried
++		 * up to 3 attempts, 1-2 ms apart.  These are IRQ-context
++		 * reads (the transaction the IRQ asked for), not off-IRQ
++		 * pulls.  A persistent failure starts the recovery ladder
++		 * (apple_z2_d21_rearm_work): release contacts, mask the
++		 * IRQ, bounded resync x3, then a full in-driver restart.
++		 */
++		for (attempt = 0; attempt < 3; attempt++) {
++			if (attempt)
++				usleep_range(1000, 2000);
++			error = apple_z2_read_packet(z2);
++			if (!error)
++				break;
++		}
+ 		mutex_unlock(&z2->io_lock);
+-		if (error)
++		if (error) {
+ 			dev_warn_ratelimited(&z2->spidev->dev,
+ 					     "runtime packet read failed: %d\n",
+ 					     error);
++			apple_z2_d21_start_recovery(z2, error);
++		}
+ 	} else {
+ 		mutex_lock(&z2->io_lock);
+ 		error = apple_z2_read_packet(z2);
+@@ -1793,6 +1884,252 @@ static void apple_z2_d21_poll_work(struct work_struct *work)
+ 				      msecs_to_jiffies(1000 / d21_poll_hz));
+ }
+ 
++/*
++ * ==========================================================================
++ * D21 runtime recovery — ported from Orchard 79f5e69 ("Input: apple_z2:
++ * Bound and recover the iPad 5 runtime like the N1 driver") for the D21
++ * wedges (TOUCH-STATE 1M/1E, 2026-11-04):
++ *
++ * - Normal service stays kext-faithful: EXACTLY ONE frame read per IRQ on
++ *   the level-low line.  Orchard's bounded drain (<=8 frames per IRQ) is
++ *   the transaction class measured to WEDGE a healthy D21 controller
++ *   (poll_hz, 2026-10-30), so it only runs inside the recovery ladder,
++ *   when the runtime is already broken.
++ *
++ * - Trigger 1 (Orchard): a frame read that still fails after 3 attempts
++ *   (1-2 ms apart) starts the ladder.
++ * - Trigger 2 (D21-specific): the no-frames watchdog.  The D21 half-boot
++ *   is SILENT — rail up, SPI ACKs, preamble 1f 01, pokes err=0, ZERO 0x44
++ *   frames — so no read error ever fires; only the ABSENCE of frames
++ *   identifies it.  A healthy roll streams 15-25 fps idle, so quiet_ms
++ *   (default 15 s) without a single valid frame is unambiguous.
++ *   gen2_packet_valid() rejects the half-boot's status frames (first byte
++ *   0xe1 fails the 0xea header family), so they never refresh
++ *   d21_last_frame.
++ *
++ * - Ladder: release contacts, mask the IRQ, then a delayed work 1 s later
++ *   re-checks liveness with a bounded drain, up to 3 attempts 1 s apart.
++ *   If frames return, the IRQ is re-enabled and nothing else happens.
++ *   Otherwise: FULL IN-DRIVER RESTART — power_off (which cuts the rBK3
++ *   digital-core rail through the SMC: the TRUE power cycle the wedged
++ *   core state needs; the old hv/ldo-only rails-off never cut it) then
++ *   apple_z2_boot(), reloading firmware and calibration.  This replaces a
++ *   module reload without tearing the input device down.
++ */
++#define APPLE_Z2_D21_REARM_ATTEMPTS	3
++#define APPLE_Z2_D21_REARM_DELAY_MS	1000
++#define APPLE_Z2_D21_WATCH_PERIOD_MS	5000
++#define APPLE_Z2_D21_RESTART_BACKOFF_MS	60000
++#define APPLE_Z2_D21_MAX_BOOT_FAILS	5
++#define APPLE_Z2_D21_MAX_DEAD_RESTARTS	5
++
++/*
++ * The interrupt is requested disabled (IRQF_NO_AUTOEN) and enabled during
++ * boot.  Track the enabled state so a path that finds it disabled does not
++ * disable it a second time (Orchard 45784d7): the recovery ladder masks it
++ * from the IRQ thread itself, and stop/boot/err_stop must stay balanced.
++ */
++static void apple_z2_irq_on(struct apple_z2 *z2)
++{
++	if (z2->irq_on)
++		return;
++	z2->irq_on = true;
++	enable_irq(z2->spidev->irq);
++}
++
++static void apple_z2_irq_off(struct apple_z2 *z2)
++{
++	if (!z2->irq_on)
++		return;
++	z2->irq_on = false;
++	disable_irq(z2->spidev->irq);
++}
++
++/* Masking from the IRQ thread itself: disable_irq() would wait for us. */
++static void apple_z2_irq_off_nosync(struct apple_z2 *z2)
++{
++	if (!z2->irq_on)
++		return;
++	z2->irq_on = false;
++	disable_irq_nosync(z2->spidev->irq);
++}
++
++static void apple_z2_d21_release_contacts(struct apple_z2 *z2)
++{
++	unsigned int i;
++
++	for (i = 0; i < z2->input_dev->mt->num_slots; i++) {
++		input_mt_slot(z2->input_dev, i);
++		input_mt_report_slot_inactive(z2->input_dev);
++	}
++	input_mt_sync_frame(z2->input_dev);
++	input_sync(z2->input_dev);
++}
++
++/*
++ * Enter the ladder: release contacts, mask the IRQ, resync 1 s from now.
++ * Callable from the IRQ thread (frame error) and the watchdog (silence).
++ */
++static void apple_z2_d21_start_recovery(struct apple_z2 *z2, int error)
++{
++	if (!d21_recover || z2->stopping || !z2->booted || z2->d21_recovering)
++		return;
++
++	z2->d21_recovering = true;
++	z2->d21_rearm_attempts = 0;
++	dev_warn(&z2->spidev->dev,
++		 "D21: runtime failure %d, releasing contacts and resynchronising\n",
++		 error);
++	apple_z2_d21_release_contacts(z2);
++	apple_z2_irq_off_nosync(z2);
++	schedule_delayed_work(&z2->d21_rearm,
++			      msecs_to_jiffies(APPLE_Z2_D21_REARM_DELAY_MS));
++}
++
++/*
++ * The ladder (Orchard's apple_z2_n1_rearm_work): up to 3 bounded-drain
++ * resync attempts 1 s apart, then a full in-driver restart.  Firmware and
++ * calibration are only reloaded by that restart.
++ */
++static void apple_z2_d21_rearm_work(struct work_struct *work)
++{
++	struct apple_z2 *z2 = container_of(to_delayed_work(work),
++					   struct apple_z2, d21_rearm);
++	unsigned int i, attempts;
++	bool saw_frame;
++	int error = 0;
++
++	mutex_lock(&z2->io_lock);
++	if (z2->stopping || !z2->booted) {
++		z2->d21_recovering = false;
++		mutex_unlock(&z2->io_lock);
++		return;
++	}
++
++	if (z2->d21_rearm_attempts < APPLE_Z2_D21_REARM_ATTEMPTS) {
++		z2->d21_rearm_attempts++;
++		attempts = z2->d21_rearm_attempts;
++		/*
++		 * Light rung: a bounded drain, 8 reads at most.  The
++		 * controller is already broken here (no valid frame for
++		 * quiet_ms, or a hard read error), so the off-IRQ pull
++		 * risk that forbids this in the IRQ path does not apply:
++		 * a module reload would do the same and worse.
++		 *
++		 * Track whether ANY read of the rung produced a valid
++		 * frame: the queue header/data-phase resync can land a
++		 * real frame on one pull and an empty queue on the next,
++		 * and runtime_frame_valid only reflects the LAST read
++		 * (measured 2026-11-03: a streaming controller was
++		 * declared "resync failed" and restart-looped).
++		 */
++		saw_frame = false;
++		for (i = 0; i < 8; i++) {
++			error = apple_z2_read_packet(z2);
++			if (error)
++				break;
++			if (z2->runtime_frame_valid)
++				saw_frame = true;
++			if (!z2->runtime_frame_valid &&
++			    !z2->runtime_control_reply)
++				break;
++		}
++		if (!error && saw_frame) {
++			/* It came back on its own; no restart needed. */
++			z2->d21_last_frame = jiffies;
++			z2->d21_rearm_attempts = 0;
++			z2->d21_recovering = false;
++			apple_z2_irq_on(z2);
++			mutex_unlock(&z2->io_lock);
++			dev_info(&z2->spidev->dev,
++				 "D21: runtime recovered after %u resync attempt(s)\n",
++				 attempts);
++			schedule_delayed_work(&z2->d21_watch,
++					      msecs_to_jiffies(APPLE_Z2_D21_WATCH_PERIOD_MS));
++			return;
++		}
++		dev_warn(&z2->spidev->dev,
++			 "D21: resynchronisation %u failed (%d)\n",
++			 attempts, error ?: -EIO);
++		schedule_delayed_work(&z2->d21_rearm,
++				      msecs_to_jiffies(APPLE_Z2_D21_REARM_DELAY_MS));
++		mutex_unlock(&z2->io_lock);
++		return;
++	}
++
++	/* Ladder exhausted: full in-driver restart. */
++	z2->booted = false;
++	z2->d21_recovering = false;
++	mutex_unlock(&z2->io_lock);
++
++	dev_warn(&z2->spidev->dev,
++		 "D21: restarting the touch controller in-driver (rBK3 rail cycle + fw/cal reload)\n");
++	cancel_delayed_work_sync(&z2->d21_poll);
++	gpiod_direction_output(z2->reset_gpio, 1);
++	apple_z2_platform_power_off(z2);
++	apple_z2_reset_protocol(z2);
++
++	error = apple_z2_boot(z2);
++	if (error) {
++		if (++z2->d21_boot_fails > APPLE_Z2_D21_MAX_BOOT_FAILS) {
++			dev_err(&z2->spidev->dev,
++				"D21: giving up auto-recovery after %u failed restarts; reload the module\n",
++				z2->d21_boot_fails);
++			return;
++		}
++		dev_err(&z2->spidev->dev,
++			"D21: in-driver restart failed: %d (retry in %d s)\n",
++			error, APPLE_Z2_D21_RESTART_BACKOFF_MS / 1000);
++		schedule_delayed_work(&z2->d21_rearm,
++				      msecs_to_jiffies(APPLE_Z2_D21_RESTART_BACKOFF_MS));
++		return;
++	}
++	z2->d21_boot_fails = 0;
++	/*
++	 * A restart that boots but never delivers a frame (the controller
++	 * came up wrong again, e.g. holding ATN asserted) must not cycle
++	 * forever: every cycle is a full rail cycle.  Frames clear the
++	 * counter (read_packet), so a single healthy frame restarts the
++	 * budget.
++	 */
++	if (++z2->d21_dead_restarts > APPLE_Z2_D21_MAX_DEAD_RESTARTS) {
++		dev_err(&z2->spidev->dev,
++			"D21: %u in-driver restarts without a frame; giving up auto-recovery, reload the module\n",
++			z2->d21_dead_restarts);
++		return;
++	}
++	dev_info(&z2->spidev->dev, "D21: in-driver restart succeeded\n");
++}
++
++/*
++ * The no-frames watchdog (the D21-specific trigger).  Runs every 5 s while
++ * booted; quiet_ms without a single valid frame on a roll that streams
++ * 15-25 fps idle is the half-boot/DEAD signature.
++ */
++static void apple_z2_d21_watch_work(struct work_struct *work)
++{
++	struct apple_z2 *z2 = container_of(to_delayed_work(work),
++					   struct apple_z2, d21_watch);
++
++	if (z2->stopping || !z2->booted || !d21_recover || !d21_quiet_ms)
++		return;
++
++	if (z2->d21_recovering)
++		return; /* the ladder is active; it re-arms us */
++
++	/* Stale = now is PAST last_frame + quiet_ms (time_is_BEFORE_jiffies:
++	 * the argument lies before jiffies).  A healthy roll refreshes
++	 * d21_last_frame at 15-25 fps, so this only fires on real silence. */
++	if (time_is_before_jiffies(z2->d21_last_frame +
++				   msecs_to_jiffies(d21_quiet_ms))) {
++		apple_z2_d21_start_recovery(z2, -ETIMEDOUT);
++		return;
++	}
++
++	schedule_delayed_work(&z2->d21_watch,
++			      msecs_to_jiffies(APPLE_Z2_D21_WATCH_PERIOD_MS));
++}
++
+ static void apple_z2_set_gpio(struct gpio_desc *gpio, int value)
+ {
+ 	if (gpio)
+@@ -2543,7 +2880,7 @@ static int apple_z2_send_firmware_blob(struct apple_z2 *z2, const u8 *data,
+ 
+ 	if (defer_irq_wait && z2->upload_irq_masked) {
+ 		z2->upload_irq_masked = false;
+-		enable_irq(z2->spidev->irq);
++		apple_z2_irq_on(z2);
+ 	}
+ 
+ 	if (!defer_irq_wait)
+@@ -3162,8 +3499,8 @@ static int d21_kick_set(const char *val, const struct kernel_param *kp)
+ 
+ 	if (!z2)
+ 		return -ENODEV;
+-	disable_irq(z2->spidev->irq);
+-	enable_irq(z2->spidev->irq);
++	apple_z2_irq_off(z2);
++	apple_z2_irq_on(z2);
+ 	apple_z2_d21_now_put();
+ 	return 0;
+ }
+@@ -4232,9 +4569,9 @@ static int apple_z2_upload_firmware(struct apple_z2 *z2)
+ 			if (error)
+ 				return error;
+ 			if (apple_z2_is_j172(z2)) {
+-				disable_irq(z2->spidev->irq);
++				apple_z2_irq_off(z2);
+ 				error = apple_z2_read_device_info_locked(z2);
+-				enable_irq(z2->spidev->irq);
++				apple_z2_irq_on(z2);
+ 				if (error)
+ 					return error;
+ 			}
+@@ -4433,6 +4770,9 @@ static int apple_z2_boot(struct apple_z2 *z2)
+ 	int error;
+ 
+ 	z2->booted = false;
++	if (z2->stopping)
++		/* Teardown won the race with a recovery restart. */
++		return -ENODEV;
+ 	apple_z2_reset_protocol(z2);
+ 	error = apple_z2_platform_power_on(z2);
+ 	if (error)
+@@ -4462,7 +4802,7 @@ static int apple_z2_boot(struct apple_z2 *z2)
+ 	}
+ 
+ 	reinit_completion(&z2->boot_irq);
+-	enable_irq(z2->spidev->irq);
++	apple_z2_irq_on(z2);
+ 	irq_enabled = true;
+ 	if (apple_z2_is_j172(z2)) {
+ 		error = apple_z2_pulse_reset(z2);
+@@ -4496,24 +4836,44 @@ static int apple_z2_boot(struct apple_z2 *z2)
+ 	}
+ 
+ 	if (apple_z2_is_j172(z2) || apple_z2_is_iphone7_plus(z2)) {
+-		disable_irq(z2->spidev->irq);
++		apple_z2_irq_off(z2);
+ 		z2->upload_irq_masked = true;
+ 	}
+ 
++	if (z2->stopping)
++		goto err_stop;
++
+ 	error = apple_z2_upload_firmware(z2);
+ 	if (error)
+ 		goto err_stop;
+ 
++	/*
++	 * D21: arm the no-frames watchdog (the Orchard 79f5e69 port).
++	 * The D21 half-boot is SILENT - rail up, SPI ACKs, ZERO 0x44
++	 * frames - so its only detector is the absence of valid frames;
++	 * a healthy roll streams 15-25 fps idle.  quiet_ms (default 15 s)
++	 * without one valid frame starts the recovery ladder, which ends
++	 * in a full in-driver restart (SMC rBK3 off -> drain -> on +
++	 * reset + fw/cal reload) instead of a module reload.
++	 */
++	if (apple_z2_is_d21(z2) && !z2->stopping) {
++		z2->d21_last_frame = jiffies;
++		z2->d21_recovering = false;
++		if (d21_recover)
++			schedule_delayed_work(&z2->d21_watch,
++					      msecs_to_jiffies(APPLE_Z2_D21_WATCH_PERIOD_MS));
++	}
++
+ 	return 0;
+ 
+ err_stop:
+ 	z2->booted = false;
+ 	if (z2->upload_irq_masked) {
+ 		z2->upload_irq_masked = false;
+-		enable_irq(z2->spidev->irq);
++		apple_z2_irq_on(z2);
+ 	}
+ 	if (irq_enabled)
+-		disable_irq(z2->spidev->irq);
++		apple_z2_irq_off(z2);
+ 	gpiod_set_value_cansleep(z2->reset_gpio, 1);
+ 	apple_z2_platform_power_off(z2);
+ 	apple_z2_reset_protocol(z2);
+@@ -4645,6 +5005,10 @@ static int apple_z2_probe(struct spi_device *spi)
+ 	 * scripts unable to reload (observed 2026-11-02).
+ 	 */
+ 	INIT_DELAYED_WORK(&z2->d21_poll, apple_z2_d21_poll_work);
++	/* Same lesson as above: the recovery works are always initialised,
++	 * because stop() unconditionally cancels them. */
++	INIT_DELAYED_WORK(&z2->d21_rearm, apple_z2_d21_rearm_work);
++	INIT_DELAYED_WORK(&z2->d21_watch, apple_z2_d21_watch_work);
+ 	spi_set_drvdata(spi, z2);
+ 
+ 	z2->reset_gpio = devm_gpiod_get(dev, "reset", GPIOD_OUT_HIGH);
+@@ -4835,10 +5199,20 @@ static void apple_z2_stop(struct apple_z2 *z2)
+ 	/*
+ 	 * The poller re-arms itself only while booted, but a work item may
+ 	 * already be queued or running; drain it before the IRQ/protocol go
+-	 * away so it can't touch the controller mid-teardown.
++	 * away so it can't touch the controller mid-teardown.  The D21
++	 * recovery works are drained first so a restart in flight cannot
++	 * race the teardown (Orchard 79f5e69 stop ordering), and the IRQ
++	 * goes through the tracked off (the ladder may have masked it).
+ 	 */
++	if (apple_z2_is_d21(z2)) {
++		mutex_lock(&z2->io_lock);
++		z2->stopping = true;
++		mutex_unlock(&z2->io_lock);
++		cancel_delayed_work_sync(&z2->d21_rearm);
++		cancel_delayed_work_sync(&z2->d21_watch);
++	}
+ 	cancel_delayed_work_sync(&z2->d21_poll);
+-	disable_irq(z2->spidev->irq);
++	apple_z2_irq_off(z2);
+ 	if (z2->irq_type_changed) {
+ 		irq_set_irq_type(z2->spidev->irq, z2->saved_irq_type);
+ 		z2->irq_type_changed = false;
+@@ -4876,6 +5250,7 @@ static int apple_z2_resume(struct device *dev)
+ {
+ 	struct apple_z2 *z2 = spi_get_drvdata(to_spi_device(dev));
+ 
++	z2->stopping = false;
+ 	return apple_z2_boot(z2);
+ }
+ 
+-- 
+2.55.0
+
