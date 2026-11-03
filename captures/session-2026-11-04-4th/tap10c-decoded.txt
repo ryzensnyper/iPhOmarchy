@@ -1,0 +1,2955 @@
+t=3756.640 seq=02 nf=4
+  f1 st=4 raw=(  2884,  5379) screen=( 491, 888) tool= 3949 pres=0
+  f2 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=31195 pres=0
+  f6 st=4 raw=(   932, 10475) screen=( 183,1693) tool= 1129 pres=4
+t=3756.724 seq=01 nf=4
+  f1 st=4 raw=(  2884,  5380) screen=( 491, 888) tool= 3947 pres=0
+  f2 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  627 pres=1
+  f5 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=30733 pres=0
+  f6 st=4 raw=(   931, 10476) screen=( 182,1693) tool= 1129 pres=3
+t=3756.807 seq=02 nf=4
+  f1 st=4 raw=(  2887,  5378) screen=( 491, 887) tool= 3947 pres=0
+  f2 st=4 raw=(  6418,  6095) screen=(1049,1001) tool=  627 pres=1
+  f5 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=30950 pres=0
+  f6 st=4 raw=(   931, 10476) screen=( 182,1693) tool= 1129 pres=3
+t=3756.890 seq=01 nf=4
+  f1 st=4 raw=(  2887,  5378) screen=( 491, 887) tool= 3947 pres=0
+  f2 st=4 raw=(  6416,  6095) screen=(1049,1001) tool=  627 pres=1
+  f5 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=31018 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=3
+t=3757.057 seq=02 nf=4
+  f1 st=4 raw=(  2889,  5377) screen=( 492, 887) tool= 3948 pres=0
+  f2 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  627 pres=1
+  f5 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=30557 pres=0
+  f6 st=4 raw=(   934, 10472) screen=( 183,1693) tool= 1127 pres=4
+t=3757.140 seq=01 nf=4
+  f1 st=4 raw=(  2873,  5387) screen=( 489, 889) tool= 3950 pres=0
+  f2 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  627 pres=1
+  f5 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=30618 pres=0
+  f6 st=4 raw=(   931, 10475) screen=( 182,1693) tool= 1127 pres=4
+t=3757.224 seq=02 nf=4
+  f1 st=4 raw=(  2870,  5389) screen=( 489, 889) tool= 3947 pres=0
+  f2 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  627 pres=1
+  f5 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=30574 pres=0
+  f6 st=4 raw=(   931, 10476) screen=( 182,1693) tool= 1127 pres=4
+t=3757.307 seq=01 nf=4
+  f1 st=4 raw=(  2883,  5380) screen=( 491, 888) tool= 3950 pres=0
+  f2 st=4 raw=(  6418,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=30837 pres=0
+  f6 st=4 raw=(   931, 10476) screen=( 182,1693) tool= 1127 pres=4
+t=3757.557 seq=02 nf=4
+  f1 st=4 raw=(  2884,  5379) screen=( 491, 888) tool= 3949 pres=0
+  f2 st=4 raw=(  6418,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=30765 pres=0
+  f6 st=4 raw=(   934, 10472) screen=( 183,1693) tool= 1126 pres=4
+t=3757.641 seq=01 nf=4
+  f1 st=4 raw=(  2889,  5377) screen=( 492, 887) tool= 3947 pres=0
+  f2 st=4 raw=(  6416,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4470,  -236) screen=( 741,   0) tool=30786 pres=0
+  f6 st=4 raw=(   932, 10474) screen=( 183,1693) tool= 1128 pres=4
+t=3757.724 seq=02 nf=4
+  f1 st=4 raw=(  2890,  5377) screen=( 492, 887) tool= 3947 pres=0
+  f2 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4470,  -236) screen=( 741,   0) tool=30896 pres=0
+  f6 st=4 raw=(   931, 10475) screen=( 182,1693) tool= 1128 pres=4
+t=3757.807 seq=01 nf=4
+  f1 st=4 raw=(  2874,  5386) screen=( 489, 889) tool= 3948 pres=0
+  f2 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=31318 pres=0
+  f6 st=4 raw=(   931, 10476) screen=( 182,1693) tool= 1128 pres=4
+t=3757.890 seq=02 nf=4
+  f1 st=4 raw=(  2884,  5379) screen=( 491, 888) tool= 3948 pres=0
+  f2 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=31369 pres=0
+  f6 st=4 raw=(   930, 10477) screen=( 182,1693) tool= 1128 pres=4
+t=3757.974 seq=01 nf=4
+  f1 st=4 raw=(  2885,  5379) screen=( 491, 888) tool= 3948 pres=0
+  f2 st=4 raw=(  6418,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=31125 pres=0
+  f6 st=4 raw=(   930, 10477) screen=( 182,1693) tool= 1128 pres=3
+t=3758.057 seq=02 nf=4
+  f1 st=4 raw=(  2887,  5378) screen=( 491, 887) tool= 3948 pres=0
+  f2 st=4 raw=(  6418,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4470,  -236) screen=( 741,   0) tool=30811 pres=0
+  f6 st=4 raw=(   932, 10474) screen=( 183,1693) tool= 1127 pres=3
+t=3758.140 seq=01 nf=4
+  f1 st=4 raw=(  2889,  5377) screen=( 492, 887) tool= 3947 pres=0
+  f2 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4470,  -236) screen=( 741,   0) tool=30981 pres=0
+  f6 st=4 raw=(   931, 10476) screen=( 182,1693) tool= 1127 pres=3
+t=3758.224 seq=02 nf=4
+  f1 st=4 raw=(  2875,  5386) screen=( 489, 889) tool= 3948 pres=0
+  f2 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4470,  -236) screen=( 741,   0) tool=30569 pres=0
+  f6 st=4 raw=(   932, 10474) screen=( 183,1693) tool= 1127 pres=4
+t=3758.307 seq=01 nf=4
+  f1 st=4 raw=(  2885,  5379) screen=( 491, 888) tool= 3948 pres=0
+  f2 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4470,  -236) screen=( 741,   0) tool=30708 pres=0
+  f6 st=4 raw=(   933, 10474) screen=( 183,1693) tool= 1126 pres=4
+t=3758.390 seq=02 nf=4
+  f1 st=4 raw=(  2887,  5378) screen=( 491, 887) tool= 3948 pres=0
+  f2 st=4 raw=(  6416,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4470,  -236) screen=( 741,   0) tool=30683 pres=0
+  f6 st=4 raw=(   932, 10474) screen=( 183,1693) tool= 1127 pres=4
+t=3758.474 seq=01 nf=4
+  f1 st=4 raw=(  2887,  5377) screen=( 491, 887) tool= 3950 pres=0
+  f2 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  627 pres=1
+  f5 st=4 raw=(  4470,  -236) screen=( 741,   0) tool=30241 pres=0
+  f6 st=4 raw=(   937, 10468) screen=( 183,1692) tool= 1125 pres=4
+t=3758.557 seq=02 nf=4
+  f1 st=4 raw=(  2889,  5376) screen=( 492, 887) tool= 3949 pres=0
+  f2 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4470,  -236) screen=( 741,   0) tool=30730 pres=0
+  f6 st=4 raw=(   933, 10473) screen=( 183,1693) tool= 1125 pres=4
+t=3758.641 seq=01 nf=4
+  f1 st=4 raw=(  2888,  5377) screen=( 491, 887) tool= 3948 pres=0
+  f2 st=4 raw=(  6416,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4470,  -236) screen=( 741,   0) tool=30335 pres=0
+  f6 st=4 raw=(   932, 10475) screen=( 183,1693) tool= 1126 pres=3
+t=3758.723 seq=02 nf=4
+  f1 st=4 raw=(  2874,  5387) screen=( 489, 889) tool= 3946 pres=0
+  f2 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4470,  -236) screen=( 741,   0) tool=30768 pres=0
+  f6 st=4 raw=(   933, 10474) screen=( 183,1693) tool= 1126 pres=3
+t=3758.791 seq=01 nf=4
+  f1 st=4 raw=(  2886,  5379) screen=( 491, 888) tool= 3946 pres=0
+  f2 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4470,  -236) screen=( 741,   0) tool=30534 pres=0
+  f6 st=4 raw=(   931, 10476) screen=( 182,1693) tool= 1127 pres=3
+t=3758.874 seq=02 nf=4
+  f1 st=4 raw=(  2887,  5378) screen=( 491, 887) tool= 3946 pres=0
+  f2 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=30150 pres=0
+  f6 st=4 raw=(   931, 10476) screen=( 182,1693) tool= 1127 pres=3
+t=3758.957 seq=01 nf=4
+  f1 st=4 raw=(  2889,  5377) screen=( 492, 887) tool= 3946 pres=0
+  f2 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  627 pres=1
+  f5 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=30405 pres=0
+  f6 st=4 raw=(   935, 10471) screen=( 183,1692) tool= 1130 pres=3
+t=3759.124 seq=02 nf=4
+  f1 st=4 raw=(  2890,  5376) screen=( 492, 887) tool= 3946 pres=0
+  f2 st=4 raw=(  6416,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=30842 pres=0
+  f6 st=4 raw=(   932, 10474) screen=( 183,1693) tool= 1129 pres=3
+t=3759.291 seq=01 nf=4
+  f1 st=4 raw=(  2888,  5377) screen=( 491, 887) tool= 3951 pres=0
+  f2 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=30696 pres=0
+  f6 st=4 raw=(   931, 10475) screen=( 182,1693) tool= 1129 pres=3
+t=3759.374 seq=02 nf=4
+  f1 st=4 raw=(  2873,  5387) screen=( 489, 889) tool= 3949 pres=0
+  f2 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=30941 pres=0
+  f6 st=4 raw=(   931, 10476) screen=( 182,1693) tool= 1129 pres=4
+t=3759.457 seq=01 nf=4
+  f1 st=4 raw=(  2884,  5380) screen=( 491, 888) tool= 3951 pres=0
+  f2 st=4 raw=(  6416,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=30275 pres=0
+  f6 st=4 raw=(   933, 10473) screen=( 183,1693) tool= 1130 pres=3
+t=3759.541 seq=02 nf=4
+  f1 st=4 raw=(  2885,  5379) screen=( 491, 888) tool= 3949 pres=0
+  f2 st=4 raw=(  6416,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=30248 pres=0
+  f6 st=4 raw=(   931, 10476) screen=( 182,1693) tool= 1129 pres=3
+t=3759.624 seq=01 nf=4
+  f1 st=4 raw=(  2883,  5380) screen=( 491, 888) tool= 3948 pres=0
+  f2 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=30523 pres=0
+  f6 st=4 raw=(   931, 10476) screen=( 182,1693) tool= 1129 pres=3
+t=3759.791 seq=02 nf=4
+  f1 st=4 raw=(  2885,  5380) screen=( 491, 888) tool= 3947 pres=0
+  f2 st=4 raw=(  6416,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=30215 pres=0
+  f6 st=4 raw=(   932, 10475) screen=( 183,1693) tool= 1128 pres=3
+t=3759.874 seq=01 nf=4
+  f1 st=4 raw=(  2888,  5377) screen=( 491, 887) tool= 3950 pres=0
+  f2 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=30334 pres=0
+  f6 st=4 raw=(   936, 10469) screen=( 183,1692) tool= 1127 pres=3
+t=3760.208 seq=02 nf=4
+  f1 st=4 raw=(  2888,  5377) screen=( 491, 887) tool= 3951 pres=0
+  f2 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4470,  -236) screen=( 741,   0) tool=30469 pres=0
+  f6 st=4 raw=(   941, 10463) screen=( 184,1691) tool= 1124 pres=3
+t=3760.458 seq=01 nf=4
+  f1 st=4 raw=(  2889,  5377) screen=( 492, 887) tool= 3949 pres=0
+  f2 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4470,  -236) screen=( 741,   0) tool=30556 pres=0
+  f6 st=4 raw=(   934, 10472) screen=( 183,1693) tool= 1125 pres=3
+t=3760.708 seq=02 nf=4
+  f1 st=4 raw=(  2889,  5377) screen=( 492, 887) tool= 3948 pres=0
+  f2 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4470,  -236) screen=( 741,   0) tool=30097 pres=0
+  f6 st=4 raw=(   937, 10468) screen=( 183,1692) tool= 1124 pres=3
+t=3761.041 seq=01 nf=4
+  f1 st=4 raw=(  2889,  5377) screen=( 492, 887) tool= 3948 pres=0
+  f2 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4470,  -236) screen=( 741,   0) tool=30097 pres=0
+  f6 st=4 raw=(   935, 10471) screen=( 183,1692) tool= 1125 pres=3
+t=3761.124 seq=02 nf=4
+  f1 st=4 raw=(  2889,  5376) screen=( 492, 887) tool= 3947 pres=0
+  f2 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4470,  -236) screen=( 741,   0) tool=30202 pres=0
+  f6 st=4 raw=(   933, 10473) screen=( 183,1693) tool= 1126 pres=3
+t=3761.208 seq=01 nf=4
+  f1 st=4 raw=(  2889,  5377) screen=( 492, 887) tool= 3947 pres=0
+  f2 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4470,  -236) screen=( 741,   0) tool=30525 pres=0
+  f6 st=4 raw=(   931, 10476) screen=( 182,1693) tool= 1127 pres=4
+t=3761.291 seq=02 nf=4
+  f1 st=4 raw=(  2889,  5377) screen=( 492, 887) tool= 3947 pres=0
+  f2 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=31158 pres=0
+  f6 st=4 raw=(   930, 10477) screen=( 182,1693) tool= 1127 pres=4
+t=3761.374 seq=01 nf=4
+  f1 st=4 raw=(  2889,  5377) screen=( 492, 887) tool= 3947 pres=0
+  f2 st=4 raw=(  6418,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=30730 pres=0
+  f6 st=4 raw=(   933, 10473) screen=( 183,1693) tool= 1129 pres=4
+t=3761.458 seq=02 nf=4
+  f1 st=4 raw=(  2889,  5377) screen=( 492, 887) tool= 3947 pres=0
+  f2 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=30568 pres=0
+  f6 st=4 raw=(   931, 10476) screen=( 182,1693) tool= 1129 pres=4
+t=3761.541 seq=01 nf=4
+  f1 st=4 raw=(  2888,  5377) screen=( 491, 887) tool= 3950 pres=0
+  f2 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4470,  -236) screen=( 741,   0) tool=30621 pres=0
+  f6 st=4 raw=(   931, 10476) screen=( 182,1693) tool= 1129 pres=4
+t=3761.624 seq=02 nf=4
+  f1 st=4 raw=(  2888,  5377) screen=( 491, 887) tool= 3948 pres=0
+  f2 st=4 raw=(  6416,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=30399 pres=0
+  f6 st=4 raw=(   931, 10476) screen=( 182,1693) tool= 1128 pres=4
+t=3761.708 seq=01 nf=4
+  f1 st=4 raw=(  2888,  5376) screen=( 491, 887) tool= 3948 pres=0
+  f2 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4470,  -236) screen=( 741,   0) tool=30402 pres=0
+  f6 st=4 raw=(   931, 10476) screen=( 182,1693) tool= 1128 pres=4
+t=3761.791 seq=02 nf=4
+  f1 st=4 raw=(  2889,  5377) screen=( 492, 887) tool= 3947 pres=0
+  f2 st=4 raw=(  6416,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4470,  -236) screen=( 741,   0) tool=30174 pres=0
+  f6 st=4 raw=(   931, 10476) screen=( 182,1693) tool= 1128 pres=4
+t=3761.958 seq=01 nf=4
+  f1 st=4 raw=(  2874,  5387) screen=( 489, 889) tool= 3948 pres=0
+  f2 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4470,  -236) screen=( 741,   0) tool=30733 pres=0
+  f6 st=4 raw=(   931, 10476) screen=( 182,1693) tool= 1128 pres=4
+t=3762.041 seq=02 nf=4
+  f1 st=4 raw=(  2871,  5389) screen=( 489, 889) tool= 3948 pres=0
+  f2 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=30662 pres=0
+  f6 st=4 raw=(   931, 10476) screen=( 182,1693) tool= 1128 pres=4
+t=3762.124 seq=01 nf=4
+  f1 st=4 raw=(  2879,  5383) screen=( 490, 888) tool= 3948 pres=0
+  f2 st=4 raw=(  6418,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=31104 pres=0
+  f6 st=4 raw=(   931, 10476) screen=( 182,1693) tool= 1128 pres=4
+t=3762.208 seq=02 nf=4
+  f1 st=4 raw=(  2885,  5379) screen=( 491, 888) tool= 3948 pres=0
+  f2 st=4 raw=(  6418,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4470,  -236) screen=( 741,   0) tool=30817 pres=0
+  f6 st=4 raw=(   931, 10476) screen=( 182,1693) tool= 1127 pres=3
+t=3762.291 seq=01 nf=4
+  f1 st=4 raw=(  2872,  5387) screen=( 489, 889) tool= 3946 pres=0
+  f2 st=4 raw=(  6418,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=30621 pres=0
+  f6 st=4 raw=(   931, 10476) screen=( 182,1693) tool= 1127 pres=3
+t=3762.374 seq=02 nf=4
+  f1 st=4 raw=(  2883,  5380) screen=( 491, 888) tool= 3945 pres=0
+  f2 st=4 raw=(  6418,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=31159 pres=0
+  f6 st=4 raw=(   931, 10476) screen=( 182,1693) tool= 1127 pres=3
+t=3762.458 seq=01 nf=4
+  f1 st=4 raw=(  2866,  5392) screen=( 488, 890) tool= 3946 pres=0
+  f2 st=4 raw=(  6418,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4468,  -236) screen=( 741,   0) tool=31415 pres=0
+  f6 st=4 raw=(   930, 10476) screen=( 182,1693) tool= 1127 pres=4
+t=3762.541 seq=02 nf=4
+  f1 st=4 raw=(  2878,  5383) screen=( 490, 888) tool= 3949 pres=0
+  f2 st=4 raw=(  6418,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=31522 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1127 pres=4
+t=3762.625 seq=01 nf=4
+  f1 st=4 raw=(  2870,  5389) screen=( 489, 889) tool= 3951 pres=0
+  f2 st=4 raw=(  6418,  6095) screen=(1049,1001) tool=  627 pres=1
+  f5 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=31497 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1127 pres=4
+t=3762.708 seq=02 nf=4
+  f1 st=4 raw=(  2886,  5378) screen=( 491, 887) tool= 3948 pres=0
+  f2 st=4 raw=(  6418,  6095) screen=(1049,1001) tool=  627 pres=1
+  f5 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=31099 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1127 pres=4
+t=3762.874 seq=01 nf=4
+  f1 st=4 raw=(  2889,  5377) screen=( 492, 887) tool= 3948 pres=0
+  f2 st=4 raw=(  6418,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=30295 pres=0
+  f6 st=4 raw=(   933, 10473) screen=( 183,1693) tool= 1129 pres=4
+t=3762.958 seq=02 nf=4
+  f1 st=4 raw=(  2889,  5376) screen=( 492, 887) tool= 3948 pres=0
+  f2 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=30948 pres=0
+  f6 st=4 raw=(   932, 10475) screen=( 183,1693) tool= 1129 pres=4
+t=3763.041 seq=01 nf=4
+  f1 st=4 raw=(  2890,  5376) screen=( 492, 887) tool= 3948 pres=0
+  f2 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=31135 pres=0
+  f6 st=4 raw=(   932, 10475) screen=( 183,1693) tool= 1129 pres=4
+t=3763.124 seq=02 nf=4
+  f1 st=4 raw=(  2888,  5377) screen=( 491, 887) tool= 3948 pres=0
+  f2 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=30947 pres=0
+  f6 st=4 raw=(   932, 10476) screen=( 183,1693) tool= 1129 pres=3
+t=3763.208 seq=01 nf=4
+  f1 st=4 raw=(  2874,  5387) screen=( 489, 889) tool= 3948 pres=0
+  f2 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=30792 pres=0
+  f6 st=4 raw=(   931, 10476) screen=( 182,1693) tool= 1129 pres=3
+t=3763.291 seq=02 nf=4
+  f1 st=4 raw=(  2885,  5379) screen=( 491, 888) tool= 3949 pres=0
+  f2 st=4 raw=(  6418,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=30456 pres=0
+  f6 st=4 raw=(   930, 10477) screen=( 182,1693) tool= 1129 pres=3
+t=3763.375 seq=01 nf=4
+  f1 st=4 raw=(  2886,  5378) screen=( 491, 887) tool= 3948 pres=0
+  f2 st=4 raw=(  6418,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=30883 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=4
+t=3763.458 seq=02 nf=4
+  f1 st=4 raw=(  2872,  5388) screen=( 489, 889) tool= 3948 pres=0
+  f2 st=4 raw=(  6418,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=30359 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=3
+t=3763.625 seq=01 nf=4
+  f1 st=4 raw=(  2869,  5390) screen=( 488, 889) tool= 3948 pres=0
+  f2 st=4 raw=(  6418,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=30855 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=3
+t=3763.708 seq=02 nf=4
+  f1 st=4 raw=(  2865,  5392) screen=( 488, 890) tool= 3947 pres=0
+  f2 st=4 raw=(  6418,  6095) screen=(1049,1001) tool=  627 pres=1
+  f5 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=31036 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=3
+t=3763.791 seq=01 nf=4
+  f1 st=4 raw=(  2862,  5395) screen=( 487, 890) tool= 3948 pres=0
+  f2 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=30958 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=4
+t=3763.874 seq=02 nf=4
+  f1 st=4 raw=(  2864,  5394) screen=( 488, 890) tool= 3948 pres=0
+  f2 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=31367 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=3
+t=3763.958 seq=01 nf=4
+  f1 st=4 raw=(  2863,  5393) screen=( 488, 890) tool= 3947 pres=0
+  f2 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=31025 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=3
+t=3764.041 seq=02 nf=4
+  f1 st=4 raw=(  2863,  5393) screen=( 488, 890) tool= 3948 pres=0
+  f2 st=4 raw=(  6418,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=31361 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=3
+t=3764.125 seq=01 nf=4
+  f1 st=4 raw=(  2868,  5390) screen=( 488, 889) tool= 3949 pres=0
+  f2 st=4 raw=(  6418,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=31369 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=3
+t=3764.208 seq=02 nf=4
+  f1 st=4 raw=(  2866,  5391) screen=( 488, 889) tool= 3949 pres=0
+  f2 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=31477 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=3
+t=3764.291 seq=01 nf=4
+  f1 st=4 raw=(  2879,  5383) screen=( 490, 888) tool= 3948 pres=0
+  f2 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=31480 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=3
+t=3764.375 seq=02 nf=4
+  f1 st=4 raw=(  2880,  5382) screen=( 490, 888) tool= 3948 pres=0
+  f2 st=4 raw=(  6416,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=30943 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=4
+t=3764.458 seq=01 nf=4
+  f1 st=4 raw=(  2887,  5378) screen=( 491, 887) tool= 3947 pres=0
+  f2 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=31099 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=4
+t=3764.541 seq=02 nf=4
+  f1 st=4 raw=(  2884,  5379) screen=( 491, 888) tool= 3950 pres=0
+  f2 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=31403 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=4
+t=3764.625 seq=01 nf=4
+  f1 st=4 raw=(  2873,  5387) screen=( 489, 889) tool= 3949 pres=0
+  f2 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=30985 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=4
+t=3764.708 seq=02 nf=4
+  f1 st=4 raw=(  2870,  5389) screen=( 489, 889) tool= 3948 pres=0
+  f2 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  627 pres=1
+  f5 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=31247 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=4
+t=3764.791 seq=01 nf=4
+  f1 st=4 raw=(  2870,  5389) screen=( 489, 889) tool= 3949 pres=0
+  f2 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=31446 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=4
+t=3764.875 seq=02 nf=4
+  f1 st=4 raw=(  2879,  5382) screen=( 490, 888) tool= 3950 pres=0
+  f2 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=30766 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=4
+t=3764.958 seq=01 nf=4
+  f1 st=4 raw=(  2885,  5379) screen=( 491, 888) tool= 3949 pres=0
+  f2 st=4 raw=(  6418,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=30376 pres=0
+  f6 st=4 raw=(   931, 10476) screen=( 182,1693) tool= 1128 pres=4
+t=3765.041 seq=02 nf=4
+  f1 st=4 raw=(  2887,  5377) screen=( 491, 887) tool= 3951 pres=0
+  f2 st=4 raw=(  6418,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=30029 pres=0
+  f6 st=4 raw=(   931, 10476) screen=( 182,1693) tool= 1128 pres=4
+t=3765.125 seq=01 nf=4
+  f1 st=4 raw=(  2873,  5386) screen=( 489, 889) tool= 3950 pres=0
+  f2 st=4 raw=(  6418,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=30048 pres=0
+  f6 st=4 raw=(   931, 10476) screen=( 182,1693) tool= 1128 pres=4
+t=3765.208 seq=02 nf=4
+  f1 st=4 raw=(  2886,  5378) screen=( 491, 887) tool= 3949 pres=0
+  f2 st=4 raw=(  6418,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=30058 pres=0
+  f6 st=4 raw=(   931, 10476) screen=( 182,1693) tool= 1128 pres=4
+t=3765.292 seq=01 nf=4
+  f1 st=4 raw=(  2886,  5378) screen=( 491, 887) tool= 3950 pres=0
+  f2 st=4 raw=(  6418,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=30726 pres=0
+  f6 st=4 raw=(   930, 10477) screen=( 182,1693) tool= 1128 pres=4
+t=3765.375 seq=02 nf=4
+  f1 st=4 raw=(  2872,  5387) screen=( 489, 889) tool= 3950 pres=0
+  f2 st=4 raw=(  6418,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=30518 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1128 pres=4
+t=3765.458 seq=01 nf=4
+  f1 st=4 raw=(  2885,  5378) screen=( 491, 887) tool= 3951 pres=0
+  f2 st=4 raw=(  6418,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=30299 pres=0
+  f6 st=4 raw=(   931, 10476) screen=( 182,1693) tool= 1127 pres=4
+t=3765.542 seq=02 nf=4
+  f1 st=4 raw=(  2872,  5387) screen=( 489, 889) tool= 3946 pres=0
+  f2 st=4 raw=(  6418,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=30259 pres=0
+  f6 st=4 raw=(   931, 10476) screen=( 182,1693) tool= 1127 pres=3
+t=3765.875 seq=01 nf=4
+  f1 st=4 raw=(  2885,  5379) screen=( 491, 888) tool= 3951 pres=0
+  f2 st=4 raw=(  6416,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=30517 pres=0
+  f6 st=4 raw=(   931, 10476) screen=( 182,1693) tool= 1127 pres=3
+t=3765.958 seq=02 nf=4
+  f1 st=4 raw=(  2887,  5377) screen=( 491, 887) tool= 3949 pres=0
+  f2 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=30578 pres=0
+  f6 st=4 raw=(   934, 10472) screen=( 183,1693) tool= 1126 pres=3
+t=3766.041 seq=01 nf=4
+  f1 st=4 raw=(  2874,  5387) screen=( 489, 889) tool= 3946 pres=0
+  f2 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=30970 pres=0
+  f6 st=4 raw=(   931, 10475) screen=( 182,1693) tool= 1127 pres=4
+t=3766.208 seq=02 nf=4
+  f1 st=4 raw=(  2886,  5378) screen=( 491, 887) tool= 3946 pres=0
+  f2 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=30216 pres=0
+  f6 st=4 raw=(   933, 10474) screen=( 183,1693) tool= 1127 pres=4
+t=3766.458 seq=01 nf=4
+  f1 st=4 raw=(  2886,  5379) screen=( 491, 888) tool= 3946 pres=0
+  f2 st=4 raw=(  6416,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=30253 pres=0
+  f6 st=4 raw=(   935, 10471) screen=( 183,1692) tool= 1126 pres=4
+t=3766.542 seq=02 nf=4
+  f1 st=4 raw=(  2888,  5378) screen=( 491, 887) tool= 3946 pres=0
+  f2 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4470,  -236) screen=( 741,   0) tool=30446 pres=0
+  f6 st=4 raw=(   933, 10473) screen=( 183,1693) tool= 1126 pres=4
+t=3766.625 seq=01 nf=4
+  f1 st=4 raw=(  2889,  5377) screen=( 492, 887) tool= 3946 pres=0
+  f2 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4470,  -236) screen=( 741,   0) tool=30379 pres=0
+  f6 st=4 raw=(   938, 10467) screen=( 184,1692) tool= 1125 pres=4
+t=3766.708 seq=02 nf=4
+  f1 st=4 raw=(  2888,  5377) screen=( 491, 887) tool= 3948 pres=0
+  f2 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4470,  -236) screen=( 741,   0) tool=30443 pres=0
+  f6 st=4 raw=(   937, 10468) screen=( 183,1692) tool= 1126 pres=3
+t=3766.792 seq=01 nf=4
+  f1 st=4 raw=(  2888,  5377) screen=( 491, 887) tool= 3947 pres=0
+  f2 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4470,  -236) screen=( 741,   0) tool=30201 pres=0
+  f6 st=4 raw=(   933, 10473) screen=( 183,1693) tool= 1128 pres=3
+t=3766.875 seq=02 nf=4
+  f1 st=4 raw=(  2889,  5377) screen=( 492, 887) tool= 3947 pres=0
+  f2 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4470,  -236) screen=( 741,   0) tool=29982 pres=0
+  f6 st=4 raw=(   936, 10470) screen=( 183,1692) tool= 1126 pres=3
+t=3766.958 seq=01 nf=4
+  f1 st=4 raw=(  2888,  5377) screen=( 491, 887) tool= 3951 pres=0
+  f2 st=4 raw=(  6418,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4470,  -236) screen=( 741,   0) tool=30415 pres=0
+  f6 st=4 raw=(   933, 10473) screen=( 183,1693) tool= 1125 pres=4
+t=3767.042 seq=02 nf=4
+  f1 st=4 raw=(  2888,  5377) screen=( 491, 887) tool= 3948 pres=0
+  f2 st=4 raw=(  6418,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4470,  -236) screen=( 741,   0) tool=30157 pres=0
+  f6 st=4 raw=(   932, 10475) screen=( 183,1693) tool= 1127 pres=4
+t=3767.125 seq=01 nf=4
+  f1 st=4 raw=(  2888,  5377) screen=( 491, 887) tool= 3948 pres=0
+  f2 st=4 raw=(  6416,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4470,  -236) screen=( 741,   0) tool=30267 pres=0
+  f6 st=4 raw=(   934, 10472) screen=( 183,1693) tool= 1129 pres=4
+t=3767.208 seq=02 nf=4
+  f1 st=4 raw=(  2889,  5377) screen=( 492, 887) tool= 3947 pres=0
+  f2 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4470,  -236) screen=( 741,   0) tool=30698 pres=0
+  f6 st=4 raw=(   931, 10476) screen=( 182,1693) tool= 1128 pres=4
+t=3767.292 seq=01 nf=4
+  f1 st=4 raw=(  2888,  5377) screen=( 491, 887) tool= 3949 pres=0
+  f2 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4470,  -236) screen=( 741,   0) tool=30466 pres=0
+  f6 st=4 raw=(   935, 10471) screen=( 183,1692) tool= 1126 pres=4
+t=3767.542 seq=02 nf=4
+  f1 st=4 raw=(  2888,  5377) screen=( 491, 887) tool= 3952 pres=0
+  f2 st=4 raw=(  6418,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4470,  -236) screen=( 741,   0) tool=30579 pres=0
+  f6 st=4 raw=(   934, 10472) screen=( 183,1693) tool= 1127 pres=4
+t=3767.625 seq=01 nf=4
+  f1 st=4 raw=(  2888,  5377) screen=( 491, 887) tool= 3950 pres=0
+  f2 st=4 raw=(  6418,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4470,  -236) screen=( 741,   0) tool=30591 pres=0
+  f6 st=4 raw=(   932, 10475) screen=( 183,1693) tool= 1127 pres=4
+t=3767.708 seq=02 nf=4
+  f1 st=4 raw=(  2888,  5377) screen=( 491, 887) tool= 3951 pres=0
+  f2 st=4 raw=(  6418,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4470,  -236) screen=( 741,   0) tool=30469 pres=0
+  f6 st=4 raw=(   933, 10473) screen=( 183,1693) tool= 1127 pres=4
+t=3767.792 seq=01 nf=4
+  f1 st=4 raw=(  2873,  5387) screen=( 489, 889) tool= 3950 pres=0
+  f2 st=4 raw=(  6418,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4470,  -236) screen=( 741,   0) tool=30840 pres=0
+  f6 st=4 raw=(   932, 10475) screen=( 183,1693) tool= 1127 pres=4
+t=3767.875 seq=02 nf=4
+  f1 st=4 raw=(  2884,  5380) screen=( 491, 888) tool= 3949 pres=0
+  f2 st=4 raw=(  6418,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4470,  -236) screen=( 741,   0) tool=30347 pres=0
+  f6 st=4 raw=(   936, 10470) screen=( 183,1692) tool= 1125 pres=4
+t=3767.959 seq=01 nf=4
+  f1 st=4 raw=(  2885,  5379) screen=( 491, 888) tool= 3951 pres=0
+  f2 st=4 raw=(  6418,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=30463 pres=0
+  f6 st=4 raw=(   932, 10475) screen=( 183,1693) tool= 1126 pres=4
+t=3768.042 seq=02 nf=4
+  f1 st=4 raw=(  2886,  5378) screen=( 491, 887) tool= 3949 pres=0
+  f2 st=4 raw=(  6418,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=30338 pres=0
+  f6 st=4 raw=(   933, 10473) screen=( 183,1693) tool= 1126 pres=4
+t=3768.125 seq=01 nf=4
+  f1 st=4 raw=(  2888,  5377) screen=( 491, 887) tool= 3948 pres=0
+  f2 st=4 raw=(  6418,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=29936 pres=0
+  f6 st=4 raw=(   932, 10474) screen=( 183,1693) tool= 1128 pres=3
+t=3768.209 seq=02 nf=4
+  f1 st=4 raw=(  2873,  5386) screen=( 489, 889) tool= 3946 pres=0
+  f2 st=4 raw=(  6418,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=30588 pres=0
+  f6 st=4 raw=(   932, 10475) screen=( 183,1693) tool= 1128 pres=3
+t=3768.292 seq=01 nf=4
+  f1 st=4 raw=(  2885,  5379) screen=( 491, 888) tool= 3946 pres=0
+  f2 st=4 raw=(  6418,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=30627 pres=0
+  f6 st=4 raw=(   931, 10476) screen=( 182,1693) tool= 1128 pres=3
+t=3768.459 seq=02 nf=4
+  f1 st=4 raw=(  2867,  5391) screen=( 488, 889) tool= 3945 pres=0
+  f2 st=4 raw=(  6416,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=31262 pres=0
+  f6 st=4 raw=(   930, 10476) screen=( 182,1693) tool= 1128 pres=3
+t=3768.542 seq=01 nf=4
+  f1 st=4 raw=(  2879,  5384) screen=( 490, 888) tool= 3947 pres=0
+  f2 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=30650 pres=0
+  f6 st=4 raw=(   930, 10477) screen=( 182,1693) tool= 1128 pres=4
+t=3768.708 seq=02 nf=4
+  f1 st=4 raw=(  2866,  5391) screen=( 488, 889) tool= 3945 pres=0
+  f2 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=30897 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1128 pres=4
+t=3768.792 seq=01 nf=4
+  f1 st=4 raw=(  2884,  5380) screen=( 491, 888) tool= 3946 pres=0
+  f2 st=4 raw=(  6416,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=30400 pres=0
+  f6 st=4 raw=(   931, 10476) screen=( 182,1693) tool= 1128 pres=3
+t=3768.875 seq=02 nf=4
+  f1 st=4 raw=(  2884,  5379) screen=( 491, 888) tool= 3950 pres=0
+  f2 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  627 pres=1
+  f5 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=30575 pres=0
+  f6 st=4 raw=(   931, 10476) screen=( 182,1693) tool= 1128 pres=3
+t=3768.959 seq=01 nf=4
+  f1 st=4 raw=(  2886,  5378) screen=( 491, 887) tool= 3949 pres=0
+  f2 st=4 raw=(  6416,  6095) screen=(1049,1001) tool=  627 pres=1
+  f5 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=30855 pres=0
+  f6 st=4 raw=(   931, 10476) screen=( 182,1693) tool= 1128 pres=3
+t=3769.041 seq=02 nf=4
+  f1 st=4 raw=(  2888,  5377) screen=( 491, 887) tool= 3950 pres=0
+  f2 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=31056 pres=0
+  f6 st=4 raw=(   930, 10477) screen=( 182,1693) tool= 1128 pres=3
+t=3769.125 seq=01 nf=4
+  f1 st=4 raw=(  2887,  5377) screen=( 491, 887) tool= 3951 pres=0
+  f2 st=4 raw=(  6416,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=30531 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1128 pres=3
+t=3769.292 seq=02 nf=4
+  f1 st=4 raw=(  2889,  5376) screen=( 492, 887) tool= 3951 pres=0
+  f2 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4470,  -236) screen=( 741,   0) tool=30900 pres=0
+  f6 st=4 raw=(   938, 10468) screen=( 184,1692) tool= 1125 pres=3
+t=3769.375 seq=01 nf=4
+  f1 st=4 raw=(  2888,  5377) screen=( 491, 887) tool= 3948 pres=0
+  f2 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4470,  -236) screen=( 741,   0) tool=30117 pres=0
+  f6 st=4 raw=(   938, 10467) screen=( 184,1692) tool= 1124 pres=3
+t=3769.459 seq=02 nf=4
+  f1 st=4 raw=(  2888,  5377) screen=( 491, 887) tool= 3950 pres=0
+  f2 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4470,  -236) screen=( 741,   0) tool=30313 pres=0
+  f6 st=4 raw=(   940, 10464) screen=( 184,1691) tool= 1123 pres=3
+t=3769.625 seq=01 nf=4
+  f1 st=4 raw=(  2888,  5377) screen=( 491, 887) tool= 3952 pres=0
+  f2 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4470,  -236) screen=( 741,   0) tool=30585 pres=0
+  f6 st=4 raw=(   940, 10464) screen=( 184,1691) tool= 1122 pres=4
+t=3769.709 seq=02 nf=4
+  f1 st=4 raw=(  2888,  5377) screen=( 491, 887) tool= 3948 pres=0
+  f2 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4470,  -236) screen=( 741,   0) tool=30543 pres=0
+  f6 st=4 raw=(   935, 10472) screen=( 183,1693) tool= 1125 pres=4
+t=3769.792 seq=01 nf=4
+  f1 st=4 raw=(  2884,  5379) screen=( 491, 888) tool= 3948 pres=0
+  f2 st=4 raw=(  6416,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4470,  -236) screen=( 741,   0) tool=29858 pres=0
+  f6 st=4 raw=(   938, 10468) screen=( 184,1692) tool= 1124 pres=3
+t=3769.875 seq=02 nf=4
+  f1 st=4 raw=(  2886,  5378) screen=( 491, 887) tool= 3947 pres=0
+  f2 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  627 pres=1
+  f5 st=4 raw=(  4470,  -236) screen=( 741,   0) tool=30323 pres=0
+  f6 st=4 raw=(   932, 10475) screen=( 183,1693) tool= 1127 pres=3
+t=3769.959 seq=01 nf=4
+  f1 st=4 raw=(  2873,  5387) screen=( 489, 889) tool= 3948 pres=0
+  f2 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=30563 pres=0
+  f6 st=4 raw=(   931, 10475) screen=( 182,1693) tool= 1127 pres=3
+t=3770.042 seq=02 nf=4
+  f1 st=4 raw=(  2886,  5378) screen=( 491, 887) tool= 3948 pres=0
+  f2 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=30645 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1127 pres=3
+t=3770.125 seq=01 nf=4
+  f1 st=4 raw=(  2883,  5381) screen=( 491, 888) tool= 3948 pres=0
+  f2 st=4 raw=(  6418,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=30505 pres=0
+  f6 st=4 raw=(   932, 10475) screen=( 183,1693) tool= 1127 pres=3
+t=3770.209 seq=02 nf=4
+  f1 st=4 raw=(  2886,  5378) screen=( 491, 887) tool= 3949 pres=0
+  f2 st=4 raw=(  6418,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=30486 pres=0
+  f6 st=4 raw=(   931, 10475) screen=( 182,1693) tool= 1127 pres=3
+t=3770.292 seq=01 nf=4
+  f1 st=4 raw=(  2873,  5387) screen=( 489, 889) tool= 3950 pres=0
+  f2 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=30805 pres=0
+  f6 st=4 raw=(   931, 10476) screen=( 182,1693) tool= 1127 pres=3
+t=3770.376 seq=02 nf=4
+  f1 st=4 raw=(  2867,  5391) screen=( 488, 889) tool= 3950 pres=0
+  f2 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=31173 pres=0
+  f6 st=4 raw=(   931, 10476) screen=( 182,1693) tool= 1127 pres=3
+t=3770.542 seq=01 nf=4
+  f1 st=4 raw=(  2881,  5382) screen=( 490, 888) tool= 3952 pres=0
+  f2 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=31332 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1127 pres=3
+t=3770.626 seq=02 nf=4
+  f1 st=4 raw=(  2872,  5388) screen=( 489, 889) tool= 3950 pres=0
+  f2 st=4 raw=(  6418,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=30698 pres=0
+  f6 st=4 raw=(   932, 10475) screen=( 183,1693) tool= 1127 pres=3
+t=3770.709 seq=01 nf=4
+  f1 st=4 raw=(  2868,  5390) screen=( 488, 889) tool= 3950 pres=0
+  f2 st=4 raw=(  6416,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=30957 pres=0
+  f6 st=4 raw=(   931, 10476) screen=( 182,1693) tool= 1127 pres=3
+t=3770.792 seq=02 nf=4
+  f1 st=4 raw=(  2881,  5382) screen=( 490, 888) tool= 3951 pres=0
+  f2 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=30500 pres=0
+  f6 st=4 raw=(   931, 10476) screen=( 182,1693) tool= 1127 pres=3
+t=3770.876 seq=01 nf=4
+  f1 st=4 raw=(  2882,  5381) screen=( 491, 888) tool= 3951 pres=0
+  f2 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=30618 pres=0
+  f6 st=4 raw=(   930, 10477) screen=( 182,1693) tool= 1127 pres=3
+t=3771.042 seq=02 nf=4
+  f1 st=4 raw=(  2871,  5388) screen=( 489, 889) tool= 3950 pres=0
+  f2 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=31046 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1127 pres=3
+t=3771.125 seq=01 nf=4
+  f1 st=4 raw=(  2870,  5389) screen=( 489, 889) tool= 3947 pres=0
+  f2 st=4 raw=(  6418,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=30622 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1127 pres=3
+t=3771.209 seq=02 nf=4
+  f1 st=4 raw=(  2884,  5380) screen=( 491, 888) tool= 3947 pres=0
+  f2 st=4 raw=(  6418,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=31088 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1127 pres=3
+t=3771.292 seq=01 nf=4
+  f1 st=4 raw=(  2873,  5387) screen=( 489, 889) tool= 3948 pres=0
+  f2 st=4 raw=(  6418,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=30803 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1127 pres=3
+t=3771.375 seq=02 nf=4
+  f1 st=4 raw=(  2882,  5381) screen=( 491, 888) tool= 3948 pres=0
+  f2 st=4 raw=(  6416,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=31157 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1127 pres=3
+t=3771.459 seq=01 nf=4
+  f1 st=4 raw=(  2884,  5379) screen=( 491, 888) tool= 3947 pres=0
+  f2 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=30823 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1127 pres=3
+t=3771.542 seq=02 nf=4
+  f1 st=4 raw=(  2871,  5388) screen=( 489, 889) tool= 3949 pres=0
+  f2 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=30898 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1127 pres=4
+t=3771.626 seq=01 nf=4
+  f1 st=4 raw=(  2883,  5379) screen=( 491, 888) tool= 3950 pres=0
+  f2 st=4 raw=(  6416,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=31091 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1127 pres=4
+t=3771.792 seq=02 nf=4
+  f1 st=4 raw=(  2883,  5380) screen=( 491, 888) tool= 3947 pres=0
+  f2 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=31049 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1127 pres=4
+t=3771.876 seq=01 nf=4
+  f1 st=4 raw=(  2884,  5381) screen=( 491, 888) tool= 3947 pres=0
+  f2 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=31219 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1127 pres=4
+t=3771.959 seq=02 nf=4
+  f1 st=4 raw=(  2885,  5379) screen=( 491, 888) tool= 3950 pres=0
+  f2 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=31009 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1127 pres=4
+t=3772.042 seq=01 nf=4
+  f1 st=4 raw=(  2889,  5377) screen=( 492, 887) tool= 3948 pres=0
+  f2 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4470,  -236) screen=( 741,   0) tool=30813 pres=0
+  f6 st=4 raw=(   931, 10475) screen=( 182,1693) tool= 1129 pres=3
+t=3772.209 seq=02 nf=4
+  f1 st=4 raw=(  2889,  5376) screen=( 492, 887) tool= 3951 pres=0
+  f2 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=30664 pres=0
+  f6 st=4 raw=(   931, 10476) screen=( 182,1693) tool= 1129 pres=3
+t=3772.292 seq=01 nf=4
+  f1 st=4 raw=(  2888,  5377) screen=( 491, 887) tool= 3949 pres=0
+  f2 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=30904 pres=0
+  f6 st=4 raw=(   931, 10476) screen=( 182,1693) tool= 1129 pres=3
+t=3772.376 seq=02 nf=4
+  f1 st=4 raw=(  2888,  5377) screen=( 491, 887) tool= 3948 pres=0
+  f2 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=30434 pres=0
+  f6 st=4 raw=(   932, 10474) screen=( 183,1693) tool= 1128 pres=3
+t=3772.459 seq=01 nf=4
+  f1 st=4 raw=(  2888,  5376) screen=( 491, 887) tool= 3950 pres=0
+  f2 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=30280 pres=0
+  f6 st=4 raw=(   931, 10476) screen=( 182,1693) tool= 1128 pres=4
+t=3772.542 seq=02 nf=4
+  f1 st=4 raw=(  2888,  5377) screen=( 491, 887) tool= 3951 pres=0
+  f2 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=30405 pres=0
+  f6 st=4 raw=(   931, 10476) screen=( 182,1693) tool= 1128 pres=4
+t=3772.626 seq=01 nf=4
+  f1 st=4 raw=(  2888,  5377) screen=( 491, 887) tool= 3948 pres=0
+  f2 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=30366 pres=0
+  f6 st=4 raw=(   931, 10476) screen=( 182,1693) tool= 1128 pres=4
+t=3772.709 seq=02 nf=4
+  f1 st=4 raw=(  2888,  5377) screen=( 491, 887) tool= 3947 pres=0
+  f2 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4470,  -236) screen=( 741,   0) tool=30759 pres=0
+  f6 st=4 raw=(   931, 10476) screen=( 182,1693) tool= 1128 pres=4
+t=3772.876 seq=01 nf=4
+  f1 st=4 raw=(  2888,  5377) screen=( 491, 887) tool= 3947 pres=0
+  f2 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4470,  -236) screen=( 741,   0) tool=30278 pres=0
+  f6 st=4 raw=(   931, 10476) screen=( 182,1693) tool= 1128 pres=3
+t=3772.959 seq=02 nf=4
+  f1 st=4 raw=(  2889,  5377) screen=( 492, 887) tool= 3947 pres=0
+  f2 st=4 raw=(  6418,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4470,  -236) screen=( 741,   0) tool=30424 pres=0
+  f6 st=4 raw=(   932, 10475) screen=( 183,1693) tool= 1128 pres=3
+t=3773.043 seq=01 nf=4
+  f1 st=4 raw=(  2888,  5377) screen=( 491, 887) tool= 3950 pres=0
+  f2 st=4 raw=(  6418,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4470,  -236) screen=( 741,   0) tool=30787 pres=0
+  f6 st=4 raw=(   936, 10470) screen=( 183,1692) tool= 1126 pres=3
+t=3773.126 seq=02 nf=4
+  f1 st=4 raw=(  2888,  5376) screen=( 491, 887) tool= 3950 pres=0
+  f2 st=4 raw=(  6416,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4470,  -236) screen=( 741,   0) tool=30437 pres=0
+  f6 st=4 raw=(   933, 10474) screen=( 183,1693) tool= 1128 pres=3
+t=3773.293 seq=01 nf=4
+  f1 st=4 raw=(  2888,  5377) screen=( 491, 887) tool= 3950 pres=0
+  f2 st=4 raw=(  6416,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4470,  -236) screen=( 741,   0) tool=30491 pres=0
+  f6 st=4 raw=(   932, 10475) screen=( 183,1693) tool= 1127 pres=3
+t=3773.376 seq=02 nf=4
+  f1 st=4 raw=(  2888,  5377) screen=( 491, 887) tool= 3948 pres=0
+  f2 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4470,  -236) screen=( 741,   0) tool=30606 pres=0
+  f6 st=4 raw=(   931, 10476) screen=( 182,1693) tool= 1127 pres=3
+t=3773.459 seq=01 nf=4
+  f1 st=4 raw=(  2888,  5376) screen=( 491, 887) tool= 3950 pres=0
+  f2 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4470,  -236) screen=( 741,   0) tool=30179 pres=0
+  f6 st=4 raw=(   935, 10471) screen=( 183,1692) tool= 1125 pres=3
+t=3773.543 seq=02 nf=4
+  f1 st=4 raw=(  2888,  5377) screen=( 491, 887) tool= 3951 pres=0
+  f2 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4470,  -236) screen=( 741,   0) tool=30067 pres=0
+  f6 st=4 raw=(   937, 10468) screen=( 183,1692) tool= 1124 pres=3
+t=3773.626 seq=01 nf=4
+  f1 st=4 raw=(  2888,  5377) screen=( 491, 887) tool= 3948 pres=0
+  f2 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4470,  -236) screen=( 741,   0) tool=30191 pres=0
+  f6 st=4 raw=(   938, 10466) screen=( 184,1692) tool= 1123 pres=3
+t=3773.709 seq=02 nf=4
+  f1 st=4 raw=(  2888,  5377) screen=( 491, 887) tool= 3948 pres=0
+  f2 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4470,  -236) screen=( 741,   0) tool=30406 pres=0
+  f6 st=4 raw=(   935, 10471) screen=( 183,1692) tool= 1125 pres=3
+t=3773.792 seq=01 nf=4
+  f1 st=4 raw=(  2888,  5377) screen=( 491, 887) tool= 3950 pres=0
+  f2 st=4 raw=(  6417,  6094) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4470,  -236) screen=( 741,   0) tool=30333 pres=0
+  f6 st=4 raw=(   932, 10474) screen=( 183,1693) tool= 1127 pres=3
+t=3774.043 seq=02 nf=4
+  f1 st=4 raw=(  2874,  5387) screen=( 489, 889) tool= 3949 pres=0
+  f2 st=4 raw=(  6418,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4470,  -236) screen=( 741,   0) tool=30132 pres=0
+  f6 st=4 raw=(   930, 10477) screen=( 182,1693) tool= 1127 pres=3
+t=3774.293 seq=01 nf=4
+  f1 st=4 raw=(  2885,  5380) screen=( 491, 888) tool= 3948 pres=0
+  f2 st=4 raw=(  6418,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4470,  -236) screen=( 741,   0) tool=30369 pres=0
+  f6 st=4 raw=(   932, 10476) screen=( 183,1693) tool= 1127 pres=4
+t=3774.376 seq=02 nf=4
+  f1 st=4 raw=(  2885,  5379) screen=( 491, 888) tool= 3950 pres=0
+  f2 st=4 raw=(  6416,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4470,  -236) screen=( 741,   0) tool=30496 pres=0
+  f6 st=4 raw=(   931, 10476) screen=( 182,1693) tool= 1127 pres=4
+t=3774.459 seq=01 nf=4
+  f1 st=4 raw=(  2888,  5377) screen=( 491, 887) tool= 3948 pres=0
+  f2 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4470,  -236) screen=( 741,   0) tool=30787 pres=0
+  f6 st=4 raw=(   931, 10476) screen=( 182,1693) tool= 1127 pres=4
+t=3774.709 seq=02 nf=4
+  f1 st=4 raw=(  2890,  5376) screen=( 492, 887) tool= 3949 pres=0
+  f2 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4470,  -236) screen=( 741,   0) tool=30453 pres=0
+  f6 st=4 raw=(   935, 10470) screen=( 183,1692) tool= 1125 pres=4
+t=3774.793 seq=01 nf=4
+  f1 st=4 raw=(  2874,  5387) screen=( 489, 889) tool= 3949 pres=0
+  f2 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4470,  -236) screen=( 741,   0) tool=30573 pres=0
+  f6 st=4 raw=(   932, 10475) screen=( 183,1693) tool= 1126 pres=3
+t=3774.876 seq=02 nf=4
+  f1 st=4 raw=(  2883,  5379) screen=( 491, 888) tool= 3951 pres=0
+  f2 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4470,  -236) screen=( 741,   0) tool=30944 pres=0
+  f6 st=4 raw=(   931, 10475) screen=( 182,1693) tool= 1127 pres=3
+t=3774.959 seq=01 nf=4
+  f1 st=4 raw=(  2886,  5379) screen=( 491, 888) tool= 3949 pres=0
+  f2 st=4 raw=(  6418,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4470,  -236) screen=( 741,   0) tool=30656 pres=0
+  f6 st=4 raw=(   931, 10476) screen=( 182,1693) tool= 1127 pres=3
+t=3775.043 seq=02 nf=4
+  f1 st=4 raw=(  2871,  5388) screen=( 489, 889) tool= 3949 pres=0
+  f2 st=4 raw=(  6418,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4470,  -236) screen=( 741,   0) tool=30128 pres=0
+  f6 st=4 raw=(   931, 10476) screen=( 182,1693) tool= 1127 pres=3
+t=3775.126 seq=01 nf=4
+  f1 st=4 raw=(  2885,  5379) screen=( 491, 888) tool= 3947 pres=0
+  f2 st=4 raw=(  6418,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=30327 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1127 pres=3
+t=3775.209 seq=02 nf=4
+  f1 st=4 raw=(  2888,  5377) screen=( 491, 887) tool= 3947 pres=0
+  f2 st=4 raw=(  6418,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=31024 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1127 pres=3
+t=3775.376 seq=01 nf=4
+  f1 st=4 raw=(  2888,  5376) screen=( 491, 887) tool= 3951 pres=0
+  f2 st=4 raw=(  6418,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=30794 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1127 pres=3
+t=3775.460 seq=02 nf=4
+  f1 st=4 raw=(  2889,  5376) screen=( 492, 887) tool= 3949 pres=0
+  f2 st=4 raw=(  6418,  6095) screen=(1049,1001) tool=  627 pres=1
+  f5 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=30737 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1127 pres=3
+t=3775.626 seq=01 nf=4
+  f1 st=4 raw=(  2888,  5377) screen=( 491, 887) tool= 3951 pres=0
+  f2 st=4 raw=(  6418,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4470,  -236) screen=( 741,   0) tool=30930 pres=0
+  f6 st=4 raw=(   942, 10461) screen=( 184,1691) tool= 1123 pres=3
+t=3775.710 seq=02 nf=4
+  f1 st=4 raw=(  2888,  5377) screen=( 491, 887) tool= 3952 pres=0
+  f2 st=4 raw=(  6418,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4470,  -236) screen=( 741,   0) tool=30835 pres=0
+  f6 st=4 raw=(   934, 10472) screen=( 183,1693) tool= 1125 pres=3
+t=3775.793 seq=01 nf=4
+  f1 st=4 raw=(  2888,  5377) screen=( 491, 887) tool= 3951 pres=0
+  f2 st=4 raw=(  6418,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4470,  -236) screen=( 741,   0) tool=30825 pres=0
+  f6 st=4 raw=(   933, 10474) screen=( 183,1693) tool= 1127 pres=3
+t=3775.876 seq=02 nf=4
+  f1 st=4 raw=(  2888,  5377) screen=( 491, 887) tool= 3952 pres=0
+  f2 st=4 raw=(  6418,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4470,  -236) screen=( 741,   0) tool=30833 pres=0
+  f6 st=4 raw=(   931, 10476) screen=( 182,1693) tool= 1127 pres=3
+t=3775.960 seq=01 nf=4
+  f1 st=4 raw=(  2888,  5377) screen=( 491, 887) tool= 3951 pres=0
+  f2 st=4 raw=(  6418,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4470,  -236) screen=( 741,   0) tool=30691 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1127 pres=3
+t=3776.043 seq=02 nf=4
+  f1 st=4 raw=(  2888,  5377) screen=( 491, 887) tool= 3948 pres=0
+  f2 st=4 raw=(  6418,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4470,  -236) screen=( 741,   0) tool=30416 pres=0
+  f6 st=4 raw=(   931, 10476) screen=( 182,1693) tool= 1127 pres=3
+t=3776.126 seq=01 nf=4
+  f1 st=4 raw=(  2888,  5377) screen=( 491, 887) tool= 3948 pres=0
+  f2 st=4 raw=(  6418,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4470,  -236) screen=( 741,   0) tool=30073 pres=0
+  f6 st=4 raw=(   931, 10476) screen=( 182,1693) tool= 1127 pres=3
+t=3776.210 seq=02 nf=4
+  f1 st=4 raw=(  2889,  5377) screen=( 492, 887) tool= 3948 pres=0
+  f2 st=4 raw=(  6418,  6095) screen=(1049,1001) tool=  627 pres=1
+  f5 st=4 raw=(  4470,  -236) screen=( 741,   0) tool=30098 pres=0
+  f6 st=4 raw=(   931, 10476) screen=( 182,1693) tool= 1127 pres=3
+t=3776.293 seq=01 nf=4
+  f1 st=4 raw=(  2889,  5377) screen=( 492, 887) tool= 3948 pres=0
+  f2 st=4 raw=(  6418,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4470,  -236) screen=( 741,   0) tool=30219 pres=0
+  f6 st=4 raw=(   932, 10475) screen=( 183,1693) tool= 1127 pres=3
+t=3776.460 seq=02 nf=4
+  f1 st=4 raw=(  2873,  5387) screen=( 489, 889) tool= 3947 pres=0
+  f2 st=4 raw=(  6418,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=30874 pres=0
+  f6 st=4 raw=(   931, 10476) screen=( 182,1693) tool= 1127 pres=3
+t=3776.543 seq=01 nf=4
+  f1 st=4 raw=(  2884,  5379) screen=( 491, 888) tool= 3949 pres=0
+  f2 st=4 raw=(  6418,  6095) screen=(1049,1001) tool=  627 pres=1
+  f5 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=30774 pres=0
+  f6 st=4 raw=(   931, 10476) screen=( 182,1693) tool= 1127 pres=3
+t=3776.626 seq=02 nf=4
+  f1 st=4 raw=(  2887,  5378) screen=( 491, 887) tool= 3949 pres=0
+  f2 st=4 raw=(  6418,  6095) screen=(1049,1001) tool=  627 pres=1
+  f5 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=30784 pres=0
+  f6 st=4 raw=(   931, 10476) screen=( 182,1693) tool= 1127 pres=3
+t=3776.710 seq=01 nf=4
+  f1 st=4 raw=(  2888,  5377) screen=( 491, 887) tool= 3948 pres=0
+  f2 st=4 raw=(  6418,  6095) screen=(1049,1001) tool=  627 pres=1
+  f5 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=30566 pres=0
+  f6 st=4 raw=(   930, 10477) screen=( 182,1693) tool= 1127 pres=3
+t=3776.793 seq=02 nf=4
+  f1 st=4 raw=(  2889,  5376) screen=( 492, 887) tool= 3950 pres=0
+  f2 st=4 raw=(  6418,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=30757 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1127 pres=3
+t=3776.876 seq=01 nf=4
+  f1 st=4 raw=(  2888,  5377) screen=( 491, 887) tool= 3948 pres=0
+  f2 st=4 raw=(  6418,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=30512 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1127 pres=3
+t=3776.960 seq=02 nf=4
+  f1 st=4 raw=(  2889,  5377) screen=( 492, 887) tool= 3948 pres=0
+  f2 st=4 raw=(  6418,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=30525 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1127 pres=3
+t=3777.043 seq=01 nf=4
+  f1 st=4 raw=(  2874,  5387) screen=( 489, 889) tool= 3950 pres=0
+  f2 st=4 raw=(  6418,  6095) screen=(1049,1001) tool=  627 pres=1
+  f5 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=31190 pres=0
+  f6 st=4 raw=(   931, 10476) screen=( 182,1693) tool= 1127 pres=3
+t=3777.126 seq=02 nf=4
+  f1 st=4 raw=(  2885,  5379) screen=( 491, 888) tool= 3949 pres=0
+  f2 st=4 raw=(  6418,  6095) screen=(1049,1001) tool=  627 pres=1
+  f5 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=30632 pres=0
+  f6 st=4 raw=(   931, 10476) screen=( 182,1693) tool= 1127 pres=4
+t=3777.210 seq=01 nf=4
+  f1 st=4 raw=(  2871,  5388) screen=( 489, 889) tool= 3950 pres=0
+  f2 st=4 raw=(  6418,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=31034 pres=0
+  f6 st=4 raw=(   931, 10476) screen=( 182,1693) tool= 1127 pres=3
+t=3777.293 seq=02 nf=4
+  f1 st=4 raw=(  2866,  5392) screen=( 488, 890) tool= 3947 pres=0
+  f2 st=4 raw=(  6416,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=30693 pres=0
+  f6 st=4 raw=(   930, 10477) screen=( 182,1693) tool= 1127 pres=3
+t=3777.376 seq=01 nf=4
+  f1 st=4 raw=(  2867,  5391) screen=( 488, 889) tool= 3945 pres=0
+  f2 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=31150 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1127 pres=3
+t=3777.460 seq=02 nf=4
+  f1 st=4 raw=(  2880,  5382) screen=( 490, 888) tool= 3946 pres=0
+  f2 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=30771 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1127 pres=3
+t=3777.543 seq=01 nf=4
+  f1 st=4 raw=(  2887,  5378) screen=( 491, 887) tool= 3946 pres=0
+  f2 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=30249 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1127 pres=3
+t=3777.626 seq=02 nf=4
+  f1 st=4 raw=(  2888,  5377) screen=( 491, 887) tool= 3946 pres=0
+  f2 st=4 raw=(  6416,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=30280 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1127 pres=3
+t=3777.710 seq=01 nf=4
+  f1 st=4 raw=(  2889,  5377) screen=( 492, 887) tool= 3946 pres=0
+  f2 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4470,  -236) screen=( 741,   0) tool=30222 pres=0
+  f6 st=4 raw=(   933, 10473) screen=( 183,1693) tool= 1126 pres=4
+t=3777.793 seq=02 nf=4
+  f1 st=4 raw=(  2889,  5376) screen=( 492, 887) tool= 3946 pres=0
+  f2 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  627 pres=1
+  f5 st=4 raw=(  4470,  -236) screen=( 741,   0) tool=30039 pres=0
+  f6 st=4 raw=(   934, 10473) screen=( 183,1693) tool= 1125 pres=4
+t=3777.960 seq=01 nf=4
+  f1 st=4 raw=(  2887,  5377) screen=( 491, 887) tool= 3946 pres=0
+  f2 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  627 pres=1
+  f5 st=4 raw=(  4470,  -236) screen=( 741,   0) tool=30139 pres=0
+  f6 st=4 raw=(   938, 10466) screen=( 184,1692) tool= 1124 pres=4
+t=3778.043 seq=02 nf=4
+  f1 st=4 raw=(  2888,  5377) screen=( 491, 887) tool= 3946 pres=0
+  f2 st=4 raw=(  6418,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=30319 pres=0
+  f6 st=4 raw=(   934, 10473) screen=( 183,1693) tool= 1125 pres=4
+t=3778.126 seq=01 nf=4
+  f1 st=4 raw=(  2888,  5377) screen=( 491, 887) tool= 3946 pres=0
+  f2 st=4 raw=(  6418,  6095) screen=(1049,1001) tool=  627 pres=1
+  f5 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=30132 pres=0
+  f6 st=4 raw=(   934, 10472) screen=( 183,1693) tool= 1125 pres=4
+t=3778.210 seq=02 nf=4
+  f1 st=4 raw=(  2888,  5377) screen=( 491, 887) tool= 3946 pres=0
+  f2 st=4 raw=(  6418,  6095) screen=(1049,1001) tool=  627 pres=1
+  f5 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=29913 pres=0
+  f6 st=4 raw=(   933, 10474) screen=( 183,1693) tool= 1126 pres=4
+t=3778.377 seq=01 nf=4
+  f1 st=4 raw=(  2874,  5387) screen=( 489, 889) tool= 3945 pres=0
+  f2 st=4 raw=(  6418,  6095) screen=(1049,1001) tool=  627 pres=1
+  f5 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=30236 pres=0
+  f6 st=4 raw=(   931, 10475) screen=( 182,1693) tool= 1127 pres=4
+t=3778.460 seq=02 nf=4
+  f1 st=4 raw=(  2884,  5379) screen=( 491, 888) tool= 3945 pres=0
+  f2 st=4 raw=(  6418,  6095) screen=(1049,1001) tool=  627 pres=1
+  f5 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=30687 pres=0
+  f6 st=4 raw=(   931, 10476) screen=( 182,1693) tool= 1127 pres=4
+t=3778.543 seq=01 nf=4
+  f1 st=4 raw=(  2886,  5378) screen=( 491, 887) tool= 3947 pres=0
+  f2 st=4 raw=(  6418,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4470,  -236) screen=( 741,   0) tool=30572 pres=0
+  f6 st=4 raw=(   930, 10477) screen=( 182,1693) tool= 1127 pres=4
+t=3778.710 seq=02 nf=4
+  f1 st=4 raw=(  2888,  5378) screen=( 491, 887) tool= 3947 pres=0
+  f2 st=4 raw=(  6418,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4470,  -236) screen=( 741,   0) tool=30648 pres=0
+  f6 st=4 raw=(   930, 10477) screen=( 182,1693) tool= 1127 pres=4
+t=3778.793 seq=01 nf=4
+  f1 st=4 raw=(  2890,  5376) screen=( 492, 887) tool= 3947 pres=0
+  f2 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4470,  -236) screen=( 741,   0) tool=31123 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1127 pres=4
+t=3778.876 seq=02 nf=4
+  f1 st=4 raw=(  2888,  5377) screen=( 491, 887) tool= 3947 pres=0
+  f2 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4470,  -236) screen=( 741,   0) tool=30772 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1127 pres=4
+t=3778.960 seq=01 nf=4
+  f1 st=4 raw=(  2889,  5377) screen=( 492, 887) tool= 3947 pres=0
+  f2 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4470,  -236) screen=( 741,   0) tool=30740 pres=0
+  f6 st=4 raw=(   933, 10473) screen=( 183,1693) tool= 1126 pres=4
+t=3779.043 seq=02 nf=4
+  f1 st=4 raw=(  2888,  5377) screen=( 491, 887) tool= 3950 pres=0
+  f2 st=4 raw=(  6418,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4470,  -236) screen=( 741,   0) tool=30730 pres=0
+  f6 st=4 raw=(   932, 10475) screen=( 183,1693) tool= 1127 pres=4
+t=3779.127 seq=01 nf=4
+  f1 st=4 raw=(  2888,  5377) screen=( 491, 887) tool= 3949 pres=0
+  f2 st=4 raw=(  6418,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4470,  -236) screen=( 741,   0) tool=30333 pres=0
+  f6 st=4 raw=(   932, 10475) screen=( 183,1693) tool= 1127 pres=4
+t=3779.210 seq=02 nf=4
+  f1 st=4 raw=(  2888,  5376) screen=( 491, 887) tool= 3951 pres=0
+  f2 st=4 raw=(  6418,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4470,  -236) screen=( 741,   0) tool=30790 pres=0
+  f6 st=4 raw=(   931, 10476) screen=( 182,1693) tool= 1127 pres=4
+t=3779.293 seq=01 nf=4
+  f1 st=4 raw=(  2888,  5377) screen=( 491, 887) tool= 3951 pres=0
+  f2 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=30891 pres=0
+  f6 st=4 raw=(   931, 10476) screen=( 182,1693) tool= 1127 pres=4
+t=3779.377 seq=02 nf=4
+  f1 st=4 raw=(  2888,  5377) screen=( 491, 887) tool= 3948 pres=0
+  f2 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=31018 pres=0
+  f6 st=4 raw=(   930, 10476) screen=( 182,1693) tool= 1127 pres=4
+t=3779.460 seq=01 nf=4
+  f1 st=4 raw=(  2884,  5379) screen=( 491, 888) tool= 3948 pres=0
+  f2 st=4 raw=(  6416,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=30755 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1127 pres=4
+t=3779.543 seq=02 nf=4
+  f1 st=4 raw=(  2871,  5388) screen=( 489, 889) tool= 3948 pres=0
+  f2 st=4 raw=(  6416,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=30224 pres=0
+  f6 st=4 raw=(   931, 10476) screen=( 182,1693) tool= 1127 pres=4
+t=3779.627 seq=01 nf=4
+  f1 st=4 raw=(  2883,  5381) screen=( 491, 888) tool= 3948 pres=0
+  f2 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=30247 pres=0
+  f6 st=4 raw=(   931, 10476) screen=( 182,1693) tool= 1127 pres=4
+t=3779.710 seq=02 nf=4
+  f1 st=4 raw=(  2887,  5379) screen=( 491, 888) tool= 3948 pres=0
+  f2 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=29881 pres=0
+  f6 st=4 raw=(   934, 10472) screen=( 183,1693) tool= 1130 pres=4
+t=3779.793 seq=01 nf=4
+  f1 st=4 raw=(  2888,  5377) screen=( 491, 887) tool= 3950 pres=0
+  f2 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=29998 pres=0
+  f6 st=4 raw=(   932, 10475) screen=( 183,1693) tool= 1129 pres=4
+t=3779.877 seq=02 nf=4
+  f1 st=4 raw=(  2888,  5377) screen=( 491, 887) tool= 3952 pres=0
+  f2 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=30276 pres=0
+  f6 st=4 raw=(   938, 10467) screen=( 184,1692) tool= 1126 pres=3
+t=3779.960 seq=01 nf=4
+  f1 st=4 raw=(  2889,  5376) screen=( 492, 887) tool= 3950 pres=0
+  f2 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=30309 pres=0
+  f6 st=4 raw=(   935, 10471) screen=( 183,1692) tool= 1126 pres=3
+t=3780.043 seq=02 nf=4
+  f1 st=4 raw=(  2888,  5377) screen=( 491, 887) tool= 3949 pres=0
+  f2 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4470,  -236) screen=( 741,   0) tool=30031 pres=0
+  f6 st=4 raw=(   935, 10471) screen=( 183,1692) tool= 1128 pres=3
+t=3780.127 seq=01 nf=4
+  f1 st=4 raw=(  2888,  5377) screen=( 491, 887) tool= 3948 pres=0
+  f2 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4470,  -236) screen=( 741,   0) tool=30582 pres=0
+  f6 st=4 raw=(   932, 10474) screen=( 183,1693) tool= 1128 pres=3
+t=3780.293 seq=02 nf=4
+  f1 st=4 raw=(  2888,  5377) screen=( 491, 887) tool= 3949 pres=0
+  f2 st=4 raw=(  6418,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4470,  -236) screen=( 741,   0) tool=30488 pres=0
+  f6 st=4 raw=(   936, 10469) screen=( 183,1692) tool= 1125 pres=3
+t=3780.377 seq=01 nf=4
+  f1 st=4 raw=(  2888,  5377) screen=( 491, 887) tool= 3948 pres=0
+  f2 st=4 raw=(  6418,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4470,  -236) screen=( 741,   0) tool=30574 pres=0
+  f6 st=4 raw=(   933, 10474) screen=( 183,1693) tool= 1126 pres=3
+t=3780.460 seq=02 nf=4
+  f1 st=4 raw=(  2888,  5377) screen=( 491, 887) tool= 3948 pres=0
+  f2 st=4 raw=(  6418,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4470,  -236) screen=( 741,   0) tool=30725 pres=0
+  f6 st=4 raw=(   936, 10470) screen=( 183,1692) tool= 1125 pres=4
+t=3780.627 seq=01 nf=4
+  f1 st=4 raw=(  2888,  5377) screen=( 491, 887) tool= 3950 pres=0
+  f2 st=4 raw=(  6418,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4470,  -236) screen=( 741,   0) tool=30694 pres=0
+  f6 st=4 raw=(   934, 10472) screen=( 183,1693) tool= 1125 pres=4
+t=3780.710 seq=02 nf=4
+  f1 st=4 raw=(  2888,  5377) screen=( 491, 887) tool= 3952 pres=0
+  f2 st=4 raw=(  6418,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4470,  -236) screen=( 741,   0) tool=30360 pres=0
+  f6 st=4 raw=(   932, 10475) screen=( 183,1693) tool= 1127 pres=4
+t=3780.794 seq=01 nf=4
+  f1 st=4 raw=(  2887,  5377) screen=( 491, 887) tool= 3953 pres=0
+  f2 st=4 raw=(  6418,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4470,  -236) screen=( 741,   0) tool=30338 pres=0
+  f6 st=4 raw=(   935, 10470) screen=( 183,1692) tool= 1125 pres=4
+t=3780.960 seq=02 nf=4
+  f1 st=4 raw=(  2888,  5377) screen=( 491, 887) tool= 3953 pres=0
+  f2 st=4 raw=(  6418,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4470,  -236) screen=( 741,   0) tool=30291 pres=0
+  f6 st=4 raw=(   935, 10470) screen=( 183,1692) tool= 1125 pres=4
+t=3781.043 seq=01 nf=4
+  f1 st=4 raw=(  2873,  5387) screen=( 489, 889) tool= 3952 pres=0
+  f2 st=4 raw=(  6418,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4470,  -236) screen=( 741,   0) tool=30294 pres=0
+  f6 st=4 raw=(   932, 10474) screen=( 183,1693) tool= 1126 pres=3
+t=3781.210 seq=02 nf=4
+  f1 st=4 raw=(  2883,  5380) screen=( 491, 888) tool= 3952 pres=0
+  f2 st=4 raw=(  6416,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4470,  -236) screen=( 741,   0) tool=30722 pres=0
+  f6 st=4 raw=(   932, 10475) screen=( 183,1693) tool= 1127 pres=3
+t=3781.294 seq=01 nf=4
+  f1 st=4 raw=(  2870,  5389) screen=( 489, 889) tool= 3951 pres=0
+  f2 st=4 raw=(  6416,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4470,  -236) screen=( 741,   0) tool=30990 pres=0
+  f6 st=4 raw=(   932, 10475) screen=( 183,1693) tool= 1127 pres=3
+t=3781.377 seq=02 nf=4
+  f1 st=4 raw=(  2868,  5391) screen=( 488, 889) tool= 3948 pres=0
+  f2 st=4 raw=(  6416,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4470,  -236) screen=( 741,   0) tool=30548 pres=0
+  f6 st=4 raw=(   931, 10476) screen=( 182,1693) tool= 1127 pres=3
+t=3781.460 seq=01 nf=4
+  f1 st=4 raw=(  2868,  5394) screen=( 488, 890) tool= 3944 pres=0
+  f2 st=4 raw=(  6415,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4470,  -236) screen=( 741,   0) tool=30148 pres=0
+  f6 st=4 raw=(   930, 10477) screen=( 182,1693) tool= 1127 pres=2
+t=3781.544 seq=02 nf=4
+  f1 st=4 raw=(  2871,  5394) screen=( 489, 890) tool= 3942 pres=0
+  f2 st=4 raw=(  6416,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4470,  -236) screen=( 741,   0) tool=30267 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1128 pres=2
+t=3781.627 seq=01 nf=4
+  f1 st=4 raw=(  2874,  5394) screen=( 489, 890) tool= 3940 pres=0
+  f2 st=4 raw=(  6416,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4470,  -236) screen=( 741,   0) tool=30009 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1128 pres=2
+t=3781.710 seq=02 nf=4
+  f1 st=4 raw=(  2874,  5395) screen=( 489, 890) tool= 3940 pres=0
+  f2 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4470,  -236) screen=( 741,   0) tool=30175 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1128 pres=3
+t=3781.794 seq=01 nf=4
+  f1 st=4 raw=(  2880,  5395) screen=( 490, 890) tool= 3938 pres=0
+  f2 st=4 raw=(  6416,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4470,  -236) screen=( 741,   0) tool=30513 pres=0
+  f6 st=4 raw=(   932, 10477) screen=( 183,1693) tool= 1128 pres=3
+t=3781.877 seq=02 nf=4
+  f1 st=4 raw=(  2886,  5395) screen=( 491, 890) tool= 3934 pres=0
+  f2 st=4 raw=(  6416,  6095) screen=(1049,1001) tool=  627 pres=0
+  f5 st=4 raw=(  4470,  -236) screen=( 741,   0) tool=30557 pres=0
+  f6 st=4 raw=(   933, 10477) screen=( 183,1693) tool= 1128 pres=3
+t=3781.961 seq=01 nf=5
+  f1 st=4 raw=(  2878,  5470) screen=( 490, 902) tool= 3961 pres=0
+  f2 st=4 raw=(  6416,  6094) screen=(1049,1001) tool=  626 pres=0
+  f4 st=3 raw=(  4431,  -236) screen=( 735,   0) tool=28409 pres=0
+  f5 st=7 raw=(  4470,  -236) screen=( 741,   0) tool=    0 pres=0
+  f6 st=4 raw=(  1139, 10557) screen=( 215,1706) tool=  986 pres=1
+t=3782.044 seq=02 nf=5
+  f1 st=4 raw=(  2826,  5520) screen=( 482, 910) tool= 3961 pres=11
+  f2 st=4 raw=(  6365,  6125) screen=(1041,1005) tool=  626 pres=0
+  f4 st=4 raw=(  4182,  -236) screen=( 696,   0) tool= 4039 pres=0
+  f5 st=0 raw=(  4470,  -236) screen=( 741,   0) tool=    0 pres=0
+  f6 st=4 raw=(  1241, 10484) screen=( 231,1695) tool=  972 pres=0
+t=3782.128 seq=01 nf=4
+  f1 st=4 raw=(  2745,  5635) screen=( 469, 928) tool= 3961 pres=82
+  f2 st=4 raw=(  6289,  6214) screen=(1029,1020) tool=  626 pres=0
+  f4 st=4 raw=(  4381,  -236) screen=( 727,   0) tool=28773 pres=0
+  f6 st=4 raw=(  1420, 10562) screen=( 260,1707) tool=  692 pres=0
+t=3782.209 seq=02 nf=4
+  f1 st=4 raw=(  -224,  7992) screen=(   0,1301) tool=  455 pres=246
+  f2 st=4 raw=(  3321,  5547) screen=( 560, 914) tool= 4130 pres=0
+  f4 st=4 raw=(  4405,  -236) screen=( 731,   0) tool=27765 pres=0
+  f6 st=4 raw=(  1324, 10565) screen=( 244,1707) tool=  904 pres=0
+t=3782.275 seq=01 nf=4
+  f1 st=0 raw=(  -224,  7992) screen=(   0,1301) tool=    0 pres=0
+  f2 st=4 raw=(  2900,  5529) screen=( 493, 911) tool= 4232 pres=0
+  f4 st=4 raw=(  4439,  -236) screen=( 736,   0) tool=28434 pres=0
+  f6 st=4 raw=(  1094, 10592) screen=( 208,1712) tool= 1281 pres=0
+t=3782.341 seq=02 nf=3
+  f2 st=4 raw=(  2983,  5436) screen=( 506, 897) tool= 4252 pres=77
+  f4 st=4 raw=(  4472,  -236) screen=( 742,   0) tool=30135 pres=0
+  f6 st=4 raw=(   952, 10495) screen=( 186,1696) tool= 1183 pres=0
+t=3782.425 seq=01 nf=3
+  f2 st=4 raw=(  3029,  5425) screen=( 514, 895) tool= 4260 pres=28
+  f4 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=30248 pres=0
+  f6 st=4 raw=(   913, 10478) screen=( 180,1694) tool= 1148 pres=24
+t=3782.508 seq=02 nf=3
+  f2 st=4 raw=(  3181,  5452) screen=( 538, 899) tool= 4261 pres=18
+  f4 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=30251 pres=0
+  f6 st=4 raw=(   912, 10475) screen=( 179,1693) tool= 1140 pres=19
+t=3782.575 seq=01 nf=3
+  f2 st=4 raw=(  3192,  5448) screen=( 540, 898) tool= 4261 pres=13
+  f4 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=30437 pres=0
+  f6 st=4 raw=(   913, 10473) screen=( 180,1693) tool= 1135 pres=12
+t=3782.641 seq=02 nf=3
+  f2 st=4 raw=(  3187,  5459) screen=( 539, 900) tool= 4261 pres=8
+  f4 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=30361 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1130 pres=6
+t=3782.724 seq=01 nf=3
+  f2 st=4 raw=(  3188,  5460) screen=( 539, 900) tool= 4261 pres=7
+  f4 st=4 raw=(  4470,  -236) screen=( 741,   0) tool=30531 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=4
+t=3782.791 seq=02 nf=3
+  f2 st=4 raw=(  3191,  5459) screen=( 539, 900) tool= 4261 pres=6
+  f4 st=4 raw=(  4470,  -236) screen=( 741,   0) tool=30127 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=4
+t=3782.877 seq=01 nf=3
+  f2 st=4 raw=(  3195,  5459) screen=( 540, 900) tool= 4260 pres=6
+  f4 st=4 raw=(  4470,  -236) screen=( 741,   0) tool=30161 pres=0
+  f6 st=4 raw=(   929, 10477) screen=( 182,1693) tool= 1130 pres=3
+t=3782.961 seq=02 nf=5
+  f2 st=4 raw=(  3091,  5553) screen=( 524, 915) tool= 4252 pres=5
+  f3 st=3 raw=(  4640,  -236) screen=( 768,   0) tool=39920 pres=1
+  f4 st=7 raw=(  4470,  -236) screen=( 741,   0) tool=    0 pres=0
+  f5 st=3 raw=(  2231, 10450) screen=( 388,1689) tool=  957 pres=0
+  f6 st=4 raw=(   525, 10640) screen=( 118,1719) tool=  670 pres=3
+t=3783.045 seq=01 nf=6
+  f1 st=3 raw=(   270,  6333) screen=(  78,1038) tool= 1723 pres=249
+  f2 st=4 raw=(  3836,  5479) screen=( 641, 903) tool= 3472 pres=0
+  f3 st=4 raw=(  4699,  -236) screen=( 778,   0) tool=34956 pres=1
+  f4 st=0 raw=(  4470,  -236) screen=( 741,   0) tool=    0 pres=0
+  f5 st=4 raw=(  2286, 10535) screen=( 396,1703) tool=  985 pres=0
+  f6 st=7 raw=(   525, 10640) screen=( 118,1719) tool=    0 pres=0
+t=3784.110 seq=02 nf=5
+  f1 st=4 raw=(    39,  6671) screen=(  42,1092) tool= 1056 pres=421
+  f2 st=4 raw=(  3548,  5465) screen=( 596, 901) tool= 3642 pres=0
+  f3 st=4 raw=(  4641,  -236) screen=( 768,   0) tool=39894 pres=0
+  f5 st=4 raw=(  2030, 10499) screen=( 356,1697) tool= 1501 pres=0
+  f6 st=0 raw=(   525, 10640) screen=( 118,1719) tool=    0 pres=0
+t=3784.227 seq=01 nf=6
+  f1 st=7 raw=(    43,  6643) screen=(  42,1087) tool=    0 pres=0
+  f2 st=7 raw=(  3534,  5462) screen=( 594, 901) tool=    0 pres=0
+  f3 st=4 raw=(  4544,  -236) screen=( 753,   0) tool=32086 pres=0
+  f4 st=3 raw=(  1026,  5953) screen=( 197, 978) tool= 1740 pres=0
+  f5 st=7 raw=(  1978, 10505) screen=( 348,1698) tool=    0 pres=0
+  f6 st=3 raw=(  4614,  5344) screen=( 764, 882) tool= 2611 pres=45
+t=3784.315 seq=02 nf=6
+  f1 st=0 raw=(    43,  6643) screen=(  42,1087) tool=    0 pres=0
+  f2 st=0 raw=(  3534,  5462) screen=( 594, 901) tool=    0 pres=0
+  f3 st=4 raw=(  4534,  -236) screen=( 751,   0) tool= 6303 pres=0
+  f4 st=4 raw=(  1035,  5955) screen=( 199, 979) tool= 1736 pres=0
+  f5 st=0 raw=(  1978, 10505) screen=( 348,1698) tool=    0 pres=0
+  f6 st=4 raw=(  4600,  5343) screen=( 762, 882) tool= 2612 pres=78
+t=3786.242 seq=01 nf=5
+  f1 st=3 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=381
+  f2 st=3 raw=(  3190,  5460) screen=( 539, 900) tool= 4268 pres=7
+  f3 st=4 raw=(  4482,  -236) screen=( 743,   0) tool=31308 pres=0
+  f4 st=4 raw=(  1100,  5871) screen=( 209, 965) tool= 1736 pres=0
+  f6 st=4 raw=(  4660,  5258) screen=( 771, 868) tool= 2612 pres=53
+t=3786.361 seq=02 nf=6
+  f1 st=7 raw=(   931, 10477) screen=( 182,1693) tool=    0 pres=0
+  f2 st=4 raw=(  3187,  5459) screen=( 539, 900) tool= 4267 pres=25
+  f3 st=7 raw=(  4482,  -236) screen=( 743,   0) tool=    0 pres=0
+  f4 st=7 raw=(  1100,  5871) screen=( 209, 965) tool=    0 pres=0
+  f5 st=3 raw=(  4469,  -236) screen=( 741,   0) tool=31491 pres=0
+  f6 st=7 raw=(  4660,  5258) screen=( 771, 868) tool=    0 pres=0
+t=3786.444 seq=01 nf=6
+  f1 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=137
+  f2 st=4 raw=(  3186,  5459) screen=( 539, 900) tool= 4267 pres=34
+  f3 st=0 raw=(  4482,  -236) screen=( 743,   0) tool=    0 pres=0
+  f4 st=0 raw=(  1100,  5871) screen=( 209, 965) tool=    0 pres=0
+  f5 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=30769 pres=0
+  f6 st=0 raw=(  4660,  5258) screen=( 771, 868) tool=    0 pres=0
+t=3786.525 seq=02 nf=3
+  f1 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=41
+  f2 st=4 raw=(  3187,  5459) screen=( 539, 900) tool= 4268 pres=28
+  f5 st=4 raw=(  4472,  -236) screen=( 742,   0) tool=31300 pres=0
+t=3786.592 seq=01 nf=3
+  f1 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=0
+  f2 st=4 raw=(  3186,  5459) screen=( 539, 900) tool= 4270 pres=25
+  f5 st=4 raw=(  4486,  -236) screen=( 744,   0) tool= 6207 pres=0
+t=3786.659 seq=02 nf=4
+  f1 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=0
+  f2 st=4 raw=(  3184,  5460) screen=( 538, 900) tool= 4274 pres=21
+  f3 st=3 raw=(  4495,  -236) screen=( 745,   0) tool=33154 pres=0
+  f5 st=7 raw=(  4492,  -236) screen=( 745,   0) tool=    0 pres=0
+t=3786.742 seq=01 nf=4
+  f1 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=0
+  f2 st=4 raw=(  3183,  5461) screen=( 538, 901) tool= 4276 pres=20
+  f3 st=4 raw=(  4498,  -236) screen=( 746,   0) tool=33436 pres=0
+  f5 st=0 raw=(  4492,  -236) screen=( 745,   0) tool=    0 pres=0
+t=3786.776 seq=02 nf=3
+  f1 st=4 raw=(   937, 10468) screen=( 183,1692) tool= 1126 pres=0
+  f2 st=4 raw=(  3188,  5458) screen=( 539, 900) tool= 4297 pres=19
+  f3 st=4 raw=(  4513,  -236) screen=( 748,   0) tool=35488 pres=0
+t=3788.692 seq=01 nf=5
+  f1 st=4 raw=(   935, 10467) screen=( 183,1692) tool= 1121 pres=0
+  f2 st=0 raw=(  3188,  5458) screen=( 539, 900) tool=    0 pres=0
+  f3 st=4 raw=(  4616,  -236) screen=( 764,   0) tool=40285 pres=0
+  f4 st=4 raw=(  1897,  5565) screen=( 335, 917) tool= 2726 pres=0
+  f6 st=4 raw=(  5560,  5364) screen=( 913, 885) tool= 1634 pres=18
+t=3788.812 seq=02 nf=6
+  f1 st=7 raw=(   935, 10467) screen=( 183,1692) tool=    0 pres=0
+  f2 st=3 raw=(  3178,  5534) screen=( 537, 912) tool= 4115 pres=36
+  f3 st=7 raw=(  4616,  -236) screen=( 764,   0) tool=    0 pres=0
+  f4 st=7 raw=(  1897,  5565) screen=( 335, 917) tool=    0 pres=0
+  f5 st=3 raw=(  3332,  -236) screen=( 562,   0) tool=24873 pres=0
+  f6 st=7 raw=(  5560,  5364) screen=( 913, 885) tool=    0 pres=0
+t=3788.897 seq=01 nf=6
+  f1 st=4 raw=(   965, 10433) screen=( 188,1686) tool= 1109 pres=0
+  f2 st=4 raw=(  2383,  5534) screen=( 412, 912) tool= 3444 pres=0
+  f3 st=0 raw=(  4616,  -236) screen=( 764,   0) tool=    0 pres=0
+  f4 st=0 raw=(  1897,  5565) screen=( 335, 917) tool=    0 pres=0
+  f5 st=4 raw=(  4179,  3678) screen=( 695, 619) tool= 2520 pres=344
+  f6 st=0 raw=(  5560,  5364) screen=( 913, 885) tool=    0 pres=0
+t=3788.976 seq=02 nf=4
+  f1 st=4 raw=(  1167,  -236) screen=( 220,   0) tool= 1109 pres=0
+  f2 st=4 raw=(  2862,  5486) screen=( 487, 904) tool= 3788 pres=0
+  f3 st=3 raw=(  6602,  6284) screen=(1078,1031) tool=  439 pres=45
+  f5 st=4 raw=(  4322,   608) screen=( 718, 133) tool= 2520 pres=439
+t=3789.095 seq=01 nf=6
+  f1 st=0 raw=(  1167,  -236) screen=( 220,   0) tool=    0 pres=0
+  f2 st=4 raw=(  3178,  5476) screen=( 537, 903) tool= 4074 pres=0
+  f3 st=0 raw=(  6602,  6284) screen=(1078,1031) tool=    0 pres=0
+  f4 st=4 raw=(  4467,  -236) screen=( 741,   0) tool=32379 pres=6
+  f5 st=0 raw=(  4322,   608) screen=( 718, 133) tool=    0 pres=0
+  f6 st=3 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=15
+t=3789.176 seq=02 nf=3
+  f2 st=4 raw=(  3221,  5462) screen=( 544, 901) tool= 4195 pres=48
+  f4 st=4 raw=(  4561,  -236) screen=( 756,   0) tool=31023 pres=1
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=13
+t=3789.242 seq=01 nf=3
+  f2 st=4 raw=(  3226,  5456) screen=( 545, 900) tool= 4239 pres=24
+  f4 st=4 raw=(  4543,  -236) screen=( 753,   0) tool=30694 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=3
+t=3789.326 seq=02 nf=3
+  f2 st=4 raw=(  3186,  5455) screen=( 539, 900) tool= 4255 pres=17
+  f4 st=4 raw=(  4528,  -236) screen=( 750,   0) tool=31355 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=0
+t=3789.409 seq=01 nf=3
+  f2 st=4 raw=(  3182,  5460) screen=( 538, 900) tool= 4258 pres=16
+  f4 st=4 raw=(  4468,  -236) screen=( 741,   0) tool=31632 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=0
+t=3789.494 seq=02 nf=3
+  f2 st=4 raw=(  3184,  5456) screen=( 538, 900) tool= 4267 pres=14
+  f4 st=4 raw=(  4472,  -236) screen=( 742,   0) tool= 6474 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=0
+t=3789.610 seq=01 nf=4
+  f2 st=4 raw=(  3033,  5459) screen=( 514, 900) tool= 3989 pres=11
+  f3 st=3 raw=(  6608,  6705) screen=(1079,1097) tool=  448 pres=30
+  f4 st=4 raw=(  4399,  -236) screen=( 730,   0) tool= 6474 pres=0
+  f6 st=4 raw=(   855, 11896) screen=( 170,1918) tool= 1129 pres=0
+t=3791.546 seq=02 nf=6
+  f1 st=4 raw=(   164, 11896) screen=(  61,1918) tool= 1118 pres=0
+  f2 st=7 raw=(  3052,  5472) screen=( 517, 902) tool=    0 pres=0
+  f3 st=0 raw=(  6608,  6705) screen=(1079,1097) tool=    0 pres=0
+  f4 st=4 raw=(  3691,  -236) screen=( 618,   0) tool=58127 pres=0
+  f5 st=3 raw=(  6346,  6084) screen=(1038, 999) tool= 1463 pres=302
+  f6 st=0 raw=(   855, 11896) screen=( 170,1918) tool=    0 pres=0
+t=3791.630 seq=01 nf=6
+  f1 st=0 raw=(   164, 11896) screen=(  61,1918) tool=    0 pres=0
+  f2 st=0 raw=(  3052,  5472) screen=( 517, 902) tool=    0 pres=0
+  f3 st=3 raw=(  4470,  -236) screen=( 741,   0) tool=31538 pres=22
+  f4 st=4 raw=(  2724,  6314) screen=( 466,1035) tool= 3694 pres=68
+  f5 st=4 raw=(  6405,  6092) screen=(1047,1000) tool=  628 pres=145
+  f6 st=3 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=0
+t=3791.794 seq=02 nf=4
+  f3 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=31678 pres=6
+  f4 st=4 raw=(  2749,  6620) screen=( 470,1084) tool= 3853 pres=31
+  f5 st=4 raw=(  6420,  6095) screen=(1049,1001) tool=  628 pres=3
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=0
+t=3791.961 seq=01 nf=4
+  f3 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=31629 pres=0
+  f4 st=4 raw=(  2772,  6511) screen=( 473,1067) tool= 3909 pres=0
+  f5 st=4 raw=(  6421,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=0
+t=3792.045 seq=02 nf=4
+  f3 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=31660 pres=0
+  f4 st=4 raw=(  2833,  5767) screen=( 483, 949) tool= 3922 pres=0
+  f5 st=4 raw=(  6422,  6095) screen=(1050,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=0
+t=3792.128 seq=01 nf=4
+  f3 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=31567 pres=0
+  f4 st=4 raw=(  2877,  5385) screen=( 490, 889) tool= 3936 pres=0
+  f5 st=4 raw=(  6416,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=0
+t=3792.211 seq=02 nf=4
+  f3 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=31218 pres=0
+  f4 st=4 raw=(  2866,  5392) screen=( 488, 890) tool= 3940 pres=0
+  f5 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=0
+t=3792.295 seq=01 nf=4
+  f3 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=31092 pres=0
+  f4 st=4 raw=(  2864,  5393) screen=( 488, 890) tool= 3941 pres=0
+  f5 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=0
+t=3792.545 seq=02 nf=4
+  f3 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=31255 pres=0
+  f4 st=4 raw=(  2863,  5394) screen=( 488, 890) tool= 3941 pres=0
+  f5 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=0
+t=3792.628 seq=01 nf=4
+  f3 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=31464 pres=0
+  f4 st=4 raw=(  2861,  5395) screen=( 487, 890) tool= 3941 pres=0
+  f5 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=0
+t=3792.712 seq=02 nf=4
+  f3 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=31081 pres=0
+  f4 st=4 raw=(  2877,  5384) screen=( 490, 888) tool= 3943 pres=0
+  f5 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   934, 10472) screen=( 183,1693) tool= 1127 pres=0
+t=3792.795 seq=01 nf=4
+  f3 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=31330 pres=0
+  f4 st=4 raw=(  2866,  5391) screen=( 488, 889) tool= 3943 pres=0
+  f5 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   932, 10475) screen=( 183,1693) tool= 1127 pres=0
+t=3792.878 seq=02 nf=4
+  f3 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=30775 pres=0
+  f4 st=4 raw=(  2880,  5383) screen=( 490, 888) tool= 3947 pres=0
+  f5 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10475) screen=( 182,1693) tool= 1127 pres=0
+t=3792.962 seq=01 nf=4
+  f3 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=31104 pres=0
+  f4 st=4 raw=(  2868,  5390) screen=( 488, 889) tool= 3945 pres=0
+  f5 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10476) screen=( 182,1693) tool= 1127 pres=0
+t=3793.295 seq=02 nf=4
+  f3 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=30931 pres=0
+  f4 st=4 raw=(  2865,  5393) screen=( 488, 890) tool= 3943 pres=0
+  f5 st=4 raw=(  6418,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10476) screen=( 182,1693) tool= 1127 pres=0
+t=3793.378 seq=01 nf=4
+  f3 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=30738 pres=0
+  f4 st=4 raw=(  2861,  5395) screen=( 487, 890) tool= 3943 pres=0
+  f5 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   930, 10477) screen=( 182,1693) tool= 1127 pres=0
+t=3793.462 seq=02 nf=4
+  f3 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=31311 pres=0
+  f4 st=4 raw=(  2860,  5395) screen=( 487, 890) tool= 3943 pres=0
+  f5 st=4 raw=(  6416,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1127 pres=0
+t=3793.628 seq=01 nf=4
+  f3 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=30487 pres=0
+  f4 st=4 raw=(  2863,  5395) screen=( 488, 890) tool= 3945 pres=0
+  f5 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1127 pres=0
+t=3793.795 seq=02 nf=4
+  f3 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=30896 pres=0
+  f4 st=4 raw=(  2862,  5395) screen=( 487, 890) tool= 3943 pres=0
+  f5 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1127 pres=0
+t=3793.878 seq=01 nf=4
+  f3 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=30576 pres=0
+  f4 st=4 raw=(  2877,  5384) screen=( 490, 888) tool= 3947 pres=0
+  f5 st=4 raw=(  6416,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1127 pres=0
+t=3794.045 seq=02 nf=4
+  f3 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=30957 pres=0
+  f4 st=4 raw=(  2870,  5389) screen=( 489, 889) tool= 3948 pres=0
+  f5 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1127 pres=0
+t=3794.128 seq=01 nf=4
+  f3 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=30592 pres=0
+  f4 st=4 raw=(  2868,  5391) screen=( 488, 889) tool= 3946 pres=0
+  f5 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1127 pres=0
+t=3794.212 seq=02 nf=4
+  f3 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=30839 pres=0
+  f4 st=4 raw=(  2864,  5393) screen=( 488, 890) tool= 3943 pres=0
+  f5 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1127 pres=0
+t=3794.295 seq=01 nf=4
+  f3 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=30906 pres=0
+  f4 st=4 raw=(  2876,  5386) screen=( 490, 889) tool= 3947 pres=0
+  f5 st=4 raw=(  6418,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1127 pres=0
+t=3794.378 seq=02 nf=4
+  f3 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=31195 pres=0
+  f4 st=4 raw=(  2865,  5392) screen=( 488, 890) tool= 3945 pres=0
+  f5 st=4 raw=(  6418,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1127 pres=0
+t=3794.462 seq=01 nf=4
+  f3 st=4 raw=(  4468,  -236) screen=( 741,   0) tool=31402 pres=0
+  f4 st=4 raw=(  2865,  5393) screen=( 488, 890) tool= 3943 pres=0
+  f5 st=4 raw=(  6418,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1127 pres=0
+t=3794.545 seq=02 nf=4
+  f3 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=30929 pres=0
+  f4 st=4 raw=(  2863,  5393) screen=( 488, 890) tool= 3943 pres=0
+  f5 st=4 raw=(  6416,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1127 pres=0
+t=3794.628 seq=01 nf=4
+  f3 st=4 raw=(  4468,  -236) screen=( 741,   0) tool=31299 pres=0
+  f4 st=4 raw=(  2866,  5392) screen=( 488, 890) tool= 3943 pres=0
+  f5 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1127 pres=0
+t=3794.795 seq=02 nf=4
+  f3 st=4 raw=(  4468,  -236) screen=( 741,   0) tool=30603 pres=0
+  f4 st=4 raw=(  2879,  5383) screen=( 490, 888) tool= 3944 pres=0
+  f5 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1127 pres=0
+t=3794.878 seq=01 nf=4
+  f3 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=30806 pres=0
+  f4 st=4 raw=(  2880,  5383) screen=( 490, 888) tool= 3944 pres=0
+  f5 st=4 raw=(  6418,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   934, 10472) screen=( 183,1693) tool= 1126 pres=0
+t=3794.962 seq=02 nf=4
+  f3 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=31135 pres=0
+  f4 st=4 raw=(  2868,  5390) screen=( 488, 889) tool= 3943 pres=0
+  f5 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   932, 10475) screen=( 183,1693) tool= 1127 pres=0
+t=3795.045 seq=01 nf=4
+  f3 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=31242 pres=0
+  f4 st=4 raw=(  2866,  5392) screen=( 488, 890) tool= 3943 pres=0
+  f5 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10475) screen=( 182,1693) tool= 1127 pres=0
+t=3795.128 seq=02 nf=4
+  f3 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=30811 pres=0
+  f4 st=4 raw=(  2878,  5384) screen=( 490, 888) tool= 3944 pres=0
+  f5 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   932, 10475) screen=( 183,1693) tool= 1127 pres=0
+t=3795.212 seq=01 nf=4
+  f3 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=31081 pres=0
+  f4 st=4 raw=(  2865,  5392) screen=( 488, 890) tool= 3943 pres=0
+  f5 st=4 raw=(  6416,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10476) screen=( 182,1693) tool= 1127 pres=0
+t=3795.295 seq=02 nf=4
+  f3 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=30682 pres=0
+  f4 st=4 raw=(  2868,  5391) screen=( 488, 889) tool= 3943 pres=0
+  f5 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10476) screen=( 182,1693) tool= 1127 pres=0
+t=3795.462 seq=01 nf=4
+  f3 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=31154 pres=0
+  f4 st=4 raw=(  2865,  5392) screen=( 488, 890) tool= 3943 pres=0
+  f5 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10476) screen=( 182,1693) tool= 1127 pres=0
+t=3795.545 seq=02 nf=4
+  f3 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=31201 pres=0
+  f4 st=4 raw=(  2863,  5394) screen=( 488, 890) tool= 3943 pres=0
+  f5 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10476) screen=( 182,1693) tool= 1127 pres=0
+t=3795.629 seq=01 nf=4
+  f3 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=30705 pres=0
+  f4 st=4 raw=(  2862,  5395) screen=( 487, 890) tool= 3943 pres=0
+  f5 st=4 raw=(  6418,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   930, 10477) screen=( 182,1693) tool= 1127 pres=0
+t=3795.795 seq=02 nf=4
+  f3 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=31095 pres=0
+  f4 st=4 raw=(  2860,  5395) screen=( 487, 890) tool= 3943 pres=0
+  f5 st=4 raw=(  6418,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1127 pres=0
+t=3795.879 seq=01 nf=4
+  f3 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=31290 pres=0
+  f4 st=4 raw=(  2862,  5395) screen=( 487, 890) tool= 3942 pres=0
+  f5 st=4 raw=(  6418,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1127 pres=0
+t=3795.962 seq=02 nf=4
+  f3 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=31503 pres=0
+  f4 st=4 raw=(  2862,  5395) screen=( 487, 890) tool= 3942 pres=0
+  f5 st=4 raw=(  6418,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1127 pres=0
+t=3796.045 seq=01 nf=4
+  f3 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=31158 pres=0
+  f4 st=4 raw=(  2877,  5384) screen=( 490, 888) tool= 3946 pres=0
+  f5 st=4 raw=(  6418,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1127 pres=0
+t=3796.379 seq=02 nf=4
+  f3 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=31168 pres=0
+  f4 st=4 raw=(  2870,  5390) screen=( 489, 889) tool= 3946 pres=0
+  f5 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10476) screen=( 182,1693) tool= 1127 pres=0
+t=3796.545 seq=01 nf=4
+  f3 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=31314 pres=0
+  f4 st=4 raw=(  2866,  5392) screen=( 488, 890) tool= 3943 pres=0
+  f5 st=4 raw=(  6416,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10476) screen=( 182,1693) tool= 1127 pres=0
+t=3796.629 seq=02 nf=4
+  f3 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=31447 pres=0
+  f4 st=4 raw=(  2864,  5393) screen=( 488, 890) tool= 3943 pres=0
+  f5 st=4 raw=(  6416,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10476) screen=( 182,1693) tool= 1127 pres=0
+t=3796.712 seq=01 nf=4
+  f3 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=30887 pres=0
+  f4 st=4 raw=(  2877,  5385) screen=( 490, 889) tool= 3947 pres=0
+  f5 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10476) screen=( 182,1693) tool= 1127 pres=0
+t=3796.879 seq=02 nf=4
+  f3 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=31329 pres=0
+  f4 st=4 raw=(  2864,  5393) screen=( 488, 890) tool= 3944 pres=0
+  f5 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1127 pres=0
+t=3796.962 seq=01 nf=4
+  f3 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=31289 pres=0
+  f4 st=4 raw=(  2864,  5393) screen=( 488, 890) tool= 3943 pres=0
+  f5 st=4 raw=(  6416,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1127 pres=0
+t=3797.129 seq=02 nf=4
+  f3 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=31096 pres=0
+  f4 st=4 raw=(  2862,  5394) screen=( 487, 890) tool= 3943 pres=0
+  f5 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1127 pres=0
+t=3797.212 seq=01 nf=4
+  f3 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=31327 pres=0
+  f4 st=4 raw=(  2861,  5395) screen=( 487, 890) tool= 3943 pres=0
+  f5 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1127 pres=0
+t=3797.379 seq=02 nf=4
+  f3 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=31093 pres=0
+  f4 st=4 raw=(  2876,  5385) screen=( 490, 889) tool= 3944 pres=0
+  f5 st=4 raw=(  6416,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1127 pres=0
+t=3797.462 seq=01 nf=4
+  f3 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=30779 pres=0
+  f4 st=4 raw=(  2867,  5392) screen=( 488, 890) tool= 3943 pres=0
+  f5 st=4 raw=(  6416,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1127 pres=0
+t=3797.546 seq=02 nf=4
+  f3 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=30913 pres=0
+  f4 st=4 raw=(  2868,  5390) screen=( 488, 889) tool= 3943 pres=0
+  f5 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1127 pres=0
+t=3797.629 seq=01 nf=4
+  f3 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=30958 pres=0
+  f4 st=4 raw=(  2883,  5380) screen=( 491, 888) tool= 3945 pres=0
+  f5 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1127 pres=0
+t=3797.879 seq=02 nf=4
+  f3 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=31337 pres=0
+  f4 st=4 raw=(  2882,  5381) screen=( 491, 888) tool= 3946 pres=0
+  f5 st=4 raw=(  6416,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1127 pres=0
+t=3797.962 seq=01 nf=4
+  f3 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=31355 pres=0
+  f4 st=4 raw=(  2866,  5392) screen=( 488, 890) tool= 3943 pres=0
+  f5 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1127 pres=0
+t=3798.046 seq=02 nf=4
+  f3 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=31066 pres=0
+  f4 st=4 raw=(  2865,  5393) screen=( 488, 890) tool= 3942 pres=0
+  f5 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1127 pres=0
+t=3798.129 seq=01 nf=4
+  f3 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=30482 pres=0
+  f4 st=4 raw=(  2876,  5385) screen=( 490, 889) tool= 3944 pres=0
+  f5 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1127 pres=0
+t=3798.212 seq=02 nf=4
+  f3 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=30843 pres=0
+  f4 st=4 raw=(  2866,  5392) screen=( 488, 890) tool= 3944 pres=0
+  f5 st=4 raw=(  6418,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1127 pres=0
+t=3798.379 seq=01 nf=4
+  f3 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=30789 pres=0
+  f4 st=4 raw=(  2879,  5383) screen=( 490, 888) tool= 3947 pres=0
+  f5 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   934, 10472) screen=( 183,1693) tool= 1126 pres=0
+t=3798.462 seq=02 nf=4
+  f3 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=31314 pres=0
+  f4 st=4 raw=(  2885,  5379) screen=( 491, 888) tool= 3947 pres=0
+  f5 st=4 raw=(  6416,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10475) screen=( 182,1693) tool= 1127 pres=0
+t=3798.629 seq=01 nf=4
+  f3 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=30895 pres=0
+  f4 st=4 raw=(  2872,  5387) screen=( 489, 889) tool= 3947 pres=0
+  f5 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10476) screen=( 182,1693) tool= 1127 pres=0
+t=3798.796 seq=02 nf=4
+  f3 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=30832 pres=0
+  f4 st=4 raw=(  2870,  5389) screen=( 489, 889) tool= 3945 pres=0
+  f5 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   932, 10475) screen=( 183,1693) tool= 1126 pres=0
+t=3798.879 seq=01 nf=4
+  f3 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=30472 pres=0
+  f4 st=4 raw=(  2865,  5392) screen=( 488, 890) tool= 3944 pres=0
+  f5 st=4 raw=(  6416,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10475) screen=( 182,1693) tool= 1127 pres=0
+t=3798.962 seq=02 nf=4
+  f3 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=30872 pres=0
+  f4 st=4 raw=(  2865,  5394) screen=( 488, 890) tool= 3944 pres=0
+  f5 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10476) screen=( 182,1693) tool= 1127 pres=0
+t=3799.046 seq=01 nf=4
+  f3 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=30614 pres=0
+  f4 st=4 raw=(  2863,  5394) screen=( 488, 890) tool= 3944 pres=0
+  f5 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10476) screen=( 182,1693) tool= 1127 pres=0
+t=3799.129 seq=02 nf=4
+  f3 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=30818 pres=0
+  f4 st=4 raw=(  2877,  5385) screen=( 490, 889) tool= 3947 pres=0
+  f5 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1127 pres=0
+t=3799.213 seq=01 nf=4
+  f3 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=30589 pres=0
+  f4 st=4 raw=(  2865,  5392) screen=( 488, 890) tool= 3944 pres=0
+  f5 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1127 pres=0
+t=3799.379 seq=02 nf=4
+  f3 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=30593 pres=0
+  f4 st=4 raw=(  2883,  5381) screen=( 491, 888) tool= 3948 pres=0
+  f5 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1127 pres=0
+t=3799.463 seq=01 nf=4
+  f3 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=30216 pres=0
+  f4 st=4 raw=(  2882,  5381) screen=( 491, 888) tool= 3946 pres=0
+  f5 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1127 pres=0
+t=3799.546 seq=02 nf=4
+  f3 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=30689 pres=0
+  f4 st=4 raw=(  2869,  5390) screen=( 488, 889) tool= 3945 pres=0
+  f5 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1127 pres=0
+t=3799.629 seq=01 nf=4
+  f3 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=30986 pres=0
+  f4 st=4 raw=(  2869,  5389) screen=( 488, 889) tool= 3944 pres=0
+  f5 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1127 pres=0
+t=3799.748 seq=02 nf=4
+  f3 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=31324 pres=0
+  f4 st=4 raw=(  2864,  5393) screen=( 488, 890) tool= 3943 pres=0
+  f5 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1127 pres=0
+t=3799.829 seq=01 nf=4
+  f3 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=31389 pres=0
+  f4 st=4 raw=(  2861,  5395) screen=( 487, 890) tool= 3943 pres=0
+  f5 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1127 pres=0
+t=3800.079 seq=02 nf=4
+  f3 st=4 raw=(  4468,  -236) screen=( 741,   0) tool=31514 pres=0
+  f4 st=4 raw=(  2862,  5395) screen=( 487, 890) tool= 3943 pres=0
+  f5 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1127 pres=0
+t=3800.162 seq=01 nf=4
+  f3 st=4 raw=(  4468,  -236) screen=( 741,   0) tool=31048 pres=0
+  f4 st=4 raw=(  2874,  5385) screen=( 489, 889) tool= 3943 pres=0
+  f5 st=4 raw=(  6416,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   932, 10475) screen=( 183,1693) tool= 1127 pres=0
+t=3800.246 seq=02 nf=4
+  f3 st=4 raw=(  4468,  -236) screen=( 741,   0) tool=31215 pres=0
+  f4 st=4 raw=(  2880,  5382) screen=( 490, 888) tool= 3944 pres=0
+  f5 st=4 raw=(  6416,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10476) screen=( 182,1693) tool= 1127 pres=0
+t=3800.329 seq=01 nf=4
+  f3 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=31449 pres=0
+  f4 st=4 raw=(  2883,  5381) screen=( 491, 888) tool= 3947 pres=0
+  f5 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10476) screen=( 182,1693) tool= 1127 pres=0
+t=3800.496 seq=02 nf=4
+  f3 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=31405 pres=0
+  f4 st=4 raw=(  2870,  5390) screen=( 489, 889) tool= 3945 pres=0
+  f5 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10476) screen=( 182,1693) tool= 1127 pres=0
+t=3800.579 seq=01 nf=4
+  f3 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=31512 pres=0
+  f4 st=4 raw=(  2867,  5391) screen=( 488, 889) tool= 3944 pres=0
+  f5 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10476) screen=( 182,1693) tool= 1127 pres=0
+t=3800.663 seq=02 nf=4
+  f3 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=31076 pres=0
+  f4 st=4 raw=(  2865,  5393) screen=( 488, 890) tool= 3943 pres=0
+  f5 st=4 raw=(  6416,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   930, 10477) screen=( 182,1693) tool= 1127 pres=0
+t=3800.746 seq=01 nf=4
+  f3 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=31276 pres=0
+  f4 st=4 raw=(  2862,  5395) screen=( 487, 890) tool= 3943 pres=0
+  f5 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1127 pres=0
+t=3800.829 seq=02 nf=4
+  f3 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=31009 pres=0
+  f4 st=4 raw=(  2862,  5395) screen=( 487, 890) tool= 3943 pres=0
+  f5 st=4 raw=(  6416,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1127 pres=0
+t=3800.913 seq=01 nf=4
+  f3 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=30888 pres=0
+  f4 st=4 raw=(  2862,  5395) screen=( 487, 890) tool= 3943 pres=0
+  f5 st=4 raw=(  6416,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1127 pres=0
+t=3800.996 seq=02 nf=4
+  f3 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=31115 pres=0
+  f4 st=4 raw=(  2866,  5392) screen=( 488, 890) tool= 3944 pres=0
+  f5 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1127 pres=0
+t=3801.079 seq=01 nf=4
+  f3 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=30547 pres=0
+  f4 st=4 raw=(  2864,  5393) screen=( 488, 890) tool= 3943 pres=0
+  f5 st=4 raw=(  6416,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1127 pres=0
+t=3801.163 seq=02 nf=4
+  f3 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=30863 pres=0
+  f4 st=4 raw=(  2863,  5394) screen=( 488, 890) tool= 3943 pres=0
+  f5 st=4 raw=(  6416,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1127 pres=0
+t=3801.329 seq=01 nf=4
+  f3 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=30783 pres=0
+  f4 st=4 raw=(  2877,  5385) screen=( 490, 889) tool= 3947 pres=0
+  f5 st=4 raw=(  6416,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1127 pres=0
+t=3801.413 seq=02 nf=4
+  f3 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=30897 pres=0
+  f4 st=4 raw=(  2865,  5392) screen=( 488, 890) tool= 3944 pres=0
+  f5 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10475) screen=( 182,1693) tool= 1129 pres=0
+t=3801.496 seq=01 nf=4
+  f3 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=30915 pres=0
+  f4 st=4 raw=(  2863,  5394) screen=( 488, 890) tool= 3943 pres=0
+  f5 st=4 raw=(  6416,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10476) screen=( 182,1693) tool= 1129 pres=1
+t=3801.579 seq=02 nf=4
+  f3 st=4 raw=(  4468,  -236) screen=( 741,   0) tool=31289 pres=0
+  f4 st=4 raw=(  2863,  5394) screen=( 488, 890) tool= 3943 pres=0
+  f5 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10476) screen=( 182,1693) tool= 1129 pres=1
+t=3801.663 seq=01 nf=4
+  f3 st=4 raw=(  4468,  -236) screen=( 741,   0) tool=31280 pres=0
+  f4 st=4 raw=(  2861,  5395) screen=( 487, 890) tool= 3942 pres=0
+  f5 st=4 raw=(  6416,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=1
+t=3801.746 seq=02 nf=4
+  f3 st=4 raw=(  4468,  -236) screen=( 741,   0) tool=30566 pres=0
+  f4 st=4 raw=(  2862,  5395) screen=( 487, 890) tool= 3942 pres=0
+  f5 st=4 raw=(  6416,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=0
+t=3801.829 seq=01 nf=4
+  f3 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=30888 pres=0
+  f4 st=4 raw=(  2862,  5395) screen=( 487, 890) tool= 3942 pres=0
+  f5 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=0
+t=3801.913 seq=02 nf=4
+  f3 st=4 raw=(  4468,  -236) screen=( 741,   0) tool=31350 pres=0
+  f4 st=4 raw=(  2862,  5395) screen=( 487, 890) tool= 3942 pres=0
+  f5 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=0
+t=3801.996 seq=01 nf=4
+  f3 st=4 raw=(  4468,  -236) screen=( 741,   0) tool=31049 pres=0
+  f4 st=4 raw=(  2862,  5395) screen=( 487, 890) tool= 3942 pres=0
+  f5 st=4 raw=(  6416,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=0
+t=3802.163 seq=02 nf=4
+  f3 st=4 raw=(  4468,  -236) screen=( 741,   0) tool=31350 pres=0
+  f4 st=4 raw=(  2862,  5395) screen=( 487, 890) tool= 3942 pres=0
+  f5 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=0
+t=3802.330 seq=01 nf=4
+  f3 st=4 raw=(  4468,  -236) screen=( 741,   0) tool=30652 pres=0
+  f4 st=4 raw=(  2862,  5395) screen=( 487, 890) tool= 3942 pres=0
+  f5 st=4 raw=(  6416,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=0
+t=3802.496 seq=02 nf=4
+  f3 st=4 raw=(  4468,  -236) screen=( 741,   0) tool=30981 pres=0
+  f4 st=4 raw=(  2862,  5395) screen=( 487, 890) tool= 3942 pres=0
+  f5 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=0
+t=3802.580 seq=01 nf=4
+  f3 st=4 raw=(  4468,  -236) screen=( 741,   0) tool=30617 pres=0
+  f4 st=4 raw=(  2862,  5395) screen=( 487, 890) tool= 3942 pres=0
+  f5 st=4 raw=(  6416,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=0
+t=3802.663 seq=02 nf=4
+  f3 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=30669 pres=0
+  f4 st=4 raw=(  2862,  5395) screen=( 487, 890) tool= 3942 pres=0
+  f5 st=4 raw=(  6416,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=0
+t=3802.746 seq=01 nf=4
+  f3 st=4 raw=(  4468,  -236) screen=( 741,   0) tool=30934 pres=0
+  f4 st=4 raw=(  2862,  5395) screen=( 487, 890) tool= 3942 pres=0
+  f5 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=0
+t=3802.830 seq=02 nf=4
+  f3 st=4 raw=(  4468,  -236) screen=( 741,   0) tool=31389 pres=0
+  f4 st=4 raw=(  2862,  5395) screen=( 487, 890) tool= 3942 pres=0
+  f5 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=0
+t=3802.913 seq=01 nf=4
+  f3 st=4 raw=(  4468,  -236) screen=( 741,   0) tool=31515 pres=0
+  f4 st=4 raw=(  2861,  5395) screen=( 487, 890) tool= 3942 pres=0
+  f5 st=4 raw=(  6416,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=1
+t=3803.079 seq=02 nf=4
+  f3 st=4 raw=(  4468,  -236) screen=( 741,   0) tool=31527 pres=0
+  f4 st=4 raw=(  2862,  5395) screen=( 487, 890) tool= 3942 pres=0
+  f5 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=0
+t=3803.163 seq=01 nf=4
+  f3 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=30745 pres=0
+  f4 st=4 raw=(  2862,  5395) screen=( 487, 890) tool= 3942 pres=0
+  f5 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=0
+t=3803.246 seq=02 nf=4
+  f3 st=4 raw=(  4468,  -236) screen=( 741,   0) tool=31281 pres=0
+  f4 st=4 raw=(  2862,  5395) screen=( 487, 890) tool= 3942 pres=0
+  f5 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=0
+t=3803.330 seq=01 nf=4
+  f3 st=4 raw=(  4467,  -236) screen=( 741,   0) tool=31671 pres=0
+  f4 st=4 raw=(  2863,  5395) screen=( 488, 890) tool= 3942 pres=0
+  f5 st=4 raw=(  6418,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=0
+t=3803.413 seq=02 nf=4
+  f3 st=4 raw=(  4468,  -236) screen=( 741,   0) tool=31168 pres=0
+  f4 st=4 raw=(  2863,  5395) screen=( 488, 890) tool= 3945 pres=0
+  f5 st=4 raw=(  6418,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=1
+t=3803.496 seq=01 nf=4
+  f3 st=4 raw=(  4468,  -236) screen=( 741,   0) tool=31406 pres=0
+  f4 st=4 raw=(  2863,  5395) screen=( 488, 890) tool= 3946 pres=0
+  f5 st=4 raw=(  6418,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=1
+t=3803.580 seq=02 nf=4
+  f3 st=4 raw=(  4468,  -236) screen=( 741,   0) tool=31114 pres=0
+  f4 st=4 raw=(  2878,  5384) screen=( 490, 888) tool= 3947 pres=0
+  f5 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=1
+t=3803.663 seq=01 nf=4
+  f3 st=4 raw=(  4468,  -236) screen=( 741,   0) tool=30466 pres=0
+  f4 st=4 raw=(  2866,  5392) screen=( 488, 890) tool= 3944 pres=0
+  f5 st=4 raw=(  6416,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=1
+t=3803.746 seq=02 nf=4
+  f3 st=4 raw=(  4468,  -236) screen=( 741,   0) tool=30386 pres=0
+  f4 st=4 raw=(  2864,  5393) screen=( 488, 890) tool= 3943 pres=0
+  f5 st=4 raw=(  6416,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=1
+t=3803.830 seq=01 nf=4
+  f3 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=30636 pres=0
+  f4 st=4 raw=(  2862,  5395) screen=( 487, 890) tool= 3943 pres=0
+  f5 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=1
+t=3803.913 seq=02 nf=4
+  f3 st=3 raw=(  4468,  -236) screen=( 741,   0) tool=30996 pres=0
+  f4 st=4 raw=(  2876,  5385) screen=( 490, 889) tool= 3944 pres=0
+  f5 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=1
+t=3804.080 seq=01 nf=4
+  f3 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=31261 pres=0
+  f4 st=4 raw=(  2869,  5390) screen=( 488, 889) tool= 3944 pres=0
+  f5 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=1
+t=3804.163 seq=02 nf=4
+  f3 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=30602 pres=0
+  f4 st=4 raw=(  2867,  5392) screen=( 488, 890) tool= 3945 pres=0
+  f5 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=1
+t=3804.246 seq=01 nf=4
+  f3 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=30446 pres=0
+  f4 st=4 raw=(  2865,  5393) screen=( 488, 890) tool= 3944 pres=0
+  f5 st=4 raw=(  6416,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=1
+t=3804.413 seq=02 nf=4
+  f3 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=30874 pres=0
+  f4 st=4 raw=(  2861,  5395) screen=( 487, 890) tool= 3943 pres=0
+  f5 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=1
+t=3804.496 seq=01 nf=4
+  f3 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=30632 pres=0
+  f4 st=4 raw=(  2862,  5395) screen=( 487, 890) tool= 3945 pres=0
+  f5 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=1
+t=3804.580 seq=02 nf=4
+  f3 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=30619 pres=0
+  f4 st=4 raw=(  2863,  5395) screen=( 488, 890) tool= 3944 pres=0
+  f5 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=1
+t=3804.663 seq=01 nf=4
+  f3 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=30269 pres=0
+  f4 st=4 raw=(  2862,  5395) screen=( 487, 890) tool= 3944 pres=0
+  f5 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=1
+t=3804.746 seq=02 nf=4
+  f3 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=30295 pres=0
+  f4 st=4 raw=(  2862,  5395) screen=( 487, 890) tool= 3943 pres=0
+  f5 st=4 raw=(  6418,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=1
+t=3804.913 seq=01 nf=4
+  f3 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=31209 pres=0
+  f4 st=4 raw=(  2862,  5395) screen=( 487, 890) tool= 3943 pres=0
+  f5 st=4 raw=(  6418,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=1
+t=3804.996 seq=02 nf=4
+  f3 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=30915 pres=0
+  f4 st=4 raw=(  2862,  5395) screen=( 487, 890) tool= 3943 pres=0
+  f5 st=4 raw=(  6418,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=1
+t=3805.080 seq=01 nf=4
+  f3 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=31336 pres=0
+  f4 st=4 raw=(  2862,  5395) screen=( 487, 890) tool= 3943 pres=0
+  f5 st=4 raw=(  6416,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=1
+t=3805.163 seq=02 nf=4
+  f3 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=31165 pres=0
+  f4 st=4 raw=(  2862,  5395) screen=( 487, 890) tool= 3944 pres=0
+  f5 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=1
+t=3805.247 seq=01 nf=4
+  f3 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=31413 pres=0
+  f4 st=4 raw=(  2862,  5395) screen=( 487, 890) tool= 3944 pres=0
+  f5 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=1
+t=3805.330 seq=02 nf=4
+  f3 st=4 raw=(  4468,  -236) screen=( 741,   0) tool=31460 pres=0
+  f4 st=4 raw=(  2862,  5395) screen=( 487, 890) tool= 3943 pres=0
+  f5 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=1
+t=3805.413 seq=01 nf=4
+  f3 st=4 raw=(  4468,  -236) screen=( 741,   0) tool=31389 pres=0
+  f4 st=4 raw=(  2862,  5395) screen=( 487, 890) tool= 3943 pres=0
+  f5 st=4 raw=(  6416,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=1
+t=3805.497 seq=02 nf=4
+  f3 st=4 raw=(  4468,  -236) screen=( 741,   0) tool=30858 pres=0
+  f4 st=4 raw=(  2862,  5395) screen=( 487, 890) tool= 3943 pres=0
+  f5 st=4 raw=(  6416,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=1
+t=3805.663 seq=01 nf=4
+  f3 st=4 raw=(  4468,  -236) screen=( 741,   0) tool=30722 pres=0
+  f4 st=4 raw=(  2862,  5395) screen=( 487, 890) tool= 3943 pres=0
+  f5 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=1
+t=3805.746 seq=02 nf=4
+  f3 st=4 raw=(  4468,  -236) screen=( 741,   0) tool=30508 pres=0
+  f4 st=4 raw=(  2862,  5395) screen=( 487, 890) tool= 3943 pres=0
+  f5 st=4 raw=(  6416,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=1
+t=3805.913 seq=01 nf=4
+  f3 st=4 raw=(  4468,  -236) screen=( 741,   0) tool=30311 pres=0
+  f4 st=4 raw=(  2862,  5395) screen=( 487, 890) tool= 3943 pres=0
+  f5 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=1
+t=3805.997 seq=02 nf=4
+  f3 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=30828 pres=0
+  f4 st=4 raw=(  2862,  5395) screen=( 487, 890) tool= 3943 pres=0
+  f5 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=1
+t=3806.080 seq=01 nf=4
+  f3 st=4 raw=(  4468,  -236) screen=( 741,   0) tool=30880 pres=0
+  f4 st=4 raw=(  2862,  5395) screen=( 487, 890) tool= 3943 pres=0
+  f5 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=1
+t=3806.163 seq=02 nf=4
+  f3 st=4 raw=(  4468,  -236) screen=( 741,   0) tool=30904 pres=0
+  f4 st=4 raw=(  2862,  5395) screen=( 487, 890) tool= 3943 pres=0
+  f5 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=1
+t=3806.247 seq=01 nf=4
+  f3 st=4 raw=(  4468,  -236) screen=( 741,   0) tool=31221 pres=0
+  f4 st=4 raw=(  2863,  5395) screen=( 488, 890) tool= 3945 pres=0
+  f5 st=4 raw=(  6416,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=1
+t=3806.330 seq=02 nf=4
+  f3 st=4 raw=(  4468,  -236) screen=( 741,   0) tool=31551 pres=0
+  f4 st=4 raw=(  2862,  5395) screen=( 487, 890) tool= 3943 pres=0
+  f5 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=1
+t=3806.413 seq=01 nf=4
+  f3 st=4 raw=(  4468,  -236) screen=( 741,   0) tool=31611 pres=0
+  f4 st=4 raw=(  2862,  5395) screen=( 487, 890) tool= 3943 pres=0
+  f5 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=1
+t=3806.497 seq=02 nf=4
+  f3 st=4 raw=(  4468,  -236) screen=( 741,   0) tool=31688 pres=0
+  f4 st=4 raw=(  2862,  5395) screen=( 487, 890) tool= 3943 pres=0
+  f5 st=4 raw=(  6416,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=1
+t=3806.580 seq=01 nf=4
+  f3 st=4 raw=(  4468,  -236) screen=( 741,   0) tool=31111 pres=0
+  f4 st=4 raw=(  2862,  5395) screen=( 487, 890) tool= 3943 pres=0
+  f5 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=1
+t=3806.746 seq=02 nf=4
+  f3 st=4 raw=(  4468,  -236) screen=( 741,   0) tool=31515 pres=0
+  f4 st=4 raw=(  2862,  5395) screen=( 487, 890) tool= 3943 pres=0
+  f5 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=1
+t=3806.813 seq=01 nf=4
+  f3 st=4 raw=(  4468,  -236) screen=( 741,   0) tool=31277 pres=0
+  f4 st=4 raw=(  2863,  5395) screen=( 488, 890) tool= 3943 pres=0
+  f5 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=1
+t=3806.897 seq=02 nf=4
+  f3 st=4 raw=(  4468,  -236) screen=( 741,   0) tool=31307 pres=0
+  f4 st=4 raw=(  2862,  5395) screen=( 487, 890) tool= 3943 pres=0
+  f5 st=4 raw=(  6416,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=1
+t=3807.064 seq=01 nf=4
+  f3 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=31504 pres=0
+  f4 st=4 raw=(  2862,  5395) screen=( 487, 890) tool= 3943 pres=0
+  f5 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=1
+t=3807.147 seq=02 nf=4
+  f3 st=4 raw=(  4468,  -236) screen=( 741,   0) tool=31721 pres=0
+  f4 st=4 raw=(  2862,  5395) screen=( 487, 890) tool= 3943 pres=0
+  f5 st=4 raw=(  6416,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=1
+t=3807.314 seq=01 nf=4
+  f3 st=4 raw=(  4468,  -236) screen=( 741,   0) tool=31611 pres=0
+  f4 st=4 raw=(  2862,  5395) screen=( 487, 890) tool= 3943 pres=0
+  f5 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=1
+t=3807.397 seq=02 nf=4
+  f3 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=31141 pres=0
+  f4 st=4 raw=(  2862,  5395) screen=( 487, 890) tool= 3943 pres=0
+  f5 st=4 raw=(  6416,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=1
+t=3807.480 seq=01 nf=4
+  f3 st=4 raw=(  4468,  -236) screen=( 741,   0) tool=31099 pres=0
+  f4 st=4 raw=(  2862,  5395) screen=( 487, 890) tool= 3943 pres=0
+  f5 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=1
+t=3807.564 seq=02 nf=4
+  f3 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=31295 pres=0
+  f4 st=4 raw=(  2877,  5384) screen=( 490, 888) tool= 3944 pres=0
+  f5 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=1
+t=3807.647 seq=01 nf=4
+  f3 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=31442 pres=0
+  f4 st=4 raw=(  2866,  5392) screen=( 488, 890) tool= 3946 pres=0
+  f5 st=4 raw=(  6416,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=1
+t=3807.730 seq=02 nf=4
+  f3 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=31519 pres=0
+  f4 st=4 raw=(  2864,  5393) screen=( 488, 890) tool= 3943 pres=0
+  f5 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=1
+t=3807.814 seq=01 nf=4
+  f3 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=31616 pres=0
+  f4 st=4 raw=(  2862,  5395) screen=( 487, 890) tool= 3943 pres=0
+  f5 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=1
+t=3807.897 seq=02 nf=4
+  f3 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=30827 pres=0
+  f4 st=4 raw=(  2862,  5395) screen=( 487, 890) tool= 3943 pres=0
+  f5 st=4 raw=(  6416,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=1
+t=3807.980 seq=01 nf=4
+  f3 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=31238 pres=0
+  f4 st=4 raw=(  2862,  5395) screen=( 487, 890) tool= 3943 pres=0
+  f5 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=1
+t=3808.064 seq=02 nf=4
+  f3 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=31422 pres=0
+  f4 st=4 raw=(  2863,  5395) screen=( 488, 890) tool= 3945 pres=0
+  f5 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=1
+t=3808.147 seq=01 nf=4
+  f3 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=30935 pres=0
+  f4 st=4 raw=(  2863,  5395) screen=( 488, 890) tool= 3944 pres=0
+  f5 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=1
+t=3808.230 seq=02 nf=4
+  f3 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=31150 pres=0
+  f4 st=4 raw=(  2862,  5395) screen=( 487, 890) tool= 3944 pres=0
+  f5 st=4 raw=(  6416,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=1
+t=3808.313 seq=01 nf=4
+  f3 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=31326 pres=0
+  f4 st=4 raw=(  2866,  5391) screen=( 488, 889) tool= 3944 pres=0
+  f5 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=2
+t=3808.397 seq=02 nf=4
+  f3 st=4 raw=(  4468,  -236) screen=( 741,   0) tool=31014 pres=0
+  f4 st=4 raw=(  2866,  5392) screen=( 488, 890) tool= 3943 pres=0
+  f5 st=4 raw=(  6416,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=2
+t=3808.480 seq=01 nf=4
+  f3 st=4 raw=(  4468,  -236) screen=( 741,   0) tool=31310 pres=0
+  f4 st=4 raw=(  2864,  5393) screen=( 488, 890) tool= 3943 pres=0
+  f5 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=2
+t=3808.564 seq=02 nf=4
+  f3 st=4 raw=(  4468,  -236) screen=( 741,   0) tool=31067 pres=0
+  f4 st=4 raw=(  2861,  5395) screen=( 487, 890) tool= 3943 pres=0
+  f5 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=2
+t=3808.647 seq=01 nf=4
+  f3 st=4 raw=(  4468,  -236) screen=( 741,   0) tool=30745 pres=0
+  f4 st=4 raw=(  2862,  5395) screen=( 487, 890) tool= 3946 pres=0
+  f5 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=2
+t=3808.730 seq=02 nf=4
+  f3 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=31345 pres=0
+  f4 st=4 raw=(  2862,  5395) screen=( 487, 890) tool= 3943 pres=0
+  f5 st=4 raw=(  6418,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=2
+t=3808.814 seq=01 nf=4
+  f3 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=31362 pres=0
+  f4 st=4 raw=(  2878,  5384) screen=( 490, 888) tool= 3947 pres=0
+  f5 st=4 raw=(  6418,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=2
+t=3808.897 seq=02 nf=4
+  f3 st=4 raw=(  4468,  -236) screen=( 741,   0) tool=31490 pres=0
+  f4 st=4 raw=(  2865,  5392) screen=( 488, 890) tool= 3943 pres=0
+  f5 st=4 raw=(  6418,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=2
+t=3808.980 seq=01 nf=4
+  f3 st=4 raw=(  4468,  -236) screen=( 741,   0) tool=31723 pres=0
+  f4 st=4 raw=(  2865,  5393) screen=( 488, 890) tool= 3943 pres=0
+  f5 st=4 raw=(  6418,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=2
+t=3809.064 seq=02 nf=4
+  f3 st=4 raw=(  4468,  -236) screen=( 741,   0) tool=30886 pres=0
+  f4 st=4 raw=(  2863,  5393) screen=( 488, 890) tool= 3943 pres=0
+  f5 st=4 raw=(  6418,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=2
+t=3809.147 seq=01 nf=4
+  f3 st=4 raw=(  4468,  -236) screen=( 741,   0) tool=31359 pres=0
+  f4 st=4 raw=(  2861,  5395) screen=( 487, 890) tool= 3944 pres=0
+  f5 st=4 raw=(  6418,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=2
+t=3809.314 seq=02 nf=4
+  f3 st=4 raw=(  4468,  -236) screen=( 741,   0) tool=31400 pres=0
+  f4 st=4 raw=(  2863,  5394) screen=( 488, 890) tool= 3946 pres=0
+  f5 st=4 raw=(  6416,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=2
+t=3809.397 seq=01 nf=4
+  f3 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=31594 pres=0
+  f4 st=4 raw=(  2867,  5392) screen=( 488, 890) tool= 3945 pres=0
+  f5 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=2
+t=3809.480 seq=02 nf=4
+  f3 st=4 raw=(  4468,  -236) screen=( 741,   0) tool=31658 pres=0
+  f4 st=4 raw=(  2865,  5392) screen=( 488, 890) tool= 3943 pres=0
+  f5 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=2
+t=3809.564 seq=01 nf=4
+  f3 st=4 raw=(  4468,  -236) screen=( 741,   0) tool=31156 pres=0
+  f4 st=4 raw=(  2865,  5393) screen=( 488, 890) tool= 3945 pres=0
+  f5 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=2
+t=3809.647 seq=02 nf=4
+  f3 st=4 raw=(  4468,  -236) screen=( 741,   0) tool=31361 pres=0
+  f4 st=4 raw=(  2863,  5394) screen=( 488, 890) tool= 3944 pres=0
+  f5 st=4 raw=(  6416,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=2
+t=3809.730 seq=01 nf=4
+  f3 st=4 raw=(  4468,  -236) screen=( 741,   0) tool=31311 pres=0
+  f4 st=4 raw=(  2861,  5395) screen=( 487, 890) tool= 3943 pres=0
+  f5 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=2
+t=3809.814 seq=02 nf=4
+  f3 st=4 raw=(  4468,  -236) screen=( 741,   0) tool=31367 pres=0
+  f4 st=4 raw=(  2862,  5394) screen=( 487, 890) tool= 3943 pres=0
+  f5 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=2
+t=3809.897 seq=01 nf=4
+  f3 st=4 raw=(  4468,  -236) screen=( 741,   0) tool=30751 pres=0
+  f4 st=4 raw=(  2862,  5394) screen=( 487, 890) tool= 3943 pres=0
+  f5 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=2
+t=3809.980 seq=02 nf=4
+  f3 st=4 raw=(  4468,  -236) screen=( 741,   0) tool=31361 pres=0
+  f4 st=4 raw=(  2862,  5394) screen=( 487, 890) tool= 3943 pres=0
+  f5 st=4 raw=(  6416,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=2
+t=3810.064 seq=01 nf=4
+  f3 st=4 raw=(  4468,  -236) screen=( 741,   0) tool=31053 pres=0
+  f4 st=4 raw=(  2862,  5394) screen=( 487, 890) tool= 3943 pres=0
+  f5 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=2
+t=3810.147 seq=02 nf=4
+  f3 st=4 raw=(  4468,  -236) screen=( 741,   0) tool=30628 pres=0
+  f4 st=4 raw=(  2862,  5394) screen=( 487, 890) tool= 3943 pres=0
+  f5 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=2
+t=3810.231 seq=01 nf=4
+  f3 st=4 raw=(  4468,  -236) screen=( 741,   0) tool=30871 pres=0
+  f4 st=4 raw=(  2862,  5394) screen=( 487, 890) tool= 3943 pres=0
+  f5 st=4 raw=(  6418,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=2
+t=3810.314 seq=02 nf=4
+  f3 st=4 raw=(  4468,  -236) screen=( 741,   0) tool=30884 pres=0
+  f4 st=4 raw=(  2863,  5395) screen=( 488, 890) tool= 3944 pres=0
+  f5 st=4 raw=(  6416,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=2
+t=3810.397 seq=01 nf=4
+  f3 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=30891 pres=0
+  f4 st=4 raw=(  2863,  5395) screen=( 488, 890) tool= 3942 pres=0
+  f5 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=2
+t=3810.481 seq=02 nf=4
+  f3 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=30960 pres=0
+  f4 st=4 raw=(  2877,  5384) screen=( 490, 888) tool= 3944 pres=0
+  f5 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=2
+t=3810.564 seq=01 nf=4
+  f3 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=31187 pres=0
+  f4 st=4 raw=(  2867,  5391) screen=( 488, 889) tool= 3944 pres=0
+  f5 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=2
+t=3810.647 seq=02 nf=4
+  f3 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=31377 pres=0
+  f4 st=4 raw=(  2866,  5392) screen=( 488, 890) tool= 3943 pres=0
+  f5 st=4 raw=(  6418,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=2
+t=3810.730 seq=01 nf=4
+  f3 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=30577 pres=0
+  f4 st=4 raw=(  2879,  5384) screen=( 490, 888) tool= 3947 pres=0
+  f5 st=4 raw=(  6418,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=2
+t=3810.814 seq=02 nf=4
+  f3 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=30741 pres=0
+  f4 st=4 raw=(  2866,  5393) screen=( 488, 890) tool= 3947 pres=0
+  f5 st=4 raw=(  6418,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=2
+t=3810.897 seq=01 nf=4
+  f3 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=31004 pres=0
+  f4 st=4 raw=(  2865,  5394) screen=( 488, 890) tool= 3948 pres=0
+  f5 st=4 raw=(  6418,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=2
+t=3810.981 seq=02 nf=4
+  f3 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=30901 pres=0
+  f4 st=4 raw=(  2867,  5391) screen=( 488, 889) tool= 3946 pres=0
+  f5 st=4 raw=(  6418,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=1
+t=3811.064 seq=01 nf=4
+  f3 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=31175 pres=0
+  f4 st=4 raw=(  2879,  5383) screen=( 490, 888) tool= 3946 pres=0
+  f5 st=4 raw=(  6418,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=1
+t=3811.147 seq=02 nf=4
+  f3 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=31486 pres=0
+  f4 st=4 raw=(  2868,  5391) screen=( 488, 889) tool= 3946 pres=0
+  f5 st=4 raw=(  6418,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=1
+t=3811.230 seq=01 nf=4
+  f3 st=4 raw=(  4468,  -236) screen=( 741,   0) tool=30985 pres=0
+  f4 st=4 raw=(  2864,  5394) screen=( 488, 890) tool= 3943 pres=0
+  f5 st=4 raw=(  6418,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=2
+t=3811.314 seq=02 nf=4
+  f3 st=4 raw=(  4468,  -236) screen=( 741,   0) tool=30633 pres=0
+  f4 st=4 raw=(  2863,  5394) screen=( 488, 890) tool= 3945 pres=0
+  f5 st=4 raw=(  6418,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=2
+t=3811.397 seq=01 nf=4
+  f3 st=4 raw=(  4468,  -236) screen=( 741,   0) tool=30411 pres=0
+  f4 st=4 raw=(  2863,  5394) screen=( 488, 890) tool= 3944 pres=0
+  f5 st=4 raw=(  6418,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=2
+t=3811.481 seq=02 nf=4
+  f3 st=4 raw=(  4468,  -236) screen=( 741,   0) tool=30875 pres=0
+  f4 st=4 raw=(  2862,  5395) screen=( 487, 890) tool= 3943 pres=0
+  f5 st=4 raw=(  6418,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=2
+t=3811.564 seq=01 nf=4
+  f3 st=4 raw=(  4468,  -236) screen=( 741,   0) tool=30899 pres=0
+  f4 st=4 raw=(  2877,  5384) screen=( 490, 888) tool= 3944 pres=0
+  f5 st=4 raw=(  6418,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=2
+t=3811.647 seq=02 nf=4
+  f3 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=30693 pres=0
+  f4 st=4 raw=(  2867,  5392) screen=( 488, 890) tool= 3943 pres=0
+  f5 st=4 raw=(  6418,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=2
+t=3811.730 seq=01 nf=4
+  f3 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=31100 pres=0
+  f4 st=4 raw=(  2866,  5392) screen=( 488, 890) tool= 3943 pres=0
+  f5 st=4 raw=(  6418,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=2
+t=3811.814 seq=02 nf=4
+  f3 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=31427 pres=0
+  f4 st=4 raw=(  2863,  5393) screen=( 488, 890) tool= 3943 pres=0
+  f5 st=4 raw=(  6416,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=2
+t=3811.897 seq=01 nf=4
+  f3 st=4 raw=(  4468,  -236) screen=( 741,   0) tool=31564 pres=0
+  f4 st=4 raw=(  2863,  5394) screen=( 488, 890) tool= 3943 pres=0
+  f5 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=2
+t=3812.064 seq=02 nf=4
+  f3 st=4 raw=(  4468,  -236) screen=( 741,   0) tool=30902 pres=0
+  f4 st=4 raw=(  2861,  5395) screen=( 487, 890) tool= 3943 pres=0
+  f5 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=2
+t=3812.231 seq=01 nf=4
+  f3 st=4 raw=(  4468,  -236) screen=( 741,   0) tool=31147 pres=0
+  f4 st=4 raw=(  2863,  5394) screen=( 488, 890) tool= 3943 pres=0
+  f5 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=2
+t=3812.314 seq=02 nf=4
+  f3 st=4 raw=(  4468,  -236) screen=( 741,   0) tool=31423 pres=0
+  f4 st=4 raw=(  2863,  5394) screen=( 488, 890) tool= 3944 pres=0
+  f5 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=2
+t=3812.398 seq=01 nf=4
+  f3 st=4 raw=(  4468,  -236) screen=( 741,   0) tool=31083 pres=0
+  f4 st=4 raw=(  2863,  5394) screen=( 488, 890) tool= 3943 pres=0
+  f5 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=2
+t=3812.481 seq=02 nf=4
+  f3 st=4 raw=(  4468,  -236) screen=( 741,   0) tool=30922 pres=0
+  f4 st=4 raw=(  2863,  5394) screen=( 488, 890) tool= 3944 pres=0
+  f5 st=4 raw=(  6418,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=2
+t=3812.564 seq=01 nf=4
+  f3 st=4 raw=(  4468,  -236) screen=( 741,   0) tool=31335 pres=0
+  f4 st=4 raw=(  2863,  5395) screen=( 488, 890) tool= 3943 pres=0
+  f5 st=4 raw=(  6418,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=2
+t=3812.648 seq=02 nf=4
+  f3 st=4 raw=(  4468,  -236) screen=( 741,   0) tool=31437 pres=0
+  f4 st=4 raw=(  2862,  5394) screen=( 487, 890) tool= 3943 pres=0
+  f5 st=4 raw=(  6418,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=2
+t=3812.898 seq=01 nf=4
+  f3 st=4 raw=(  4468,  -236) screen=( 741,   0) tool=31430 pres=0
+  f4 st=4 raw=(  2863,  5395) screen=( 488, 890) tool= 3943 pres=0
+  f5 st=4 raw=(  6418,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=2
+t=3813.064 seq=02 nf=4
+  f3 st=4 raw=(  4468,  -236) screen=( 741,   0) tool=30695 pres=0
+  f4 st=4 raw=(  2862,  5394) screen=( 487, 890) tool= 3943 pres=0
+  f5 st=4 raw=(  6418,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=2
+t=3813.147 seq=01 nf=4
+  f3 st=4 raw=(  4468,  -236) screen=( 741,   0) tool=31438 pres=0
+  f4 st=4 raw=(  2863,  5394) screen=( 488, 890) tool= 3945 pres=0
+  f5 st=4 raw=(  6418,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=2
+t=3813.231 seq=02 nf=4
+  f3 st=4 raw=(  4468,  -236) screen=( 741,   0) tool=31163 pres=0
+  f4 st=4 raw=(  2863,  5394) screen=( 488, 890) tool= 3943 pres=0
+  f5 st=4 raw=(  6418,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=2
+t=3813.314 seq=01 nf=4
+  f3 st=4 raw=(  4468,  -236) screen=( 741,   0) tool=30925 pres=0
+  f4 st=4 raw=(  2863,  5394) screen=( 488, 890) tool= 3945 pres=0
+  f5 st=4 raw=(  6418,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=2
+t=3813.398 seq=02 nf=4
+  f3 st=4 raw=(  4468,  -236) screen=( 741,   0) tool=31193 pres=0
+  f4 st=4 raw=(  2863,  5394) screen=( 488, 890) tool= 3944 pres=0
+  f5 st=4 raw=(  6416,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=2
+t=3813.481 seq=01 nf=4
+  f3 st=4 raw=(  4468,  -236) screen=( 741,   0) tool=30925 pres=0
+  f4 st=4 raw=(  2863,  5394) screen=( 488, 890) tool= 3944 pres=0
+  f5 st=4 raw=(  6416,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=2
+t=3813.564 seq=02 nf=4
+  f3 st=4 raw=(  4468,  -236) screen=( 741,   0) tool=31261 pres=0
+  f4 st=4 raw=(  2863,  5394) screen=( 488, 890) tool= 3943 pres=0
+  f5 st=4 raw=(  6416,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=2
+t=3813.647 seq=01 nf=4
+  f3 st=4 raw=(  4468,  -236) screen=( 741,   0) tool=31321 pres=0
+  f4 st=4 raw=(  2863,  5394) screen=( 488, 890) tool= 3943 pres=0
+  f5 st=4 raw=(  6416,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=2
+t=3813.730 seq=02 nf=4
+  f3 st=4 raw=(  4468,  -236) screen=( 741,   0) tool=31103 pres=0
+  f4 st=4 raw=(  2863,  5394) screen=( 488, 890) tool= 3944 pres=0
+  f5 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=2
+t=3813.814 seq=01 nf=4
+  f3 st=4 raw=(  4468,  -236) screen=( 741,   0) tool=31551 pres=0
+  f4 st=4 raw=(  2863,  5394) screen=( 488, 890) tool= 3943 pres=0
+  f5 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=2
+t=3813.981 seq=02 nf=4
+  f3 st=4 raw=(  4468,  -236) screen=( 741,   0) tool=31100 pres=0
+  f4 st=4 raw=(  2862,  5394) screen=( 487, 890) tool= 3943 pres=0
+  f5 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=2
+t=3814.064 seq=01 nf=4
+  f3 st=4 raw=(  4468,  -236) screen=( 741,   0) tool=31295 pres=0
+  f4 st=4 raw=(  2863,  5394) screen=( 488, 890) tool= 3943 pres=0
+  f5 st=4 raw=(  6416,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=2
+t=3814.148 seq=02 nf=4
+  f3 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=31420 pres=0
+  f4 st=4 raw=(  2863,  5394) screen=( 488, 890) tool= 3946 pres=0
+  f5 st=4 raw=(  6416,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=2
+t=3814.231 seq=01 nf=4
+  f3 st=4 raw=(  4468,  -236) screen=( 741,   0) tool=31686 pres=0
+  f4 st=4 raw=(  2863,  5394) screen=( 488, 890) tool= 3945 pres=0
+  f5 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=2
+t=3814.314 seq=02 nf=4
+  f3 st=4 raw=(  4468,  -236) screen=( 741,   0) tool=31703 pres=0
+  f4 st=4 raw=(  2863,  5394) screen=( 488, 890) tool= 3944 pres=0
+  f5 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=2
+t=3814.398 seq=01 nf=4
+  f3 st=4 raw=(  4468,  -236) screen=( 741,   0) tool=31529 pres=0
+  f4 st=4 raw=(  2863,  5394) screen=( 488, 890) tool= 3943 pres=0
+  f5 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=2
+t=3814.481 seq=02 nf=4
+  f3 st=4 raw=(  4468,  -236) screen=( 741,   0) tool=31100 pres=0
+  f4 st=4 raw=(  2863,  5394) screen=( 488, 890) tool= 3944 pres=0
+  f5 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=2
+t=3814.564 seq=01 nf=4
+  f3 st=4 raw=(  4468,  -236) screen=( 741,   0) tool=31652 pres=0
+  f4 st=4 raw=(  2863,  5394) screen=( 488, 890) tool= 3946 pres=0
+  f5 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=2
+t=3814.648 seq=02 nf=4
+  f3 st=4 raw=(  4468,  -236) screen=( 741,   0) tool=31591 pres=0
+  f4 st=4 raw=(  2863,  5394) screen=( 488, 890) tool= 3947 pres=0
+  f5 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=2
+t=3814.731 seq=01 nf=4
+  f3 st=4 raw=(  4468,  -236) screen=( 741,   0) tool=31066 pres=0
+  f4 st=4 raw=(  2863,  5394) screen=( 488, 890) tool= 3944 pres=0
+  f5 st=4 raw=(  6418,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=2
+t=3814.815 seq=02 nf=4
+  f3 st=4 raw=(  4468,  -236) screen=( 741,   0) tool=31247 pres=0
+  f4 st=4 raw=(  2863,  5394) screen=( 488, 890) tool= 3943 pres=0
+  f5 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=2
+t=3814.898 seq=01 nf=4
+  f3 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=30809 pres=0
+  f4 st=4 raw=(  2862,  5394) screen=( 487, 890) tool= 3944 pres=0
+  f5 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=2
+t=3814.981 seq=02 nf=4
+  f3 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=31360 pres=0
+  f4 st=4 raw=(  2863,  5394) screen=( 488, 890) tool= 3944 pres=0
+  f5 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=2
+t=3815.064 seq=01 nf=4
+  f3 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=30955 pres=0
+  f4 st=4 raw=(  2862,  5394) screen=( 487, 890) tool= 3943 pres=0
+  f5 st=4 raw=(  6418,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=2
+t=3815.148 seq=02 nf=4
+  f3 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=31332 pres=0
+  f4 st=4 raw=(  2863,  5394) screen=( 488, 890) tool= 3945 pres=0
+  f5 st=4 raw=(  6418,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=2
+t=3815.231 seq=01 nf=4
+  f3 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=30925 pres=0
+  f4 st=4 raw=(  2863,  5394) screen=( 488, 890) tool= 3944 pres=0
+  f5 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=2
+t=3815.314 seq=02 nf=4
+  f3 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=30395 pres=0
+  f4 st=4 raw=(  2862,  5394) screen=( 487, 890) tool= 3943 pres=0
+  f5 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=2
+t=3815.398 seq=01 nf=4
+  f3 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=30896 pres=0
+  f4 st=4 raw=(  2877,  5384) screen=( 490, 888) tool= 3947 pres=0
+  f5 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=2
+t=3815.564 seq=02 nf=4
+  f3 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=31098 pres=0
+  f4 st=4 raw=(  2867,  5391) screen=( 488, 889) tool= 3948 pres=0
+  f5 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=2
+t=3815.648 seq=01 nf=4
+  f3 st=4 raw=(  4468,  -236) screen=( 741,   0) tool=30518 pres=0
+  f4 st=4 raw=(  2880,  5383) screen=( 490, 888) tool= 3949 pres=0
+  f5 st=4 raw=(  6418,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=2
+t=3815.731 seq=02 nf=4
+  f3 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=30673 pres=0
+  f4 st=4 raw=(  2867,  5392) screen=( 488, 890) tool= 3948 pres=0
+  f5 st=4 raw=(  6418,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=2
+t=3815.814 seq=01 nf=4
+  f3 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=30912 pres=0
+  f4 st=4 raw=(  2865,  5393) screen=( 488, 890) tool= 3946 pres=0
+  f5 st=4 raw=(  6418,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=2
+t=3815.898 seq=02 nf=4
+  f3 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=31042 pres=0
+  f4 st=4 raw=(  2863,  5394) screen=( 488, 890) tool= 3944 pres=0
+  f5 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=3
+t=3816.064 seq=01 nf=4
+  f3 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=31265 pres=0
+  f4 st=4 raw=(  2865,  5392) screen=( 488, 890) tool= 3944 pres=0
+  f5 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=3
+t=3816.148 seq=02 nf=4
+  f3 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=31272 pres=0
+  f4 st=4 raw=(  2869,  5390) screen=( 488, 889) tool= 3945 pres=0
+  f5 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=3
+t=3816.231 seq=01 nf=4
+  f3 st=4 raw=(  4468,  -236) screen=( 741,   0) tool=30992 pres=0
+  f4 st=4 raw=(  2866,  5392) screen=( 488, 890) tool= 3945 pres=0
+  f5 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=3
+t=3816.314 seq=02 nf=4
+  f3 st=4 raw=(  4468,  -236) screen=( 741,   0) tool=31272 pres=0
+  f4 st=4 raw=(  2861,  5395) screen=( 487, 890) tool= 3944 pres=0
+  f5 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=3
+t=3816.398 seq=01 nf=4
+  f3 st=4 raw=(  4468,  -236) screen=( 741,   0) tool=31456 pres=0
+  f4 st=4 raw=(  2862,  5395) screen=( 487, 890) tool= 3943 pres=0
+  f5 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=3
+t=3816.481 seq=02 nf=4
+  f3 st=4 raw=(  4468,  -236) screen=( 741,   0) tool=31522 pres=0
+  f4 st=4 raw=(  2862,  5395) screen=( 487, 890) tool= 3943 pres=0
+  f5 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=3
+t=3816.565 seq=01 nf=4
+  f3 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=30871 pres=0
+  f4 st=4 raw=(  2862,  5395) screen=( 487, 890) tool= 3943 pres=0
+  f5 st=4 raw=(  6418,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=3
+t=3816.648 seq=02 nf=4
+  f3 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=30332 pres=0
+  f4 st=4 raw=(  2878,  5384) screen=( 490, 888) tool= 3944 pres=0
+  f5 st=4 raw=(  6418,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=3
+t=3816.731 seq=01 nf=4
+  f3 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=31260 pres=0
+  f4 st=4 raw=(  2867,  5392) screen=( 488, 890) tool= 3946 pres=0
+  f5 st=4 raw=(  6416,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=2
+t=3816.815 seq=02 nf=4
+  f3 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=31465 pres=0
+  f4 st=4 raw=(  2864,  5393) screen=( 488, 890) tool= 3944 pres=0
+  f5 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=2
+t=3816.898 seq=01 nf=4
+  f3 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=31473 pres=0
+  f4 st=4 raw=(  2862,  5394) screen=( 487, 890) tool= 3944 pres=0
+  f5 st=4 raw=(  6416,  6095) screen=(1049,1001) tool=  628 pres=1
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=2
+t=3817.065 seq=02 nf=4
+  f3 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=31063 pres=0
+  f4 st=4 raw=(  2863,  5394) screen=( 488, 890) tool= 3943 pres=0
+  f5 st=4 raw=(  6416,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=2
+t=3817.231 seq=01 nf=4
+  f3 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=30876 pres=0
+  f4 st=4 raw=(  2877,  5385) screen=( 490, 889) tool= 3947 pres=0
+  f5 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=2
+t=3817.315 seq=02 nf=4
+  f3 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=31196 pres=0
+  f4 st=4 raw=(  2866,  5393) screen=( 488, 890) tool= 3944 pres=0
+  f5 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=2
+t=3817.398 seq=01 nf=4
+  f3 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=30890 pres=0
+  f4 st=4 raw=(  2864,  5394) screen=( 488, 890) tool= 3944 pres=0
+  f5 st=4 raw=(  6418,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=2
+t=3817.482 seq=02 nf=4
+  f3 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=30663 pres=0
+  f4 st=4 raw=(  2863,  5394) screen=( 488, 890) tool= 3944 pres=0
+  f5 st=4 raw=(  6418,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=3
+t=3817.565 seq=01 nf=4
+  f3 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=30428 pres=0
+  f4 st=4 raw=(  2862,  5395) screen=( 487, 890) tool= 3943 pres=0
+  f5 st=4 raw=(  6418,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=3
+t=3817.648 seq=02 nf=4
+  f3 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=31173 pres=0
+  f4 st=4 raw=(  2863,  5394) screen=( 488, 890) tool= 3945 pres=0
+  f5 st=4 raw=(  6418,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=3
+t=3817.731 seq=01 nf=4
+  f3 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=31059 pres=0
+  f4 st=4 raw=(  2863,  5394) screen=( 488, 890) tool= 3943 pres=0
+  f5 st=4 raw=(  6418,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=3
+t=3817.982 seq=02 nf=4
+  f3 st=4 raw=(  4468,  -236) screen=( 741,   0) tool=31414 pres=0
+  f4 st=4 raw=(  2863,  5394) screen=( 488, 890) tool= 3944 pres=0
+  f5 st=4 raw=(  6418,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=3
+t=3818.065 seq=01 nf=4
+  f3 st=4 raw=(  4468,  -236) screen=( 741,   0) tool=30932 pres=0
+  f4 st=4 raw=(  2862,  5394) screen=( 487, 890) tool= 3944 pres=0
+  f5 st=4 raw=(  6418,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=3
+t=3818.148 seq=02 nf=4
+  f3 st=4 raw=(  4468,  -236) screen=( 741,   0) tool=31265 pres=0
+  f4 st=4 raw=(  2862,  5394) screen=( 487, 890) tool= 3944 pres=0
+  f5 st=4 raw=(  6416,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=2
+t=3818.232 seq=01 nf=4
+  f3 st=4 raw=(  4468,  -236) screen=( 741,   0) tool=30685 pres=0
+  f4 st=4 raw=(  2863,  5394) screen=( 488, 890) tool= 3944 pres=0
+  f5 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=2
+t=3818.315 seq=02 nf=4
+  f3 st=4 raw=(  4468,  -236) screen=( 741,   0) tool=31180 pres=0
+  f4 st=4 raw=(  2863,  5394) screen=( 488, 890) tool= 3945 pres=0
+  f5 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=2
+t=3818.398 seq=01 nf=4
+  f3 st=4 raw=(  4468,  -236) screen=( 741,   0) tool=31167 pres=0
+  f4 st=4 raw=(  2863,  5394) screen=( 488, 890) tool= 3948 pres=0
+  f5 st=4 raw=(  6418,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=3
+t=3818.481 seq=02 nf=4
+  f3 st=4 raw=(  4468,  -236) screen=( 741,   0) tool=30678 pres=0
+  f4 st=4 raw=(  2863,  5394) screen=( 488, 890) tool= 3944 pres=0
+  f5 st=4 raw=(  6418,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=3
+t=3818.565 seq=01 nf=4
+  f3 st=4 raw=(  4468,  -236) screen=( 741,   0) tool=31163 pres=0
+  f4 st=4 raw=(  2863,  5394) screen=( 488, 890) tool= 3943 pres=0
+  f5 st=4 raw=(  6418,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=3
+t=3818.815 seq=02 nf=4
+  f3 st=4 raw=(  4468,  -236) screen=( 741,   0) tool=31472 pres=0
+  f4 st=4 raw=(  2863,  5394) screen=( 488, 890) tool= 3943 pres=0
+  f5 st=4 raw=(  6418,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=3
+t=3818.898 seq=01 nf=4
+  f3 st=4 raw=(  4468,  -236) screen=( 741,   0) tool=31461 pres=0
+  f4 st=4 raw=(  2863,  5394) screen=( 488, 890) tool= 3943 pres=0
+  f5 st=4 raw=(  6418,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=3
+t=3818.981 seq=02 nf=4
+  f3 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=30996 pres=0
+  f4 st=4 raw=(  2877,  5384) screen=( 490, 888) tool= 3947 pres=0
+  f5 st=4 raw=(  6418,  6095) screen=(1049,1001) tool=  628 pres=1
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=3
+t=3819.065 seq=01 nf=4
+  f3 st=4 raw=(  4468,  -236) screen=( 741,   0) tool=31305 pres=0
+  f4 st=4 raw=(  2866,  5391) screen=( 488, 889) tool= 3945 pres=0
+  f5 st=4 raw=(  6418,  6095) screen=(1049,1001) tool=  628 pres=1
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=3
+t=3819.148 seq=02 nf=4
+  f3 st=4 raw=(  4468,  -236) screen=( 741,   0) tool=30918 pres=0
+  f4 st=4 raw=(  2865,  5393) screen=( 488, 890) tool= 3944 pres=0
+  f5 st=4 raw=(  6416,  6095) screen=(1049,1001) tool=  628 pres=1
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=3
+t=3819.232 seq=01 nf=4
+  f3 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=31130 pres=0
+  f4 st=4 raw=(  2864,  5393) screen=( 488, 890) tool= 3944 pres=0
+  f5 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  628 pres=1
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=3
+t=3819.315 seq=02 nf=4
+  f3 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=30924 pres=0
+  f4 st=4 raw=(  2879,  5383) screen=( 490, 888) tool= 3948 pres=0
+  f5 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  628 pres=1
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=3
+t=3819.398 seq=01 nf=4
+  f3 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=31096 pres=0
+  f4 st=4 raw=(  2867,  5391) screen=( 488, 889) tool= 3946 pres=0
+  f5 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  628 pres=1
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=3
+t=3819.482 seq=02 nf=4
+  f3 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=31351 pres=0
+  f4 st=4 raw=(  2865,  5392) screen=( 488, 890) tool= 3944 pres=0
+  f5 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  628 pres=1
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=3
+t=3819.565 seq=01 nf=4
+  f3 st=4 raw=(  4468,  -236) screen=( 741,   0) tool=31139 pres=0
+  f4 st=4 raw=(  2864,  5393) screen=( 488, 890) tool= 3943 pres=0
+  f5 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=3
+t=3819.648 seq=02 nf=4
+  f3 st=4 raw=(  4468,  -236) screen=( 741,   0) tool=30723 pres=0
+  f4 st=4 raw=(  2862,  5394) screen=( 487, 890) tool= 3943 pres=0
+  f5 st=4 raw=(  6416,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=3
+t=3819.731 seq=01 nf=4
+  f3 st=4 raw=(  4468,  -236) screen=( 741,   0) tool=30767 pres=0
+  f4 st=4 raw=(  2863,  5394) screen=( 488, 890) tool= 3943 pres=0
+  f5 st=4 raw=(  6416,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=3
+t=3819.798 seq=02 nf=4
+  f3 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=30754 pres=0
+  f4 st=4 raw=(  2863,  5394) screen=( 488, 890) tool= 3943 pres=0
+  f5 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=3
+t=3819.882 seq=01 nf=4
+  f3 st=4 raw=(  4468,  -236) screen=( 741,   0) tool=30841 pres=0
+  f4 st=4 raw=(  2863,  5394) screen=( 488, 890) tool= 3947 pres=0
+  f5 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=3
+t=3819.965 seq=02 nf=4
+  f3 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=30572 pres=0
+  f4 st=4 raw=(  2867,  5391) screen=( 488, 889) tool= 3947 pres=0
+  f5 st=4 raw=(  6418,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=3
+t=3820.048 seq=01 nf=4
+  f3 st=4 raw=(  4468,  -236) screen=( 741,   0) tool=30847 pres=0
+  f4 st=4 raw=(  2865,  5392) screen=( 488, 890) tool= 3946 pres=0
+  f5 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=3
+t=3820.132 seq=02 nf=4
+  f3 st=4 raw=(  4468,  -236) screen=( 741,   0) tool=30897 pres=0
+  f4 st=4 raw=(  2863,  5394) screen=( 488, 890) tool= 3943 pres=0
+  f5 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=3
+t=3820.215 seq=01 nf=4
+  f3 st=4 raw=(  4468,  -236) screen=( 741,   0) tool=31368 pres=0
+  f4 st=4 raw=(  2862,  5394) screen=( 487, 890) tool= 3946 pres=0
+  f5 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=3
+t=3820.298 seq=02 nf=4
+  f3 st=4 raw=(  4468,  -236) screen=( 741,   0) tool=31486 pres=0
+  f4 st=4 raw=(  2863,  5394) screen=( 488, 890) tool= 3945 pres=0
+  f5 st=4 raw=(  6418,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=3
+t=3820.382 seq=01 nf=4
+  f3 st=4 raw=(  4468,  -236) screen=( 741,   0) tool=31576 pres=0
+  f4 st=4 raw=(  2863,  5394) screen=( 488, 890) tool= 3944 pres=0
+  f5 st=4 raw=(  6418,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=3
+t=3820.465 seq=02 nf=4
+  f3 st=4 raw=(  4468,  -236) screen=( 741,   0) tool=31625 pres=0
+  f4 st=4 raw=(  2863,  5394) screen=( 488, 890) tool= 3943 pres=0
+  f5 st=4 raw=(  6418,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=3
+t=3820.632 seq=01 nf=4
+  f3 st=4 raw=(  4468,  -236) screen=( 741,   0) tool=31424 pres=0
+  f4 st=4 raw=(  2867,  5391) screen=( 488, 889) tool= 3945 pres=0
+  f5 st=4 raw=(  6418,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=3
+t=3820.715 seq=02 nf=4
+  f3 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=30992 pres=0
+  f4 st=4 raw=(  2881,  5382) screen=( 490, 888) tool= 3948 pres=0
+  f5 st=4 raw=(  6418,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=3
+t=3820.798 seq=01 nf=4
+  f3 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=30699 pres=0
+  f4 st=4 raw=(  2884,  5380) screen=( 491, 888) tool= 3950 pres=0
+  f5 st=4 raw=(  6416,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=3
+t=3820.882 seq=02 nf=4
+  f3 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=30544 pres=0
+  f4 st=4 raw=(  2887,  5378) screen=( 491, 887) tool= 3949 pres=0
+  f5 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=3
+t=3821.132 seq=01 nf=4
+  f3 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=31050 pres=0
+  f4 st=4 raw=(  2870,  5389) screen=( 489, 889) tool= 3946 pres=0
+  f5 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=3
+t=3821.215 seq=02 nf=4
+  f3 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=31218 pres=0
+  f4 st=4 raw=(  2866,  5392) screen=( 488, 890) tool= 3947 pres=0
+  f5 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=3
+t=3821.382 seq=01 nf=4
+  f3 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=30877 pres=0
+  f4 st=4 raw=(  2865,  5393) screen=( 488, 890) tool= 3948 pres=0
+  f5 st=4 raw=(  6416,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=3
+t=3821.465 seq=02 nf=4
+  f3 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=31135 pres=0
+  f4 st=4 raw=(  2877,  5385) screen=( 490, 889) tool= 3950 pres=0
+  f5 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=3
+t=3821.715 seq=01 nf=4
+  f3 st=4 raw=(  4469,  -236) screen=( 741,   0) tool=30790 pres=0
+  f4 st=4 raw=(  2880,  5383) screen=( 490, 888) tool= 3947 pres=0
+  f5 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=3
+t=3821.799 seq=02 nf=4
+  f3 st=4 raw=(  4468,  -236) screen=( 741,   0) tool=30562 pres=0
+  f4 st=4 raw=(  2869,  5390) screen=( 488, 889) tool= 3945 pres=0
+  f5 st=4 raw=(  6417,  6095) screen=(1049,1001) tool=  628 pres=0
+  f6 st=4 raw=(   931, 10477) screen=( 182,1693) tool= 1129 pres=3

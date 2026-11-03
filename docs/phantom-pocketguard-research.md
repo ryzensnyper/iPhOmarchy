@@ -351,3 +351,69 @@ regular cals) **fixed the controller-side tap-delivery loss**:
 - `/proc/interrupts` on this kernel: the AIC count column is STATIC (65828 on
   two different boots, per-CPU columns 0) — do not use it for irq rate; count
   `touch parse` lines per wall time instead.
+
+## 3.8 ★ SESSION 2026-11-04 (4th): the roll lottery persists on calibrated boots —
+### measured three ways, two detectors closed, two new leads
+
+Three fully-calibrated boots in one day (prox acked + DTB 0x8 on all three),
+THREE different rolls — the calibration is settled, the per-boot mode lottery
+is not:
+
+| boot | roll | 15-tap protocol (10 OSK + 5 top) | report state |
+|---|---|---|---|
+| #13 (3rd sess.) | GOOD | 10 taps → 15 raw lifecycles → 23 downs | — |
+| power-on 17:08 | ALL-DEAF (top+bottom) | 15 taps → 6 raw (~3 real) → 6 downs | f8: normal.frames=0, trans +19/s, noisy=1; 7f byte3=00 |
+| #14 (reload-death → dance) | MIXED (top works, bottom deaf) | 15 taps → 7 raw → 3 downs; TOP taps arrived (pres 654-1092), BOTTOM 1/10 | f8: same signature as bad boot; 7f byte3=04 (INVERTED) |
+
+- **★ f8 is DOUBLY SCRATCHED**: the counters are cumulative (the ~44.7/s
+  lockstep trio scales with uptime — 135K at 3400 s, 12.6K at 446 s) and the
+  asd signature (normal.frames=0, transitions ~19/s, noisy.frames=1) is
+  IDENTICAL on the all-deaf, mixed, and (per §3.6) degraded rolls. It cannot
+  discriminate roll quality.
+- **★ 0x7f byte3 is a weak, non-monotone marker**: 04 on the MIXED roll, 00 on
+  the all-deaf roll, 00 post-recovery on #13. Not a delivery predictor. The
+  7f "surface mirror" area currently reads f8-counter values, not the surface
+  descriptor — earlier "zeroed mirror" readings (dance #10) need that
+  reinterpretation; the mirror-vs-counters switch condition is unknown.
+- **★ The parked-artifact jamming theory WEAKENED**: dance #14 had NO parked
+  bottom ghost and NO giant y-clamped blob in the whole capture window, and
+  the bottom was still deaf (1/10). The bottom deafness is deeper than the
+  artifacts (see the prox-address lead below).
+- **★ NEW DRIVER FLAW (measured, fix drafted): the palm-latch counter counts
+  oversized frames regardless of pressure.** The #14 top taps arrived with
+  tool_major 3797-4332 (≥ tool_max=3000) and pres ramping; big_frames hit 8
+  BEFORE pres crossed pres_min, so the whole tap was latched and never
+  forwarded (zero evdev events at those times — event1 absolute-timestamp
+  decode). The one finger-scale tap (tool 736, pres 529) forwarded instantly.
+  Fix (patch 0045 candidate): count big_frames only on frames that would
+  forward (pres >= pres_min); the giant-blob class still hard-latches on
+  tool_area_hard (its pres is irrelevant, area ≫ 12M).
+- **★ NEW LEAD for the bottom deafness — the prox target address.** Our
+  patch 0043 writes PxCl (144 B) to 0x10009600 (makez2fw GEN_1 slot) via the
+  post-boot cal path; the e1 0e ack proves the WRITE, not that the fw ever
+  READS it from there. The iOS kext sends PxCl through the BOOTLOADER HBPP
+  DATA stream (0xE118 chunks ≤1008 B, status 0x4BC1) BEFORE the fw boots —
+  a different channel entirely. If the fw's in-pocket subsystem is still
+  running uncalibrated, the bottom (pocket-gradient) region is exactly where
+  it should be deaf — the observed signature. NEXT: decode the kext prox
+  send fn (mtspi-labeled.asm @ 0x115e8) for the actual target, and/or find
+  the GEN_1 slot semantic in makez2fw; consider an HBPP-DATA prox variant.
+- **Plain POWER-ON boots Linux with full calibration** (2/2: the 17:08 boot
+  + dance #14): the dance is only needed after a power-CUT-into-iOS or an
+  USB-death reboot. The reload USB-death remains the dance-forcer.
+- **g_multi -22 at t=0 reproduced 3/3 boots** (`couldn't find an available
+  UDC` — g_multi loads before dwc2 probes; configfs-gadget.g1 then binds
+  fine). The reload link-death reproduced again (dance #14 was forced by
+  it). NEW: `pmp-t8015-v1 232300000.pmp` probe fails with missing
+  `apple/pmp-t8015.bin` — the PMP driver exists in the kernel without
+  firmware; relevant to the §1M PMP-domain lead for the USB deaths.
+- **d21-touchfix auto-start failed again on dance #14** (4th consecutive
+  boot). Started manually per checklist. Root cause still unexamined —
+  journal shows NO start attempt; suspect an ordering/condition issue in the
+  unit (worth a dedicated look: `systemctl cat d21-touchfix` + journal).
+- **Tooling lessons**: `pkill -x cat` in a capture script kills the NEXT
+  capture's kmsg stream too (use PID files); evdev captures via
+  `timeout N dd bs=24` are sound (a silent driver forwards nothing — 0 bytes
+  is data); evdev event timestamps are absolute (tv_sec = the phone's epoch
+  clock) — align them against kmsg uptime via the first event's frame, not
+  against the capture launch time.
