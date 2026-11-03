@@ -1,0 +1,124 @@
+From f0d89690d948ee06298eaecdf92d82558c0c8c4f Mon Sep 17 00:00:00 2001
+From: dugs <dugahol@protonmail.com>
+Date: Wed, 4 Nov 2026 02:36:14 +1030
+Subject: [PATCH] input: apple_z2: D21 in-pocket prox calibration download
+ (0x10009600)
+
+iOS's AppleMultitouchZ2SPI bootloads the in-pocket prox calibration
+(syscfg PxCl, 144 B on D21) into bootloader SRAM at 0x10009600 before
+the firmware image; the makez2fw GEN_1 container emits it in exactly
+that slot and order, ahead of multi-touch-calibration.  The C1F5E,4
+container declares no prox provider, but the kext sends it for every
+Z2 bootload.  Without it the firmware's in-pocket baseline subsystem
+runs on absent data - the lead suspect for the phantom/guard boot
+modes (nfingers=3/4 frozen records + real-touch delivery loss, 0x7f
+critical-error bit2, asd never-normal).
+
+Optional by design: with neither the DT property nor
+apple/z2-proxcal.bin the boot proceeds exactly as before.  Never
+zero-fills blind into bootloader SRAM (unlike the other D21 cal
+fallbacks).  prox_cal=0 disables.
+---
+ drivers/input/touchscreen/apple_z2.c | 65 ++++++++++++++++++++++++++++
+ 1 file changed, 65 insertions(+)
+
+diff --git a/drivers/input/touchscreen/apple_z2.c b/drivers/input/touchscreen/apple_z2.c
+index 95021fbdf..803ee5f02 100644
+--- a/drivers/input/touchscreen/apple_z2.c
++++ b/drivers/input/touchscreen/apple_z2.c
+@@ -80,6 +80,7 @@
+ #define ORB_GAP_CAL_PROP_NAME            "apple,z2-orb-gap-cal-blob"
+ #define ORB_FORCE_CAL_PROP_NAME          "apple,z2-orb-force-cal-blob"
+ #define SHAPE_ACCEL_CAL_PROP_NAME        "apple,z2-shape-accel-cal-blob"
++#define PROX_CAL_PROP_NAME               "apple,z2-prox-cal-blob"
+ 
+ #define APPLE_Z2_FW_CONFIG_WORDS         11
+ #define APPLE_Z2_FW_CONFIG_MIN_DMA       BIT(0)
+@@ -2727,6 +2728,8 @@ static const char *apple_z2_cal_firmware_name(const char *property)
+ 		return "apple/z2-orbforce.bin";
+ 	if (!strcmp(property, SHAPE_ACCEL_CAL_PROP_NAME))
+ 		return "apple/z2-shapeaccel.bin";
++	if (!strcmp(property, PROX_CAL_PROP_NAME))
++		return "apple/z2-proxcal.bin";
+ 	return NULL;
+ }
+ 
+@@ -3181,6 +3184,10 @@ MODULE_PARM_DESC(probe_reports, "Sample the controller state and counter reports
+  */
+ static bool d21_skip_j172_writes;
+ module_param_named(skip_j172_writes, d21_skip_j172_writes, bool, 0444);
++static bool d21_prox_cal = true;
++module_param_named(prox_cal, d21_prox_cal, bool, 0444);
++MODULE_PARM_DESC(prox_cal,
++		 "D21: download the in-pocket prox calibration (syscfg PxCl -> 0x10009600) at bootload");
+ MODULE_PARM_DESC(skip_j172_writes, "Skip the J172 0x9d/0xbf mode-setup writes");
+ static int d21_af_val = 0;
+ module_param_named(af_val, d21_af_val, int, 0444);
+@@ -4463,6 +4470,64 @@ static int apple_z2_send_late_calibration(struct apple_z2 *z2,
+ 		fw_idx = round_up(fw_idx + size, 4);
+ 	}
+ 
++	/*
++	 * D21: iOS's AppleMultitouchZ2SPI also bootloads the in-pocket prox
++	 * calibration (syscfg PxCl, 144 B on this unit) to controller SRAM
++	 * 0x10009600 (the makez2fw GEN_1 container emits it in exactly that
++	 * slot, ahead of multi-touch-calibration; the kext sends it for
++	 * every Z2 bootload).  The C1F5E,4 container declares no prox
++	 * provider, so the fw-loop never carries it; send it here through
++	 * the same proven post-boot blob path as the four cals above.
++	 * Without it the firmware's in-pocket baseline subsystem runs on
++	 * absent data - the lead suspect for the phantom/guard boot modes
++	 * (docs/phantom-pocketguard-research.md).  Optional and non-fatal:
++	 * with neither the DT property nor apple/z2-proxcal.bin present,
++	 * or on a rejected send, the boot proceeds exactly as before.
++	 * Never zero-fills blind into controller SRAM.  A pre-fw attempt
++	 * (GEN_1 ordering) acked 1f 01 but derailed the firmware download
++	 * (-EPROTO, 2026-11-04), so this must stay after the fw.
++	 */
++	if (apple_z2_is_d21(z2) && d21_prox_cal) {
++		const u8 *px __free(kfree) = NULL;
++		bool have = device_property_present(&z2->spidev->dev,
++						    PROX_CAL_PROP_NAME);
++		size_t pxlen = 0;
++		int perr;
++
++		if (!have) {
++			const struct firmware *pxfw __free(firmware) = NULL;
++
++			have = !request_firmware(&pxfw, "apple/z2-proxcal.bin",
++						 &z2->spidev->dev);
++		}
++		if (!have) {
++			dev_warn(&z2->spidev->dev,
++				 "D21: no prox calibration (apple,z2-prox-cal-blob / apple/z2-proxcal.bin), in-pocket baseline not programmed\n");
++		} else {
++			px = apple_z2_build_iphone7_cal(z2,
++							PROX_CAL_PROP_NAME,
++							0x10009600, 0x400,
++							&pxlen);
++			if (IS_ERR(px)) {
++				dev_warn(&z2->spidev->dev,
++					 "D21: prox calibration build failed (%ld), skipping\n",
++					 PTR_ERR(px));
++			} else {
++				perr = apple_z2_send_firmware_blob(z2, px,
++								   pxlen, false,
++								   false);
++				if (perr)
++					dev_warn(&z2->spidev->dev,
++						 "D21: prox calibration send failed (%d), continuing\n",
++						 perr);
++				else
++					dev_info(&z2->spidev->dev,
++						 "D21: prox calibration -> 0x10009600 (%zu bytes)\n",
++						 pxlen);
++			}
++		}
++	}
++
+ 	return 0;
+ }
+ 
+-- 
+2.55.0
+

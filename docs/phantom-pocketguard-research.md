@@ -242,3 +242,66 @@ the desk (`/root/phantom-sample.log`, decoded on the host):
 - HoolockLinux firmware guide: `~/a11-fw/firmware/iphone7.md` §9 — SysCfg =
   `/dev/nvme0n3` read-only under Linux; kboot copies touch cal blobs from the
   live ADT (`apple,z2-cal-blob` et al.).
+
+## 3.6 SESSION RESULTS CONTINUED (dance #11, same session)
+
+- **The 0xf8 counters do NOT discriminate** — decoded both rolls with the reply
+  alignment pinned (`content = reply[2..]`, fwconfig offset N = reply[2+N]; the
+  content@reply[3] alternative gives garbage). The pattern is IDENTICAL on the
+  dance #10/#11 degraded boots and on a post-reload roll: F1/F2/F3.clean-frames
+  climb in lockstep at **44.7/s** (the scan rate — the 0x44 stream at ~15 fps is
+  a subsample), F1.active frozen, asd.normal.frames = 0 with
+  asd.normal.transitions +30/s, asd.noisy.frames = 1. **Scratch f8 as a
+  detector input.**
+- **0x7f byte3 = the critical-error bits**: 04 (bit2) on both dance boots, 00
+  after a reload. But delivery stayed degraded with byte3=00 → the bit marks a
+  boot-time condition that a reload clears, not the delivery quality. Weak
+  detector candidate; keep sampling it.
+- **The Oct 30 "healthy idle" captures (kmsg-idlenow/kmsg-live) show the SAME
+  hand-scale blob** (nf=1, st=4, tool ~4000, pres 0, screen ≈(555,358)) — so a
+  single hovering hand-scale record at that spot is the panel's NORMAL idle
+  signature (desk/hand artifact), NOT a phantom marker. The real phantom
+  signatures remain: (a) the boot-time FROZEN multi-record trio (one at
+  tool 21300, y clamped to the surface min), (b) the delivery loss.
+- **Delivery across rolls** (user tests): dance #11 boot = "top better than
+  bottom, OSK weak" (the §1L pattern verbatim); post-reload roll (7f=00) =
+  "still seems degraded". The loss persists across rolls and the 7f bit →
+  consistent with the §1L **bottom artifact parked on the OSK region jamming
+  controller-side contact detection** (12.7M-class blob, recurs across boots).
+- **★ USB-net A/B RESULT (the handoff's #1 experiment, answered):**
+  `systemctl restart d21-touch` with `smc_cut_rail=1` (default, the unload-time
+  rBK3 SMC cut) killed the IP link within ~30 s BOTH times (the dance #10
+  session's first reload, and the prox-test reload — one self-recovered to
+  enumeration-loss requiring a dance). The ONE reload run with
+  `smc_cut_rail=0` (set before the stop) kept the link up (ping 1.7 ms straight
+  after the restart). **Stage-1 fix: unit drop-in sets smc_cut_rail=0 after
+  insmod (`/tmp/opencode/usb-rail.conf` → d21-touch.service.d/). Stage-2 fix
+  (patch 0044): decouple the unload-time cut from the in-driver restart's true
+  cut (they share the param today — apple_z2_platform_power_off gates the rBK3
+  write on d21_smc_cut_rail, and the recovery ladder calls that same path).**
+- **★ E3 SHIPPED (patch 0043): the driver downloads the in-pocket prox
+  calibration.** SysCfg (`/dev/nvme0n3`, 128 KB, sha 4765d8da…) parsed
+  (datakey FourCCs are byte-REVERSED in the data dictionary: lCxP=PxCl,
+  GbrO=OrbG, lCFO=OFCl, CADS=SDAC, lCtM=MtCl, lCFS=SFCl, CFIS=SIFC, CbrO=OrbC):
+  **PxCl = 144 B** (→ `/usr/lib/firmware/apple/z2-proxcal.bin`, sha
+  056baf3a…), SFCl 48 B, SIFC 28 B, OrbC 5002 B, MtCl 852 B. OrbG/OFCl/SDAC
+  match our existing cal files byte-for-byte (offset parsing proven). **uTSC,
+  gTSC, uFSC, FDAC are NOT present in this unit's SysCfg** — iOS never
+  downloaded those either; the ADT references resolve empty. OOCl is a 16 B
+  inline value, not a blob.
+  Patch 0043 (`f0d89690d`): D21 sends the prox blob to **0x10009600** (the
+  makez2fw GEN_1 slot) through the same post-boot blob path as the four cals,
+  after the fw loop, optional + non-fatal, `prox_cal=0` disables. Lesson
+  recorded: the GEN_1 pre-firmware ordering (prox before the fw image) acked
+  `1f 01` but derailed the fw download (-EPROTO, probe -71) — the kext's
+  bootloader-phase prox send does not translate to our choreography; post-fw
+  is the proven path. **Boot result with prox: pending the next boot (this
+  session's reloads kept getting killed by the USB link).**
+- **d21-touchfix failed to auto-start on 2/2 dance boots** (unit enabled, v3
+  binary present, journal shows NO start attempt). The desktop reads event2 =
+  touchfix output, so a missing touchfix = "touch dead" even when the driver
+  forwards taps. Post-dance checklist: `systemctl is-active d21-touchfix ||
+  systemctl start d21-touchfix`.
+- `/proc/interrupts` on this kernel: the AIC count column is STATIC (65828 on
+  two different boots, per-CPU columns 0) — do not use it for irq rate; count
+  `touch parse` lines per wall time instead.
