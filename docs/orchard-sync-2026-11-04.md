@@ -186,6 +186,49 @@ native vermagic for everything), assemble via build-payload.sh with
 all -m handshakes, push, dance #19. brcmfmac + firmware + pwrctrl are
 READY and waiting on the phone (/root/wifi/, /usr/lib/firmware/brcm/).
 
+### ★ PORT COMPLETE (session 6, 2026-11-04 night) — recipe executed
+
+Applied SEQUENTIALLY as hoolock commits, exported as
+`patches/0050-0065` (iPhOmarchy d8be73b): 0001 (manual-availability
+DART fixed cell), 0003 (match-data struct `apple_h9p_hw`), 0004 (NVMMU
+TCB one-direction, page count last), 0013 (per-SoC PHY/NVMMU/port-3),
+0014 (msi-doorbell u32), 0015 (T7000), 0016 (pwrctrl BCM4350), 0017
+(T7000 port IRQs), 0019-0025 (the full S8003 series), 0030 (T8015 —
+the PHY-timeout fix, = de95753). SKIPPED with reasons: 0008-0011 +
+0026/0027 (nvme-ans — our tree still has the OLD nvme-apple layout,
+no pci-apple-ans.c, no callers of the NVMMU map API), 0012/0018/0028
+(binding yamls — our tree carries no apple,t8010-pcie.yaml), 0029/
+0031 (already landed session 5 as 0049/0048).
+
+- ★ **OrchardLinux/linux is now PUBLIC** (created 2026-11-01) — the
+  integrated post-0025 h9p driver (3263 lines) was fetched from its
+  main branch and used as the convergence target: our post-S8003 file
+  is **byte-identical** to it except our documented local deltas
+  (T8015 `has_clocks=false`, genpd guard, header wording). The repo's
+  push predates de95753 (T8015), so 0030 still had to be ported from
+  the patch.
+- ★ **Local delta kept**: `apple_h9p_hw_t8015.has_clocks = false` —
+  upstream's D221 DTB supplies aux/ref as CLOCK nodes; ours keeps them
+  as ps_pcie POWER DOMAINS (converting broke the ANS2 NVMe on
+  2026-10-27). With has_clocks=true our probe would defer forever on
+  the missing DT clocks. Rationale recorded in the driver comment.
+- ★ Our session-5 DT port quirks (apple,link-retry-after-power-cycle,
+  hardware-trained-phy-lane, endpoint-power-after-link-setup,
+  inherited-perst-before-link-setup, manual-availability-iommu 2-cell)
+  are ALL parsed by the modernized generic parse path — the D21 DTB
+  needs NO changes for the port.
+- Gotcha repeated: patch(1) writes .orig backups on fuzz; `git add -A`
+  swept them into six commits — filter-branch stripped them; use
+  `--no-backup-if-mismatch` and audit before add. patch(1)'s
+  "reversed" heuristic also mis-fires when an earlier hand-resolution
+  happens to match a later patch's post-image (0030 hunk 1 vs our 0019
+  header wording) — split the patch and apply hunks 2+ explicitly.
+- gotcha (build hygiene): a bare `make <file>.o` without
+  `ARCH=arm64 LLVM=1` runs an x86 syncconfig that REWRITES .config
+  (arm64 symbols dropped). Recovery: `.config.old` (pre-mangle) →
+  `.config`, then `make ARCH=arm64 LLVM=1 olddefconfig`. Always pass
+  ARCH/LLVM on every make.
+
 ALSO SHIPPED LIVE: `usb-gadget.sh` UDC-wait fix (the g_multi -22 race,
 3/3 boots → fixed on the rootfs); `d21-touchfix` unit tolerates the
 builtin uinput (modprobe → `-modprobe`, the rootfs has no module tree
