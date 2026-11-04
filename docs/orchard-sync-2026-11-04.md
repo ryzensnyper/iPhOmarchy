@@ -141,3 +141,54 @@ encrypted** — `ipsw img4 im4p extract --lookup` has no key for type
 sub-project, OR ask Nick Chan (towinchenmi) upstream how his
 pmp-t8015.bin was produced. Driver + DT are ready upstream
 (kernel/patches/hoolock/080-pmp/); our kernel already carries the driver.
+
+## Wi-Fi bring-up — LIVE PROGRESS to the h9p PHY wall (dances #17/#18, same day)
+
+Dance #17 (the wifi payload) exposed a **stale-kernel packaging bug**
+(make-blob.sh's relative path shipped the Nov 1 Image.gz) — fixed by
+`tools/build-payload.sh` (5 gates incl. the kernel↔module vermagic
+handshake; the step6 stale artifact renamed .STALE-DO-NOT-USE). Dance
+#18 shipped the correct kernel (g3b07f3a1ea98, USB fixes in, touch
+loads natively — no more vermagic swaps, the phone boots the desktop).
+
+**Chain progress** (each solved on-camera):
+1. apcie + DART enabled in `dtb/d21-boot-wifi.dts` ✓ (both probe)
+2. pwrctrl `wifi@0,0` platform device created, apple-wifi binds ✓ — the
+   blocker was `CONFIG_REGULATOR_FIXED` unset: `devm_regulator_get
+   ("vdd")` deferred forever, the h9p destroyed the pwrctrl device on
+   every defer (devm cleanup) and retried into the same wall. Built
+   `drivers/regulator/fixed.ko` (=m, native vermagic) → **wlan-vdd
+   regulator registered** → the chain fired: h9p got past
+   `pci_pwrctrl_devices_ready` for the first time.
+3. h9p PHY init: **global PHY init timeout (-ETIMEDOUT)** — the ROOT
+   CAUSE is identified: our h9p = Pauli's original port (2125 lines,
+   no match-data struct) with a BARE `apple,t8015-pcie` match entry —
+   the T8015 PHY/config tunables and the different initCommon sequence
+   (common status @0x24, PHY-IP handshake, port-complex ordering) are
+   in Orchard's `de95753`/`0030-PCI-apple-h9p-Add-T8015-support.patch`
+   (Eduardo Martins, from the d221 runtime ADT: apcie-phy-tunables,
+   apcie-common-tunables, pcie-rc-tunables, apcie-config-tunables).
+4. The cleanup oops after that timeout is ALREADY FIXED
+   (`daf529f6e`: detach_genpd guarded — attach_genpd leaves
+   pd_count=1 with NULL arrays for single-domain nodes; upstream's
+   0029 has the identical fix).
+
+**NEXT SESSION RECIPE (the h9p modernization port)**: our driver
+predates Orchard's whole drivers/pci series — `0001/0003/0004` each
+conflict against our 2125-line file (their base is the integrated
+hoolock staging 6831bc701, 3300+ lines, NOT public — the fork's last
+push is Sep 3). The port: apply Orchard's drivers/pci h9p series
+(0001, 0003, 0004, 0008-0027, 0029, 0030) SEQUENTIALLY onto our file
+resolving conflicts (known local deltas: our aux/ref-optional commit
+337856506 — upstream also made them optional; our bare t8015 match
+entry; our header). Then rebuild (Image + all modules — HEAD moves,
+native vermagic for everything), assemble via build-payload.sh with
+all -m handshakes, push, dance #19. brcmfmac + firmware + pwrctrl are
+READY and waiting on the phone (/root/wifi/, /usr/lib/firmware/brcm/).
+
+ALSO SHIPPED LIVE: `usb-gadget.sh` UDC-wait fix (the g_multi -22 race,
+3/3 boots → fixed on the rootfs); `d21-touchfix` unit tolerates the
+builtin uinput (modprobe → `-modprobe`, the rootfs has no module tree
+for the new kernel — depmod for g3b07f3a1ea98 is a TODO if modprobe is
+ever needed); the wireless modules idle-load at boot is NOT persisted
+(insmod'd by hand — add a unit after the h9p port).

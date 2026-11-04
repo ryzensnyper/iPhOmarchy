@@ -1,0 +1,41 @@
+From daf529f6e7b74503b61104b48a2e3015e3085aad Mon Sep 17 00:00:00 2001
+From: dugs <dugahol@protonmail.com>
+Date: Wed, 4 Nov 2026 12:29:26 +1030
+Subject: [PATCH] PCI: apple-h9p: do not detach genpd when it never attached
+
+apple_h9p_pcie_attach_genpd() returns early for nodes with one or zero
+power domains but leaves pd_count at the real count with the pd_dev/
+pd_link arrays unallocated; apple_h9p_pcie_detach_genpd() then indexes
+NULL.  The D21 pcie node has exactly one power domain, so the first
+probe failure oopsed the deferred-probe worker (measured 2026-11-04:
+NULL deref at apple_h9p_pcie_detach_genpd+0x20 in the cleanup after the
+PHY init timeout).
+
+Guard the arrays instead of resetting pd_count.
+
+Assisted-by: LLM
+---
+ drivers/pci/controller/pcie-apple-h9p.c | 7 +++++++
+ 1 file changed, 7 insertions(+)
+
+diff --git a/drivers/pci/controller/pcie-apple-h9p.c b/drivers/pci/controller/pcie-apple-h9p.c
+index 56a36433e..c9fd389da 100644
+--- a/drivers/pci/controller/pcie-apple-h9p.c
++++ b/drivers/pci/controller/pcie-apple-h9p.c
+@@ -625,6 +625,13 @@ static void apple_h9p_pcie_detach_genpd(struct apple_h9p_pcie *pcie)
+ {
+ 	int i;
+ 
++	/* attach_genpd() leaves the arrays unallocated when the node has
++	 * <= 1 power domain (pd_count keeps the real count): our T8015
++	 * node has exactly one, and the cleanup after any probe failure
++	 * would otherwise deref NULL (oopsed 2026-11-04). */
++	if (!pcie->pd_dev || !pcie->pd_link)
++		return;
++
+ 	for (i = pcie->pd_count - 1; i >= 0; i--) {
+ 		if (pcie->pd_link[i])
+ 			device_link_del(pcie->pd_link[i]);
+-- 
+2.55.0
+
