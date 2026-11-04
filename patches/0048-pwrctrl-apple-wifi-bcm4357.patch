@@ -1,0 +1,40 @@
+From 3b07f3a1ea984355e9994bd5c3f472e5e8364966 Mon Sep 17 00:00:00 2001
+From: dugs <dugahol@protonmail.com>
+Date: Wed, 4 Nov 2026 11:32:24 +1030
+Subject: [PATCH] PCI: pwrctrl: apple-wifi: match the BCM4357
+
+The D21 (iPhone 8 Plus) and D221 (iPhone X) BCM4357 powers with the
+same REG_ON and 100 ms stabilization as the j172 BCM4355, so map its
+PCI ID to that data.  This lets the endpoint node claim
+pci14e4,440a and still bind pci-pwrctrl.
+
+Ported from Orchard 66edac2 (tested upstream on the iPhone X); the D21
+ADT confirms the same wiring: wlan on apcie port 3, REG_ON = SMC gP0e,
+device-wake = pinctrl_ap 40, clkreq = 163, PERST = 167.
+
+Assisted-by: LLM
+---
+ drivers/pci/pwrctrl/pci-pwrctrl-apple-wifi.c | 7 +++++++
+ 1 file changed, 7 insertions(+)
+
+diff --git a/drivers/pci/pwrctrl/pci-pwrctrl-apple-wifi.c b/drivers/pci/pwrctrl/pci-pwrctrl-apple-wifi.c
+index 91df035e3..107653595 100644
+--- a/drivers/pci/pwrctrl/pci-pwrctrl-apple-wifi.c
++++ b/drivers/pci/pwrctrl/pci-pwrctrl-apple-wifi.c
+@@ -203,6 +203,13 @@ static const struct of_device_id apple_wifi_pwrctrl_of_match[] = {
+ 		.compatible = "pci14e4,43dc",
+ 		.data = &apple_j172_wifi_data,
+ 	},
++	{
++		/* D21 (iPhone 8 Plus) and D221 (iPhone X): the BCM4357
++		 * powers with the same REG_ON and 100 ms stabilization as
++		 * the j172 BCM4355. */
++		.compatible = "pci14e4,440a",
++		.data = &apple_j172_wifi_data,
++	},
+ 	{ }
+ };
+ MODULE_DEVICE_TABLE(of, apple_wifi_pwrctrl_of_match);
+-- 
+2.55.0
+
