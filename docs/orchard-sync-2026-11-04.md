@@ -229,6 +229,86 @@ no pci-apple-ans.c, no callers of the NVMMU map API), 0012/0018/0028
   `.config`, then `make ARCH=arm64 LLVM=1 olddefconfig`. Always pass
   ARCH/LLVM on every make.
 
+## ★ DANCE #19 (session 6, same night) — THE WALL IS BREACHED: the
+## BCM4357 IS ON THE PCI BUS
+
+Payload sha 4e7cde44a1f9… (kernel g51c95d053f92 = the h9p port). The
+phone booted it, touch native (new vermagic, sha f39cd98e…), USB fine.
+
+- **The T8015 sequence ran**: NO "global PHY ready timeout" — port 3's
+  init completed, and after one "port 3 link did not reach L0
+  (linksts=0xab400000)" warning the link came up: root port
+  `0000:00:03.0 [106b:100a]` trained and **the endpoint enumerated as
+  `0000:01:00.0 [14e4:440a] rev 04 class 0x0280`** — matches the d221
+  bring-up doc's measurement exactly (5.0 GT/s x1 upstream).
+- **GAP 1 found + fixed (DTB)**: "OF: no iommu-map translation for id
+  0x100" — the endpoint landed on BUS 1 (RID 0x100), not bus 2. The
+  session-5 DTB mapped 0x200. Orchard's d221-pcie.md says the endpoint
+  RID is 0x100 and their board iommu-map uses it. Fixed:
+  iommu-map <0x100 0x1e 0x00 0x01>, port bus-range <1 1>, wifi@0,0 reg
+  0x10000 (iPhOmarchy 19dfd62).
+- **GAP 2 found + fixed (module)**: brcmfmac has NO BCM4357 entry —
+  upstream-known gap (d221-pcie.md: "a linux-wireless topic"). Added:
+  0x440a PCI ID, chip ID 0x4357 (4355-family RAM/SR cases), fw def
+  brcmfmac4357-pcie (hoolock 0c549fd6b) + ported Orchard's whole
+  drivers/wifi brcmfmac series 0001-0005+0007 (0002 = the Apple NVRAM
+  by OTP = the pegasuse module-instance naming; 0006 yaml skipped).
+- KNOWN upstream issue we may still hit (d221-pcie.md "What remains"):
+  the DART reports "translation setup for streams 1 failed: -5" with
+  iommu_setup_default_domain from the h9p probe — enumeration works
+  but the endpoint has no working DMA. Their status at a538a0f; watch
+  for it on dance #20.
+- Modules on the phone: /root/*.g3b07f3a1e backups of every old module;
+  wifi-insmod-chain.sh now loads regulator-fixed FIRST (registers
+  wlan-vdd → un-defers the h9p probe).
+
+## ★ DANCES #20-21 (session 6, night) — brcmfmac BINDS; the fw-download
+## crash isolated + fixed (DTB quirks)
+
+Dance #20 (payload 4e7cde44…, g51c95d053f92) → dance #21 (b07fed4d…,
+g0c549fd6bed0 = + brcmfmac 4357 + Apple wifi series 0001-0005+0007 as
+0c549fd6b). Progress on camera: h9p T8015 trains, root port
+106b:100a, endpoint 14e4:440a enumerates, **iommu group 0 assigned (the
+RID-0x100 fix WORKED — no d221 "-5" DART error)**, brcmfmac BOUND,
+"brcmf_fw_alloc_request: using brcm/brcmfmac4357-pcie for chip
+BCM4357/4" (our chip-ID guess exact: 0x4357 rev 4).
+
+- Firmware naming learned empirically: the Apple alt-path fires
+  (board_type "apple,d21" derived from the endpoint node) — candidates
+  are dash-form ("apple,d21-pegasuse-GINS-m-5.3") while our files are
+  comma-form ("apple,pegasuse-GINS-m-5.3", the iOS dext naming). Plain
+  names + dash-form symlinks now on the phone (no rebuild needed).
+- ★ **THE CRASH (twice, reproducible)**: with firmware files present,
+  brcmfmac's download starts → system dies SILENTLY (no oops, no DART
+  fault, journal kernel stream stops mid-probe; last kernel line =
+  fw_alloc; userspace continued ~2 min then reset) → back to iOS.
+  Probe with files MISSING fails cleanly ("Dongle setup failed") —
+  so the death is IN the download/init path.
+- ★ ROOT CAUSE (high confidence): `apple,inherited-perst-before-link-setup`
+  made the T8015 path skip the PERST assert → the chip powered up
+  without clean PERST sequencing → link trained LATE/async (measured:
+  linksts=0xab400000 at end of setup = HW_READY 0xab but LTSSM 0x00
+  Detect.Quiet, LINK_PRESENT 0; the d221 trains in 102 ms INSIDE the
+  setup) → enumeration happened anyway → the fw download's chip-core
+  reset broke the flaky link → MMIO abort/hang → watchdog reset.
+  The d221 DT carries NONE of the four session-5 quirk flags
+  (t8015-x.dtsi 0005) — and for T8015, endpoint-power-after-link-setup
+  and hardware-trained-phy-lane are only read by the T8010 code (inert).
+- FIX shipped: the four flags dropped from the port node (iPhOmarchy
+  07eee38) — converged to the d221 form. Payload 8e9b77b0… (DTB
+  df217136…) ready for dance #22.
+- SAFE-PROBE protocol for dance #22 (user request: no more blind
+  crashes): (1) status script FIRST, expect NO "did not reach L0"
+  warning (the PERST fix should make training deterministic); (2) echo
+  0 > /sys/module/apple_z2/parameters/verbose (the 15-fps touch debug
+  flood buries evidence); (3) echo performance >
+  /sys/module/pcie_aspm/parameters/policy (the endpoint got "ASPM:
+  default states L1"; chip-reset during L1 is a hang candidate);
+  (4) arm the host-side live kernel-log stream; (5) chain + insmod
+  brcmfmac debug=0x1c0102 (PCIE|FWCON|MSGBUF|TRACE|INTR — FWCON prints
+  the CHIP's own console), detached via nohup. If it still dies: the
+  streamed tail (or silence = hang) is the next discriminator.
+
 ALSO SHIPPED LIVE: `usb-gadget.sh` UDC-wait fix (the g_multi -22 race,
 3/3 boots → fixed on the rootfs); `d21-touchfix` unit tolerates the
 builtin uinput (modprobe → `-modprobe`, the rootfs has no module tree
