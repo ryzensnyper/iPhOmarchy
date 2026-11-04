@@ -88,3 +88,56 @@ Our D21 PR must rebase onto `kernel/patches/drivers/input/`'s reworked
 apple_z2 series, convert `apple_z2_is_d21()` checks to a `d21_info`
 match-data struct, and follow their commit/test conventions
 (patches/orchard-ref/pr60-pr57-j81-vs-d21.md).
+
+## D21 Wi-Fi deep-dive (session 5, same day) — the concrete gap list
+
+Kernel coverage checked against our payload tree (`~/hoolock/linux`):
+
+- `CONFIG_PCIE_APPLE_H9P=y` — the h9p host-bridge driver is BUILT-IN and
+  compiled (pcie-apple-h9p.o present). The T8015 PCIe controller side may
+  already be substantially in our lineage; diff vs the orchard
+  `kernel/patches/devices/t8015/` series (clocks-as-gates 0002, DARTs 0003,
+  host bridge 0004, Wi-Fi port 0005) before porting anything.
+- `CONFIG_PCI_PWRCTRL_APPLE_WIFI=y` — the BCM4357 endpoint power-lifecycle
+  driver (orchard 66edac2) is BUILT-IN and compiled.
+- brcmfmac: in-tree WITH the apple module-instance naming code
+  (brcmfmac/pcie.c builds board_type lists from DT board_type + chip OTP;
+  example name `apple,shikoku-RASP-m-6.11-X3`), but **CONFIG_BRCMFMAC /
+  CFG80211 / MAC80211 are NOT SET** in the payload .config. Fast path:
+  build cfg80211 + mac80211 + brcmutil + brcmfmac as MODULES (vermagic
+  swap, no payload rebuild), insmod in dependency order.
+- **Firmware EXTRACTED** (~/a11-fw/wifi-d21/, sha-pinned, never committed):
+  pegasuse.{trx,clmb,txcb} + the two matching GINS NVRAM profiles from OUR
+  20H392 rootfs (the apfs-mnt was already mounted). Recipe committed as
+  `tools/firmware-d21-wifi.json` (d221-schema, hashes + paths only — the
+  bytes are Apple's). The brcmfmac request name is decided at probe time
+  (DT board_type + OTP) — read the probe log and symlink if it differs
+  from `brcmfmac4357-pcie.apple,pegasuse.*`.
+- **DT facts from the live ADT**: reg_on = SMC `gP0e` (the IDENTICAL SMC
+  GPIO 14 the d221 patch drives via `apple,smc-gpio`), device-wake = gpio4
+  (the wlan event GPIO), `module-instance = pegasuse`,
+  `compatible = [wlan-pcie-uart,bcm4357, wlan-pcie-uart,bcm]` under
+  `apcie,t8015`, `function-pcie_port_control = 175:PrtC(0xb2)`. The d221
+  endpoint patch (t8015-x.dtsi: root-port node + `wifi@0,0` +
+  regulator-fixed from smc_gpio 14 + device-wake) is the template.
+- Precedent: the D11 (iPhone 7) recipe in `~/a11-fw/firmware/iphone7.md`
+  already verified BCM4355 `olaf` station-mode WPA2 with
+  `firmware/tools/makebrcmfw.py` — same shape, proven in-house.
+- **The gate: the DTB.** The Wi-Fi port/endpoint/regulator nodes live in
+  the payload's DTB → one payload rebuild carries the Wi-Fi DT **and** the
+  USB robustness patches (f_ecm resend, dwc2 L0) **and** optionally the
+  PMP DT node (driver ready, firmware pending). One rebuild, three wins.
+
+## PMP firmware — parked with a precise lead
+
+`apple/pmp-t8015.bin` is NOT a file in the IPSW (Firmware/ carries AOP,
+Callan, Multitouch, baseband, SE/Stockholm, all_flash only) and the
+rootfs `/usr/standalone/firmware` has only SmartIO/nfrestore/SLAM. The
+PMP image is baked into **iBoot** (`Firmware/all_flash/
+iBoot.d21.RELEASE.im4p`, iBoot-8422.142.2.700.1, extracted to
+/tmp/opencode/iboot-d21.im4p → payload 1,092,976 B) which is **GID-key
+encrypted** — `ipsw img4 im4p extract --lookup` has no key for type
+`ibot` (theapplewiki lacks it). Extraction = a checkm8-path RE
+sub-project, OR ask Nick Chan (towinchenmi) upstream how his
+pmp-t8015.bin was produced. Driver + DT are ready upstream
+(kernel/patches/hoolock/080-pmp/); our kernel already carries the driver.
