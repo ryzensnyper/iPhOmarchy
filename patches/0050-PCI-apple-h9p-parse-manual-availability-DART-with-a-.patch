@@ -1,0 +1,49 @@
+From 1d9cfd1e05439ac15d49ba1647b0bc9a067adbba Mon Sep 17 00:00:00 2001
+From: dugs <dugahol@protonmail.com>
+Date: Wed, 4 Nov 2026 13:13:05 +1030
+Subject: [PATCH 50/65] PCI: apple-h9p: parse manual-availability DART with a
+ fixed stream cell
+
+apple,manual-availability-iommu names a DART and the stream whose retained
+configuration is reloaded during link bring-up. The driver parsed it with
+the DART's #iommu-cells and then required exactly one argument, so the
+property broke as soon as the DART used the standard five-cell specifier
+that carries the DMA window.
+
+The property only ever carries the stream ID. Parse it with one fixed
+argument cell.
+
+Ported from Orchard drivers/pci 0001 (their binding hunk is not carried:
+our tree has no apple,t8010-pcie.yaml).
+
+Assisted-by: LLM
+---
+ drivers/pci/controller/pcie-apple-h9p.c | 11 +++--------
+ 1 file changed, 3 insertions(+), 8 deletions(-)
+
+diff --git a/drivers/pci/controller/pcie-apple-h9p.c b/drivers/pci/controller/pcie-apple-h9p.c
+index c9fd389da..71ca4984b 100644
+--- a/drivers/pci/controller/pcie-apple-h9p.c
++++ b/drivers/pci/controller/pcie-apple-h9p.c
+@@ -1874,15 +1874,10 @@ static int apple_h9p_pcie_parse_ports(struct apple_h9p_pcie *pcie)
+ 		{
+ 			struct of_phandle_args dart;
+ 
+-			ret = of_parse_phandle_with_args(np,
+-							 "apple,manual-availability-iommu",
+-							 "#iommu-cells", 0, &dart);
++			ret = of_parse_phandle_with_fixed_args(np,
++							       "apple,manual-availability-iommu",
++							       1, 0, &dart);
+ 			if (!ret) {
+-				if (dart.args_count != 1) {
+-					of_node_put(dart.np);
+-					ret = -EINVAL;
+-					goto out_put_child;
+-				}
+ 				pcie->manual_dart[port] = dart.np;
+ 				pcie->manual_dart_sid[port] = dart.args[0];
+ 			} else if (ret != -ENOENT) {
+-- 
+2.55.0
+

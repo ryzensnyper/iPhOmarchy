@@ -1,0 +1,46 @@
+From 7cf6da1791ea59798df5f20f655f05a62e158fa4 Mon Sep 17 00:00:00 2001
+From: dugs <dugahol@protonmail.com>
+Date: Wed, 4 Nov 2026 13:42:09 +1030
+Subject: [PATCH 62/65] PCI: apple-h9p: clear the S8003 PME_Turn_Off request
+ when stopping a port
+
+Stopping an S8003 port before its restart left out two accesses of the
+validated sequence: the read-back of the LTSSM control register after
+clearing its enable bit, and clearing port+0x8c, the PME_Turn_Off
+request (iOS writes 0x31 there to send it). Whatever state the port
+block was left in by earlier software, no PME_Turn_Off or L2 request
+may be pending when the port is brought back up.
+
+Ported from Orchard drivers/pci 0023.
+
+Assisted-by: LLM
+---
+ drivers/pci/controller/pcie-apple-h9p.c | 5 +++++
+ 1 file changed, 5 insertions(+)
+
+diff --git a/drivers/pci/controller/pcie-apple-h9p.c b/drivers/pci/controller/pcie-apple-h9p.c
+index d5b261862..ae74e76c5 100644
+--- a/drivers/pci/controller/pcie-apple-h9p.c
++++ b/drivers/pci/controller/pcie-apple-h9p.c
+@@ -178,6 +178,8 @@
+ 
+ #define S8003_PORT_LINKSTS		0x0088
+ #define S8003_PORT_LINKSTS_UP		BIT(0)
++/* PME_Turn_Off request (0x31 sends it, AppleS800xPCIePort::disableGated) */
++#define S8003_PORT_PMETO		0x008c
+ #define S8003_PORT_LINKPMGRSTS		0x0210
+ #define S8003_PORT_LINKCDMSTS		0x0804
+ #define S8003_PORT_LINKCDMSTS_LTSSM	GENMASK(14, 9)
+@@ -2244,6 +2246,9 @@ static int apple_s8003_port_stop(struct apple_h9p_pcie *pcie,
+ 
+ 	writel(H9P_PORT_IRQMASK_PRE_LINK, pb + H9P_PORT_IRQMASK);
+ 	h9p_rmw(pb + H9P_PORT_LTSSMCTL, H9P_PORT_LTSSM_ENABLE, 0);
++	readl(pb + H9P_PORT_LTSSMCTL);
++	/* No PME_Turn_Off/L2 request may stay pending across the restart */
++	h9p_writel_flush(0, pb + S8003_PORT_PMETO);
+ 	writel(H9P_PORT_IRQSTAT_PRE_LINK, pb + H9P_PORT_IRQSTAT);
+ 
+ 	return apple_h9p_wait(pb + H9P_PORT_LTSSMCTL, H9P_PORT_LTSSM_ENABLE,
+-- 
+2.55.0
+

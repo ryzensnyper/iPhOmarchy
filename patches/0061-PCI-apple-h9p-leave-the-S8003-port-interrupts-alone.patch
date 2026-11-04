@@ -1,0 +1,90 @@
+From d391394a171bc01f119465367e11115dc44d8fdd Mon Sep 17 00:00:00 2001
+From: dugs <dugahol@protonmail.com>
+Date: Wed, 4 Nov 2026 13:41:21 +1030
+Subject: [PATCH 61/65] PCI: apple-h9p: leave the S8003 port interrupts alone
+
+Same reasoning as T7000: the S8003 sequence does not arm or use the
+per-port event interrupts (AppleS8003PCIe has no per-port interrupt
+handling in the iOS 16.7.10 kernelcache), and a status bit that cannot
+be acknowledged would keep the line asserted. Do not request them.
+
+Ported from Orchard drivers/pci 0022.
+
+Assisted-by: LLM
+---
+ drivers/pci/controller/pcie-apple-h9p.c | 17 ++++-------------
+ 1 file changed, 4 insertions(+), 13 deletions(-)
+
+diff --git a/drivers/pci/controller/pcie-apple-h9p.c b/drivers/pci/controller/pcie-apple-h9p.c
+index 1cc6b21a2..d5b261862 100644
+--- a/drivers/pci/controller/pcie-apple-h9p.c
++++ b/drivers/pci/controller/pcie-apple-h9p.c
+@@ -475,8 +475,8 @@ enum apple_h9p_port_result {
+  * @has_nvmmu: the storage port has an NVMMU ("nvmmu" window and interrupt)
+  * @port3_link_events: port 3's event interrupt is armed by @setup_port, and
+  *	its link event re-enables the root complex
+- * @no_port_irqs: leave the per-port interrupts alone (iOS's T7000 code
+- *	doesn't use them)
++ * @no_port_irqs: leave the per-port interrupts alone (iOS's T7000 and S8003
++ *	code doesn't use them)
+  * @nvme_mode_ports: ports carrying the ANS NVMe endpoint, for which the root
+  *                   complex is switched into NVMe mode before they power up
+  * @link_settle_ms: delay between link training and the first configuration
+@@ -487,7 +487,6 @@ enum apple_h9p_port_result {
+  * @port_tunables: port block tunables (S8003 only)
+  * @nvmmu_init_busy: NVMMU TCB control bit that is set while its init runs
+  * @nvmmu_inv_fifo: wait for the NVMMU invalidate FIFO before invalidating
+- * @port_irq_after_link: enable a port's interrupt only once its link is up
+  * @j172_bridge_quirk: replay J172 firmware's bridge transactions on port 3
+  */
+ struct apple_h9p_hw {
+@@ -509,7 +508,6 @@ struct apple_h9p_hw {
+ 	struct apple_h9p_tunables port_tunables;
+ 	u32 nvmmu_init_busy;
+ 	bool nvmmu_inv_fifo;
+-	bool port_irq_after_link;
+ 	bool j172_bridge_quirk;
+ };
+ 
+@@ -1032,8 +1030,7 @@ static int apple_h9p_pcie_request_port_irqs(struct apple_h9p_pcie *pcie)
+ 		if (irq < 0)
+ 			return irq;
+ 
+-		armed_later = (pcie->hw->port3_link_events && port == 3) ||
+-			      pcie->hw->port_irq_after_link;
++		armed_later = pcie->hw->port3_link_events && port == 3;
+ 		port_irq->pcie = pcie;
+ 		port_irq->index = port;
+ 		port_irq->irq = irq;
+@@ -2457,7 +2454,6 @@ static int apple_s8003_setup_port(struct apple_h9p_pcie *pcie,
+ 				  unsigned int port,
+ 				  enum apple_h9p_port_result *result)
+ {
+-	struct apple_h9p_port_irq *port_irq = &pcie->port_irq[port];
+ 	struct device *dev = pcie->dev;
+ 	int ret;
+ 
+@@ -2486,11 +2482,6 @@ static int apple_s8003_setup_port(struct apple_h9p_pcie *pcie,
+ 		return 0;
+ 	}
+ 
+-	if (port_irq->irq > 0 && !port_irq->enabled) {
+-		enable_irq(port_irq->irq);
+-		port_irq->enabled = true;
+-	}
+-
+ 	*result = APPLE_H9P_PORT_READY;
+ 	return 0;
+ }
+@@ -2995,7 +2986,7 @@ static const struct apple_h9p_hw apple_h9p_hw_s8003 = {
+ 	/* AppleNVMeMMU on S8003 polls the init bit itself */
+ 	.nvmmu_init_busy = H9P_NVMMU_TCB_CTRL_INIT,
+ 	.nvmmu_inv_fifo = true,
+-	.port_irq_after_link = true,
++	.no_port_irqs = true,
+ };
+ 
+ static const struct of_device_id apple_h9p_pcie_of_match[] = {
+-- 
+2.55.0
+
