@@ -315,3 +315,63 @@ builtin uinput (modprobe → `-modprobe`, the rootfs has no module tree
 for the new kernel — depmod for g3b07f3a1ea98 is a TODO if modprobe is
 ever needed); the wireless modules idle-load at boot is NOT persisted
 (insmod'd by hand — add a unit after the h9p port).
+
+## ★ SESSION 6 END STATE — the brcmfmac download wedge (open, fully mapped)
+
+Dances #19-32 (11 dances) closed: the h9p port, the T8015 sequence, the
+link training (deterministic), the endpoint enumeration, the iommu map,
+brcmfmac binding + chip ID. OPEN: the firmware download wedges the
+T8015 interconnect (silent death, no oops/fault) — mapped by pr_emerg
+markers (they SURVIVE crashes) across 6 crash autopsies:
+
+- ROOT CAUSE of dances #20-26: rambase 0x180000 (the 4355-family guess)
+  put the fw sentinel write at 0x2cfff8 — past the RAM end (0x2c0000),
+  in the TCM window hole (0x130000-0x170000 unmapped) → wedge. FIXED:
+  rambase 0x170000 (hoolock a88a43869), triple-confirmed from Apple's
+  own artifacts (the dext ChipManagerPCIe4357 setMemoryRAMAddress(0x170000);
+  its memory table 0x1f50e4: ARM region {0x170000, 0x150000}; the DBPP
+  header in the fw container itself carries 0x170000 at file offset 0x74).
+- The CLKREQ-mux DTB experiment (6233ddd) REGRESSED (2/2 early deaths in
+  the PCI bind — the mux lets the SoC gate the REFCLK while the chip
+  deasserts CLKREQ during ROM boot); REVERTED (04b25ee). LESSON: with no
+  fw managing the chip's power state, the REFCLK must stay unconditionally
+  on — no CLKREQ mux until the fw is up.
+- Apple's per-chip steps we never knew: ChipManagerPCIe4357
+  prepareHardware = GCI core (BCMA 0x840) reg 0xe64 = (val & ~3) | 1;
+  checkHardware = write 4 to GCI 0x40, read back expect 4, GCI 0x204
+  bit 14 clear. Ported into the probe (hoolock a88a43869) — outcome
+  untested (the last probe crashed before the readout; its markers are
+  in the next boot's journalctl -b -1, THE FIRST THING TO READ).
+- The Apple .trx = NOT a TRX file: their own DBPP container (magic
+  50504244 at 0x74, a 32-byte descriptor pair at 0x0/0x20, 0xfa pad).
+  May work written raw; if the fw-up poll times out cleanly, unwrap via
+  the dext's parser.
+- Apple dext fully disassembled: /tmp/opencode/dext.asm (514k lines,
+  binary at /tmp/opencode/apfs-mnt/root/System/Library/DriverExtensions/
+  com.apple.DriverKit-AppleBCMWLAN.dext/com.apple.DriverKit-AppleBCMWLAN).
+  Key symbols: ChipManagerPCIe4357 initWithChip (0x100050c18 — the full
+  config: 9 cores, 8 backplane windows at 0x1f5138, memory table
+  0x1f50e4, UCode regions 0x1f51f8/0x1f5208, SROM sig 0x4357, word count
+  0x400, PTM/cache-coherent/HMAP@0x580, BootMSIUnsupported=true,
+  NotSplitArchitecture=true), prepareHardware (0x100050eb4),
+  checkHardware (0x100050f5c), ChipBackplane mapCore/readRegister32/
+  waitForValue32 (the GCI core = ChipCoreID 6).
+- MODULE-ONLY ITERATION WORKS (no dances!): pin
+  include/generated/utsrelease.h to the running kernel's release
+  (7.3.0-rc1-g0c549fd6bed0), make ARCH=arm64 LLVM=1
+  M=drivers/net/wireless/broadcom/brcm80211, scp to
+  /root/wifi/brcmfmac-trace.ko, insmod. The phone's chain:
+  /root/wifi-insmod-chain.sh (regulator-fixed FIRST). All old modules
+  backed up as *.g3b07f3a1e / *.g51c95d05 on the phone.
+- NEXT: (1) dance, read journalctl -b -1 brcmf-trace markers (the dance
+  #32 crash: GCI-prep build, death point unknown); (2) if the GCI steps
+  printed + the death moved into the download: compare against Apple's
+  exact flow (their fw download does NOT poll TCM blindly — the
+  waitForValue32 machinery + host-wake); (3) if the fw-up poll times out
+  CLEANLY: unwrap the DBPP container (the dext parse); (4) consider
+  Apple's forcePower/mapCore/backplane-window flow replacing
+  brcmf_pcie_select_core entirely.
+- The dance count discipline: the user is dance-fatigued — batch every
+  probe behind a read-only journal read; never two probes without a new
+  hypothesis; the user's dance command:
+  sudo tmux new -d -s pwn -x 200 -y 60 -c ~/checkm8-kit "./palera1n -p -v".
