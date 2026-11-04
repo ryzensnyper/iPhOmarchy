@@ -432,10 +432,6 @@
 				clkreq-gpios = <0x18 0xa3 0x01>;
 				max-link-speed = <0x02>;
 				apple,manual-availability-iommu = <0x1e 0x00>;
-				apple,link-retry-after-power-cycle;
-				apple,hardware-trained-phy-lane;
-				apple,endpoint-power-after-link-setup;
-				apple,inherited-perst-before-link-setup;
 				#address-cells = <0x03>;
 				#size-cells = <0x02>;
 				ranges;
