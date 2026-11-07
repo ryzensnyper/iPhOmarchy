@@ -120,9 +120,13 @@ Orchard template to follow:
       behavior, rotation).
 - [ ] Target: `labwc` + software render on `simpledrm`, usable with touch — **met**.
 
-### M7 — Display / GPU (long-term, out of near-term scope)
-- Display pipe (`disp0,t8015`) and GPU (`G11P`) have **no mainline driver**; upstream marks them
-  TBA. Not required for M1–M6 (simple-framebuffer is enough).
+### M7 — Display / GPU (long-term; GPU research started, **WIP**)
+- Display pipe (`disp0,t8015`) has **no mainline driver**; simple-framebuffer is enough for M1–M6.
+- GPU: the A11 is **G10P** — the next generation of the A10 **G9P** that Orchard got
+  working. A feasibility dig (firmware extracted, hardware map, Fender register map
+  proven identical, A10 driver as template) is in [gpu-wip.md](gpu-wip.md). It is
+  **research only**: the init-data layout, runtime constants and the entire Mesa
+  shader backend remain, and nothing has run on hardware. Long-term, not near-term.
 
 ## Cross-cutting
 
