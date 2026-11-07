@@ -432,6 +432,7 @@
 				clkreq-gpios = <0x18 0xa3 0x01>;
 				max-link-speed = <0x02>;
 				apple,manual-availability-iommu = <0x1e 0x00>;
+				apple,endpoint-cold-boot;
 				#address-cells = <0x03>;
 				#size-cells = <0x02>;
 				ranges;

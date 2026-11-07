@@ -375,3 +375,108 @@ markers (they SURVIVE crashes) across 6 crash autopsies:
   probe behind a read-only journal read; never two probes without a new
   hypothesis; the user's dance command:
   sudo tmux new -d -s pwn -x 200 -y 60 -c ~/checkm8-kit "./palera1n -p -v".
+
+## SESSION 7 — Apple's boot flow decoded further (2026-11-04 evening)
+
+Static analysis of /tmp/opencode/dext.asm (no new probe yet). Facts that
+narrow the wedge:
+
+1. **Apple DOES poll the boot word — with a quiet period.** The boot word
+   (last 4 bytes of ARM RAM, i.e. rambase+ramsize-4) is read ONCE
+   immediately after the ARM release, then:
+   - `ChipManagerPCIe::getPCIeBootMinPollingDelay()` = **600 ms** (the
+     4357 initWithChip never overrides it; 4377/4377b set 200), so Apple
+     sleeps 600 ms before the second read;
+   - `getPCIeBootPollingInterval()` = **10 ms** between reads;
+   - total budget 5000 ms;
+   - a read of 0xffffffff aborts the wait (treated as failure).
+   brcmfmac instead polls every 50 ms starting 50 ms after set_active.
+   If the fw's own PCIe re-init is the sensitive window, this is the
+   difference. (BusInterfacePCIe::loadChipImage @0x10016672c-0x100166a9c;
+   getters @0x1001cbc8c/0x1001cbcb0.)
+2. **Apple releases the ARM through the ARM master wrapper, not through
+   the CR4 core reset alone** (loadChipImage, 0x10016653c-0x10016675c):
+   - read ARM wrapper 0x800; if bit0 clear, wait 0x804==0 (1000x?),
+     write 0x800=1, wait 0x804==1 ("ARM failed to get ready"/"reset");
+   - write wrapper 0x408=0x23, 0x800=0, 0x408=0x21;
+   - `ChipBackplane::sysmemReset(1)` then `(0)` — this writes sysmem
+     wrapper (ChipWrapperID 0x16) reg 0x800=1/0, sleep 2 ms, reg
+     0x408=3/0, sleep 2 ms;
+   - load the image (loadImage);
+   - after the load: write 0x408=3, 0x800=0, 0x408=1, dmb ish — the ARM
+     starts. brcmfmac's `brcmf_chip_set_active` does none of the wrapper
+     programming (only CR4 reset + vector write). This is a candidate
+     reason the ARM never reaches the fw, and possibly why a runaway ARM
+     master wedges the T1955 interconnect.
+3. Apple resets the chip with forcePower()/sysmemReset, not with the
+   ChipCommon watchdog write that brcmfmac's `brcmf_pcie_reset_device`
+   uses (CC watchdog=4 = full chip reset, incl. PCIe core; it runs
+   twice per probe: buscore reset + brcmf_pcie_reset).
+4. The .trx is Apple's DBPP container, written as-is by the PCIe bus
+   interface (`generateChipImage`/`editImage` are no-ops for PCIe);
+   header at 0x74 = "DBPP", 0x2139b4, 0x00170000, zeros to 0x100, then a
+   table of 32-bit image offsets (0x1a8b25, 0x1ae234, ...) — consistent
+   with an image whose deployed size exceeds the 0xEEA00 file, i.e. a
+   compressed/loaded payload. brcmfmac writes the file raw at 0x170000,
+   so if the ARM does start but the image is a container, expect a clean
+   "FW failed to initialize" (not a wedge).
+
+FIRST DATA POINT STILL MISSING: the pr_emerg markers of the dance #32
+crash (GCI-prep build hoolock e0f87394b3d1) — read with
+`journalctl -b -1 | grep brcmf-trace` in the next Linux boot.
+
+## SESSION 7 PROGRESS — the marker trail is now crash-durable; stage ladder
+### (2026-11-04 night, dance #1 + one probe)
+
+The dance #32 markers were read: `journalctl -b -1` showed ONLY
+"module_init enter" + "platform probe done (err -19)" — for THREE boots in
+a row (-1, -3, -4). No "probe enter", no "chip_attach". Two readings were
+possible: (a) the PCI probe never ran, (b) the markers were LOST because
+pr_emerg only reaches the kernel ring and journald does not fsync — a hard
+interconnect wedge resets the SoC before the 5 s ext4 commit, so the trail
+after the last flush is gone. (b) was much more likely (the same build
+reached reset_device in an earlier probe, and the module_init markers that
+DID survive were simply the last ones before the wedge).
+
+So the diagnostics were rebuilt instead of guessed at:
+
+- **Crash-durable markers**: new `brcmf-trace.c/.h` in brcmfmac — every
+  `pr_emerg("brcmf-trace: ...")` became `brcmf_trace(...)`, which prints to
+  the console AND appends to `/root/wifi/trace.log` opened **O_SYNC**
+  (one fsync'd write per marker). The trail survives a hard reset and is
+  read straight off the rootfs after the next boot.
+- **Stage ladder** (new module param `stage`):
+  1 = probe entry only (no MMIO) | 2 = +pci_enable_device/BAR ioremap
+  (config space only) | 3 = +chip_attach (first BAR0/backplane read)
+  | 4 = +Apple's GCI prepareHardware | 5 = full probe (reset + download).
+  Each stage stops the probe right after one more risky layer, so a wedge
+  is bisected without burning a dance.
+- **Finer markers**: chipid raw value, recognition/setup results, select_core
+  base, BAR map, sentinel write address, fw memcpy start/end, nvram copy,
+  first boot-word read, poll samples.
+
+Dance #1 results (one boot, four probes, all in the SAME boot):
+- stage 1: probe binds 14e4:440a, machine alive -> the bind path is fine.
+- stage 2: BAR0 = 0x640400000 (32K), BAR2 = 0x640000000 (4M), alive.
+- stage 3: chipid raw **0x10144357** -> BCM4357 rev 4; reset_device ran;
+  rambase **0x170000** / ramsize **0x150000**; alive.
+- stage 4: GCI core base 0x18010000 rev 12; 0xe64 read 0x0; 0x40 readback
+  **0x4** (Apple wants 4); 0x204 = 0x10a0a88c -> bit 14 clear. **Apple's own
+  checkHardware passes on this chip.** Alive.
+- stage 5 (full probe): **WEDGE - phone reset to iOS.** The pre-wipe
+  /root/wifi/trace.log holds the exact death point (read on the next boot).
+
+Root cause candidate found while reading the code: the `cand[4] = {0,
+0x160000, 0x180000, 0x40000}` TCM diagnostic dump runs **unconditionally in
+the download path** (not only under trace_only) and 3 of its 4 offsets
+(0x0, 0x160000, 0x40000) are **unmapped BAR2 addresses** - the same class
+of access that wedged the interconnect with rambase 0x180000. v2 removes
+that dump entirely and adds markers around every remaining download step.
+v2 also adopts Apple's boot-word wait exactly: one immediate read, 600 ms
+quiet period (getPCIeBootMinPollingDelay), then a 10 ms poll interval
+(getPCIeBootPollingInterval) inside the 5 s budget, aborting on 0xffffffff
+(brcmfmac polled every 50 ms from t=0, i.e. it touched the chip inside the
+firmware's PCIe re-init window).
+
+v2 module: brcmfmac.ko sha256 9f41d46e1f3ebc1b2f90a035d146b32838c3e8d376
+c42fb904b978685bf85e38 (deployed as /root/wifi/brcmfmac-stage2.ko).
