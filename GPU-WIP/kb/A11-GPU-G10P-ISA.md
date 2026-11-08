@@ -1509,12 +1509,23 @@ opcodes than the two already known (`imad`, `texture_load`)** — the candidate
 table in Addendum 3 is an under-estimate, not a final answer.
 
 The next instrument is therefore **not** more solver heuristics but the
-**same-source differential**: the 32 instances of each of the two
-`.constant_program` programs are the same program compiled with different
-constants, so aligning two instances of one program pins the length of every
-instruction whose encoding differs between them.  That yields the A11 length
-of the A11-only opcodes and of the Mesa opcodes that changed length, without
-guessing.
+**same-source differential**: the corpus contains groups of instances compiled
+from one source, and aligning two instances of one group pins the length of
+every instruction whose encoding differs between them.  The groups (from
+`tools/g10p-struct/g10p-samesrc.py`, by `source_name`) are:
+
+| group | instances |
+|---|---|
+| `bucketed-tessellation-compute-instance-counts-driver` | **32** |
+| `bucketed-tessellation-driver-emit-draw-commands-driver` | **32** |
+| `tessellation-non-bucketed-emit-draw-commands-driver` | 8 |
+| `eot_uber` | 4 |
+| `bgo_uber` | 3 |
+
+Note (corrects an easy mistake): the 73 objects whose *file name* ends in
+`agc.main.constant_program` are **not** one source — pairwise they share only
+1–6 leading words and 1–4 % identical words.  The same-source groups above
+are the ones to align.
 
 ### 8. Cross-check against the A10 (G9P) work (confirmed, and a useful warning)
 
