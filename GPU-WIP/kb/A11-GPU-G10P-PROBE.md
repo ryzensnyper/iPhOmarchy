@@ -111,14 +111,34 @@ Two stages, each its own boot, each revertible:
 
 ## 4. What is **not** known yet (and must be resolved offline first)
 
-| unknown | how to resolve |
+*(Updated after the AGXG10P kext RE pass.)*
+
+| unknown | status after RE |
 |---|---|
-| Which of the two `gfx-kf` regions is akf / control / SRAM | RE `AGXG10P__TEXT_EXEC.bin` for the AKF/control mappings (the ADT gives only the two extents) |
-| The mailbox offset for this IOP (PMP has it at `akf+0x8000`) | same RE pass, or the ADT if a mailbox node is added by the kext |
-| The run-bit offset (A10 used `base+0x2048`) | same RE pass |
-| The GFX firmware image to use (`g10p.img` vs `gfx-t8015-const.bin`) | compare headers; `g10p.img` is the stripped, verified image |
-| The PMP is presumably required for Fender / power gating | booted already by the PMP driver; keep it booted |
-| Fender on A11: is the state-request sequence the same as the A10's `0x11`? | RE `agxp_kext_g10p_rtbuddy.cpp` / the Fender notes in `orchard-gpu/a10/FENDER.md` |
+| Window register offsets (phys/IOP/len) | **Confirmed present in the G10P kext, identical to A10.** The dummy-read block at `+0x200c`, `+0x2010`, `+0x2014`, `+0x2018`, `+0x201c`, `+0x2020` appears at kext `0x42d14–0x42d28`, and `str wzr,[x19,#0x2020]`/`[x19,#0x2070]` … `[x19,#0x2098]` shows the same 0x2000-block layout. So the "Fender window" (W) writes transplant unchanged. The "A window" (IOP window) register offsets are not in the kext as bare immediates (they are constructed); they are assumed — with high confidence, same silicon — to be `A+0x08/+0x10`, `+0x18/+0x20`, `+0x28`, `+0x30`, `+0x38` exactly like the A10. To be verified on the bench or by a full symbol-resolved RE of `AppleA7IOP::_mapFirmware` in the kext. |
+| `Fender+0x1000` power request | **Confirmed in the G10P kext at `0x2600`**: `str w8,[x0,#0x1000]` with `state\|0x10`, and `ldr` polls bit 4. So the A11 Fender power sequence is the same as the A10's `Fender+0x1000 = 0x11` and as `tools/fender-power-on.sh` — *not* the `+0x2048` run bit for the Fender itself. |
+| `getRuntimeBinSize` | **Confirmed: `0x8f000`** (from the buddy kext, documented in `A11-GPU-G10P-LAYOUT.md` §1). Allocate `0x8f000` contiguous, 16 KiB aligned, copy `g10p.img` at offset 0, zero the rest to `0x8f000`. |
+| The GFX firmware image | **Confirmed: `g10p.img`** (381 728 B stripped; `gfx-t8015-const.bin` is the same image with a 9-byte RTKit `.Release` header). ARM32, load base 0, "G10 Firmware initializing". |
+| Fender `+0x2048` (IOP run bit) | **Not present as a bare immediate anywhere** (checked: `#0x2040`–`#0x2060` all zero hits in the disassembly or the data sections). It is built at runtime from a base+offset; it needs either a full RE of the run-setter or the bench test. This only matters for Stage 2, which can also be driven by `the Fender+0x1000 path above`. |
+| Fender `+0x2058` | A10 cleared to 0 on power-on — verify on A11 if the same register pair exists. |
+| The mailbox offset for this IOP | Unverified (PMP has it at `akf+0x8000`). The `apple,t8015-asc-mailbox` driver handles the IRQs; only the region is in question. |
+| The init data | **Not required for Stage 1.** The A11 firmware, like the A10's, boots through RTKit management first and only then waits for AGX init data — which is Phase 2 work, not part of the probe. |
+
+## 6b. The uncomfortable truth — what Stage 1 actually requires
+
+For Stage 1 (an RTKit HELLO from the GFX IOP), the exact same PMP driver
+mechanism works:
+
+1. Copy `g10p.img` into a physically contiguous `0x8f000` buffer.
+2. Set the two AKF remap windows (`W` = Fender-shared `0x04D00000`,
+   `A` = `0x04D20000`) — offsets above.
+3. Set the mailbox ready bits and the timebase sync, or simply `writel(1, ctl_base)`
+   as the PMP driver does.
+4. Poll the mailbox for the RTKit HELLO (endpoint 0).
+
+No AGX init data, no GPU powering, no shader, nothing else. If HELLO doesn't
+come up, the failure mode is limited to a stuck IOP; a reboot restores the
+known-good display (`simplefb`).
 
 ## 5. Safety / rollback
 
@@ -142,9 +162,11 @@ Two stages, each its own boot, each revertible:
 
 ## 7. Immediate offline work before the “go”
 
-1. RE `AGXG10P__TEXT_EXEC.bin` for the IOP boot path → the missing offsets in
-   §4. Time-boxed; if inconclusive, Stage 1 starts with the PMP mapping as the
-   starting hypothesis and the kext RE continues in parallel.
+1. ~~RE `AGXG10P__TEXT_EXEC.bin` for the IOP boot path~~ — **done**
+   (see §4).  The window blocks match A10 exactly; the runtime size is
+   `0x8f000`; Fender+0x1000 is confirmed.  The remaining two items
+   (IOP window enable stride, the constructed run bit) are same-silicon
+   assumptions and are only relevant to Stage 2.
 2. Draft the `apple,t8015-gfx-iop` DT binding + node patch and the driver
    source (out-of-tree module), ready to build.
 3. Prepare the firmware copy script + checksums, and the uninstall/rollback
