@@ -189,11 +189,19 @@ the branch instructions are not: `jmp_exec_any` (`0xc000`), `jmp_exec_none`
 instruction boundary, and that position is a property of the word stream
 rather than of the framing.
 
-* **A11's branch offset is a 16-bit sign-extended value in the *third* word**
-  (bits 32–47), not G13's 32-bit field spread over words 1–2.  Sweeping the
-  field layout × unit × base against the framed corpus, the third-word field
-  wins outright: **15 259 / 15 361 (99.3 %)** targets on a boundary, versus
-  87 % for every 32-bit layout.
+* **A11's branch offset is a 16-bit sign-extended byte offset, and the word
+  that holds it depends on the branch opcode.** G13 puts a 32-bit `off` at
+  bits 16–47 of every branch; A11 does not.
+  * `jmp_exec_none` (`0xc020`) — offset in the **third** word (bits 32–47):
+    **15 243 / 15 252 (99.9 %)** targets on a boundary, versus 87.6 % for
+    G13's 32-bit layout.
+  * `call` (`0xc010`) — offset in the **second** word (bits 16–31): **4 / 4
+    (100 %)**.
+  * `jmp_exec_any` (`0xc000`) — **unresolved**: neither word works, and the
+    18 hits out of 105 are at chance level (their offsets are scattered over
+    all residues mod 6, whereas a real offset field is ~100 % ≡ 0 mod 6).
+    `0xc000` occurs only 400 times in the corpus against 21 048 for
+    `0xc020`.
 * **99.3 % of all branch offsets in the corpus are exact multiples of 6.**
   That is an independent proof of the instruction size — a compiler only emits
   multiples of 6 if every instruction it can branch over is 6 bytes long — and

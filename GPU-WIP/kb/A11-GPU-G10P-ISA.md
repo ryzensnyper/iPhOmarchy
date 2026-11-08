@@ -1861,7 +1861,7 @@ Per-opcode highlights:
 
 ---
 
-## Addendum 7 (2026-11-08/09, night): **branch targets validate the framing** — and A11's branch offset is 16-bit in the third word
+## Addendum 7 (2026-11-08/09, night): **branch targets validate the framing** — and A11's branch offsets are 16-bit, with a per-opcode field position
 
 Offline only. New artefacts: `tools/g10p_constrain.py` (the branch-constrained
 solver), `tools/g10p_branches.py`, `tools/g10p_branches.py` sweep variants.
@@ -1878,24 +1878,40 @@ be an instruction boundary**.  Those positions are a property of the word
 stream, not of the framing, which makes them hard constraints.  With ~15 000
 branches over the corpus they over-determine the segmentation.
 
-### 2. A11's branch offset is 16-bit in the *third* word (confirmed)
+### 2. A11's branch offset is 16-bit in one word, and the field position is per-opcode (confirmed)
 
 G13's descriptor says `off` is a **32-bit** field at bits 16..47
-(`next_pc = pc + sign_extend(off, 32)`).  A11 is different.  Sweeping the
-offset field layout × unit × base against the framed corpus:
+(`next_pc = pc + sign_extend(off, 32)`).  A11 is different: the offset is a
+**16-bit sign-extended byte offset** (see §3: 99.3 % of them are multiples of
+6 bytes), and **which word holds it depends on the branch opcode**.
 
-| offset field | unit | base | targets on a boundary |
-|---|---|---|---|
-| **word 2 only (16-bit)** | word | next | **15 259 / 15 361 (99.3 %)** |
-| **word 2 only (16-bit)** | byte | next | **15 259 / 15 361 (99.3 %)** |
-| word 1 only (16-bit) | word | next | 13 410 / 15 361 (87.3 %) |
-| `w1 \| w2<<16` (32-bit) | word | next | 13 379 / 15 361 (87.1 %) |
-| `w2<<16 \| w1` (32-bit) | word | next | 13 379 / 15 361 (87.1 %) |
+Sweeping the offset field layout × unit × base against the framed corpus,
+per branch opcode:
 
-So in A11 the branch offset is a **16-bit sign-extended value in the third
-word (bits 32..47)** of the branch instruction, and the target is
-`instruction_address + offset`.  (Byte and word units score identically
-because every offset is a multiple of 6 — see below.)
+| branch opcode | offset field | unit | base | targets on a boundary |
+|---|---|---|---|---|
+| `jmp_exec_none` `0xc020` | **word 2** (bits 32–47) | byte | pc | **15 243 / 15 252 (99.9 %)** |
+| `jmp_exec_none` `0xc020` | `w1 \| w2<<16` (32-bit, G13's) | byte | next | 13 364 / 15 252 (87.6 %) |
+| `call` `0xc010` | **word 1** (bits 16–31) | byte | pc | **4 / 4 (100 %)** |
+| `jmp_exec_any` `0xc000` | word 1 | word | pc | 37 / 105 (35.2 %) — *not significant* |
+| `jmp_exec_any` `0xc000` | word 2 | word | next | 24 / 105 (22.9 %) — *not significant* |
+
+The `jmp_exec_any` figures are at chance level: for the 105 occurrences, the
+18 that do land on a boundary have offsets scattered over all residues mod 6
+(0:6, 1:1, 2:10, 5:1) while the misses are equally scattered (0:3, 1:6,
+2:31, 3:19, 4:7, 5:21).  A real branch offset field would be almost entirely
+≡ 0 mod 6, exactly as `jmp_exec_none`'s is.  **So the `0xc000` offset field
+is not in word 1 or word 2 and remains unresolved** (see §6).
+
+Corpus census for context (how rare each exec-mask opcode is):
+
+| word | occurrences in the corpus | at instruction starts |
+|---|---|---|
+| `0xc020` (`jmp_exec_none`) | 21 048 | 15 252 |
+| `0xc000` (`jmp_exec_any`) | 400 | 105 |
+| `0xc010` (`call`) | 39 | 4 |
+| `0xc030` (`TODO.unk30C0`) | 15 | — |
+| `0xc040` (`TODO.unk40C0`) | 4 | — |
 
 ### 3. The 6-byte quantum, confirmed a sixth and seventh time (confirmed)
 
@@ -1960,12 +1976,14 @@ branch-constrained solve.
   `0xff00` (6 B) and a family of `0xd0xx`/`0xc8xx`/`0xde00`-shaped words
   (4 B).  Naming them needs the AGX3 decoder's opcode table, or a
   Metal-toolchain black-box probe.
-* **`jmp_exec_any` and `call` behave differently from `jmp_exec_none`.**
-  Under the solved framing, `jmp_exec_none` targets hit **100 %**, but
-  `jmp_exec_any` (153 occurrences) hits only ~20 % and `call` ~40 %.  Either
-  those two use a different offset convention (a different field, or a
-  different base), or they are the opcodes whose framing is still wrong.
-  This is the sharpest remaining lead.
+* **`jmp_exec_any` (`0xc000`) is still unresolved.**  Unlike
+  `jmp_exec_none` (100 %) and `call` (100 % of 4), neither word 1 nor word 2
+  holds its offset: the 18 hits out of 105 are at chance level and their
+  offsets are scattered over all residues mod 6.  Either the offset lives in a
+  field we have not identified (the instruction may carry a condition and a
+  target), or `0xc000` is **not** a branch in A11 at all — it occurs only 400
+  times in the corpus, against 21 048 for `0xc020`.  This is the sharpest
+  remaining lead.
 * `mov_imm`: the corpus contains both the G13-style `0x62`/`0x162` forms and
   `0xc2`-byte forms (`0x00c2`, `0x02c2`, `0x04c2`, `0x06c2`); which is A11's
   `mov_imm` is still open, and the `0xc2` family now appears in the

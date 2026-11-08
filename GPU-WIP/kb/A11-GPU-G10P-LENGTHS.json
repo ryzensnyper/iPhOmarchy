@@ -1,5 +1,5 @@
 {
- "branch_offset_semantics": "16-bit sign-extended relative offset in the THIRD word (bit 32..47) of the branch instruction; target = instruction_address + offset",
+ "branch_offset_semantics": "16-bit sign-extended byte offset; target = instruction_address + offset.  Field position is per-opcode: jmp_exec_none (0xc020) uses the THIRD word (bits 32..47) and hits 100% of its targets; call (0xc010) uses the SECOND word (bits 16..31) and hits 100% of its (4) targets; jmp_exec_any (0xc000) does not match either and remains unresolved.",
  "branch_offsets": {
   "multiple_of_6": 15253,
   "multiple_of_6_fraction": 0.9929692077338715,

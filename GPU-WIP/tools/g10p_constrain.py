@@ -245,6 +245,167 @@ def main():
         if not changed:
             break
 
+    final_hit, final_tot = hit, tot
+
+    # ---- per-branch-opcode offset-field sweep ------------------------------
+    layouts = {
+        "w1": lambda w1, w2: w1,
+        "w2": lambda w1, w2: w2,
+        "w1|w2<<16": lambda w1, w2: w1 | (w2 << 16),
+        "w1<<16|w2": lambda w1, w2: (w1 << 16) | w2,
+        "w2|w1<<16": lambda w1, w2: w2 | (w1 << 16),
+        "w2<<16|w1": lambda w1, w2: (w2 << 16) | w1,
+    }
+    print("\n=== per-branch-opcode offset-field sweep ===")
+    for bname in sorted(BRANCH.values()):
+        best = []
+        for lname, lfn in layouts.items():
+            for uname, scale in (("word", 1), ("byte", 2), ("6B-insn", 6)):
+                for base in (0, 1):
+                    tot = hit = 0
+                    for fn, words, cands, f in framed:
+                        if f is None:
+                            continue
+                        starts, seq = f
+                        n = len(words)
+                        for p, c, L in seq:
+                            if c[0] == "A" or words[p] not in BRANCH or p + 3 > n:
+                                continue
+                            if BRANCH[words[p]] != bname:
+                                continue
+                            off = lfn(words[p + 1], words[p + 2])
+                            if off & 0x8000:
+                                off -= 1 << 16
+                            tot += 1
+                            if off % scale:
+                                continue
+                            t = p + (L if base else 0) + off // scale
+                            if 0 <= t < n and t in starts:
+                                hit += 1
+                    if tot:
+                        best.append((100.0 * hit / tot, hit, tot, lname, uname,
+                                     "next" if base else "pc"))
+        best.sort(reverse=True)
+        if not best:
+            continue
+        print("   %s:" % bname)
+        for pct, hit, tot, lname, uname, bnm in best[:8]:
+            print("      field %-10s unit %-7s from %-5s : %5d / %5d (%.1f%%)"
+                  % (lname, uname, bnm, hit, tot, pct))
+
+    # ---- offset modulus per branch opcode, using each opcode's best field --
+    BESTFIELD = {"jmp_exec_none": 2, "jmp_exec_any": 1, "call": 1}
+    print("\n=== branch-offset modulus per branch opcode (best field) ===")
+    for bname, wi in BESTFIELD.items():
+        hist = collections.Counter()
+        tot = 0
+        for fn, words, cands, f in framed:
+            if f is None:
+                continue
+            starts, seq = f
+            n = len(words)
+            for p, c, L in seq:
+                if c[0] == "A" or words[p] not in BRANCH or p + 3 > n:
+                    continue
+                if BRANCH[words[p]] != bname:
+                    continue
+                off = words[p + wi]
+                if off & 0x8000:
+                    off -= 1 << 16
+                hist[off % 6] += 1
+                tot += 1
+        if not tot:
+            continue
+        print("   %-14s (field word %d)  n=%d" % (bname, wi, tot))
+        for r in sorted(hist):
+            print("      off %% 6 == %d : %5d (%.1f%%)" % (r, hist[r],
+                                                          100.0 * hist[r] / tot))
+
+    # ---- context for the jmp_exec_any misses --------------------------------
+    print("\n=== context: jmp_exec_any misses (offset from word 1) ===")
+    shown = 0
+    for fn, words, cands, f in framed:
+        if f is None:
+            continue
+        starts, seq = f
+        n = len(words)
+        seqmap = {q: (cc, LL) for q, cc, LL in seq}
+        for p, c, L in seq:
+            if c[0] == "A" or words[p] != 0xC000 or p + 3 > n:
+                continue
+            off = words[p + 1]
+            if off & 0x8000:
+                off -= 1 << 16
+            t = p + off // 2
+            if 0 <= t < n and t in starts:
+                continue
+            if shown >= 6:
+                break
+            shown += 1
+            print("   %-32s @word %-6d c000 off(w1)=%-7d target=%d"
+                  % (fn[:32], p, off, t))
+            lo = max(0, p - 6)
+            line = []
+            for q in range(lo, min(n, p + 7)):
+                mark = "*" if q == p else (" " if q in starts else "-")
+                line.append("%04x%s" % (words[q], mark))
+            print("      " + " ".join(line))
+            print("      (* = branch, space = instruction start, - = inside)")
+
+    # ---- per-branch-opcode breakdown --------------------------------------
+    bo = collections.Counter()
+    bh = collections.Counter()
+    bmiss = collections.defaultdict(list)
+    for fn, words, cands, f in framed:
+        if f is None:
+            continue
+        starts, seq = f
+        n = len(words)
+        for p, c, L in seq:
+            if c[0] == "A" or words[p] not in BRANCH or p + 3 > n:
+                continue
+            off = words[p + 2]
+            if off & 0x8000:
+                off -= 1 << 16
+            t = p + off // 2
+            nm = BRANCH[words[p]]
+            bo[nm] += 1
+            if 0 <= t < n and t in starts:
+                bh[nm] += 1
+            elif len(bmiss[nm]) < 4:
+                bmiss[nm].append((fn, p, words[p], off, t, n))
+    print("\n=== branch targets on a boundary, per branch opcode ===")
+    hmod = collections.defaultdict(collections.Counter)
+    mmod = collections.defaultdict(collections.Counter)
+    for fn, words, cands, f in framed:
+        if f is None:
+            continue
+        starts, seq = f
+        n = len(words)
+        for p, c, L in seq:
+            if c[0] == "A" or words[p] not in BRANCH or p + 3 > n:
+                continue
+            bnm = BRANCH[words[p]]
+            off = words[p + 2]
+            if off & 0x8000:
+                off -= 1 << 16
+            t = p + off // 2
+            if 0 <= t < n and t in starts:
+                hmod[bnm][off % 6] += 1
+            else:
+                mmod[bnm][off % 6] += 1
+    for nm in sorted(bo):
+        print("   %-14s %6d / %6d (%.1f%%)" % (nm, bh[nm], bo[nm],
+                                               100.0 * bh[nm] / bo[nm]))
+        for tag, h in (("hits", hmod[nm]), ("misses", mmod[nm])):
+            if not h:
+                continue
+            print("        %-7s off%%6: %s" % (tag, ", ".join(
+                "%d:%d" % (r, h[r]) for r in sorted(h))))
+        for fn, p, w, off, t, n in bmiss[nm]:
+            print("      miss: %-30s @word %-6d %04x off=%-6d target=%d (n=%d)"
+                  % (fn[:30], p, w, off, t, n))
+
     # ---- how are branch offsets distributed? ----------------------------
     modhist = collections.Counter()
     offcount = 0
@@ -266,7 +427,6 @@ def main():
         print("   off %% 6 == %d : %6d (%.1f%%)" % (r, modhist[r],
                                                    100.0 * modhist[r] / offcount))
 
-    final_hit, final_tot = hit, tot
 
     # ---- branch-offset interpretation sweep on the final framing --------
     print("\n=== branch-offset interpretation sweep (final framing) ===")
@@ -280,7 +440,7 @@ def main():
     }
     results = []
     for lname, lfn in layouts.items():
-        for uname, scale in (("byte", 1), ("word", 2), ("6B-insn", 6)):
+        for uname, scale in (("word", 1), ("byte", 2), ("6B-insn", 6)):
             for base in (0, 1):
                 tot = hit = 0
                 for fn, words, cands, f in framed:
@@ -355,9 +515,13 @@ def main():
                                "multiple_of_6_fraction":
                                    (modhist.get(0, 0) / offcount) if offcount else 0},
             "branch_offset_semantics":
-                "16-bit sign-extended relative offset in the THIRD word "
-                "(bit 32..47) of the branch instruction; target = "
-                "instruction_address + offset",
+                "16-bit sign-extended byte offset; target = "
+                "instruction_address + offset.  Field position is "
+                "per-opcode: jmp_exec_none (0xc020) uses the THIRD word "
+                "(bits 32..47) and hits 100% of its targets; call (0xc010) "
+                "uses the SECOND word (bits 16..31) and hits 100% of its "
+                "(4) targets; jmp_exec_any (0xc000) does not match either "
+                "and remains unresolved.",
             "used_classes": used,
             "classes": tbl,
         }, f, indent=1, sort_keys=True)
