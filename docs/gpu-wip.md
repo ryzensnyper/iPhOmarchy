@@ -1,5 +1,12 @@
 # GPU (A11 / T8015) — WIP research, **not** usable yet
 
+> **📚 The full research record now lives in [`../GPU-WIP/`](../GPU-WIP/)** —
+> offline findings, the corpus/ISA work, the firmware inventory, the read-only
+> device survey and the analysis scripts, with a condensed index in
+> [`../GPU-WIP/README.md`](../GPU-WIP/README.md). This page is the older
+> summary and is kept for the narrative; where the two disagree, `GPU-WIP/` is
+> current.
+
 > **Status: WORK-IN-PROGRESS / EXPERIMENTAL.** Nothing here boots a GPU or
 > draws a frame on the D21. It is a feasibility dig only. There is **no
 > mainline A11 GPU driver** — the Orchard A10 work is the template, and the
@@ -73,21 +80,39 @@ part — the **init-data layout re-derived from the G10P firmware/kext**.
 
 ## What still needs a lot of work (do not underestimate)
 
-1. **Init-data layout showstopper.** The window/init-page/context layout in
-   `pvr_apple_layout.c` is *firmware-build specific*, not chip-specific. The
-   A10 notes say explicitly: re-derive it from the matching kext and iOS
-   captures, "do not copy T8010 offsets". This is the largest unknown.
-2. **Runtime size / window registers** — G10P image is `0x5d329` vs G9P
-   `0x5b320`; runtime likely ≈`0x8f000` but unconfirmed.
+*Status as of 2026-11-08 — see `GPU-WIP/README.md` for the current set.*
+
+1. ~~**Init-data layout showstopper.**~~ **Done offline.** The G10P init
+   layout was re-derived from the G10P firmware/kext; the A10 offsets do *not*
+   carry over field-for-field, and the `\0Release\0` wrapper is not part of
+   the loadable image (image = `__const + 9`, size `0x5d320`). Full record:
+   `GPU-WIP/kb/A11-GPU-G10P-LAYOUT.md`.
+2. ~~**Runtime size / window registers.**~~ **Runtime size confirmed:**
+   `getRuntimeBinSize` → `0x8f000`, same as the A10. IOP window/run register
+   offsets still unconfirmed on G10P.
 3. **IOP window/run registers** (`+0x08`/`+0x38`, Fender run `+0x2048`) —
    not yet confirmed on G10P.
 4. **GPU performance states** — the ADT `sgx` table is zero-filled with
    `gpu-num-perf-states = 2`; a real m1n1 capture is needed for the OPP
    table the bootloader fills.
-5. **Shader ISA** — whether G10P matches the A10 G9P encoder (reuse) or needs
-   a new one. Probe with `metal-tt -arch applegpu_g10p`. **The Mesa side is
-   the other half of the work** and is not started.
-6. **Hardware confirmation** — the first boot must write `0x11` to
+5. **A GPU driver that can bind a G10P.** The tree this device boots has
+   panthor as the **Mali-only** upstream snapshot (no Apple compatible at
+   all), and upstream panthor is likewise Mali-only — the Apple backend lives
+   out-of-tree in the Asahi tree. So this is an out-of-tree driver build, not
+   a DT-only job.
+6. **Shader ISA — exact A11 length table.** The corpus framing is solved at
+   the dialect level: the A11 shaders are Mesa's public AGX dialect
+   (word-aligned, Mesa opcode values) plus a handful of A11 deltas
+   (`stop = 0x0108`, `jmp_exec_none = 0xc020`, no L bit in the 16-bit ALU
+   opcodes, `mov_imm` family opcode byte `0xc2`, `trap ≠ 0x0008`). What is
+   still open is the exact length of the A11-only opcodes that match no Mesa
+   signature (`0x0f00`, `0x06c2`, `0x8041`, `0x0083`, …) and the `imad` /
+   `texture_load` split (6 or 12 bytes vs Mesa's 8).
+7. **Device-side prerequisites** — a `gpu@` DT node (plus the GPU mailbox and
+   IRQs 259–262) and the `apple/pmp-t8015.bin` PMP firmware, which the kernel
+   currently cannot find (the blob has been extracted and validated offline,
+   but not installed).
+8. **Hardware confirmation** — the first boot must write `0x11` to
    `0x04D01000`, read back bit 4, then read `CORE_ID` at `0x04000000`.
 
 ## Reference points

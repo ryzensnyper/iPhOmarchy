@@ -28,7 +28,7 @@ on, and an interrupt drain loop that raced the controller into silence).
 | Bluetooth (N88 UART + patchram) | ❌ next in queue (first up) |
 | Adaptive charging (PMIC lease policy) | ❌ queued |
 | Audio (Apple MCA/I2S + codec) | ❌ queued |
-| GPU | ⚠️ **WIP research only** — A11 is **G10P** (same family as the A10 G9P); no driver boots yet, see [docs/gpu-wip.md](docs/gpu-wip.md) |
+| GPU | ⚠️ **WIP research only** — A11 is **G10P** (same family as the A10 G9P); no driver boots yet, see [GPU-WIP/](GPU-WIP/) (index + [docs/gpu-wip.md](docs/gpu-wip.md) for the narrative) |
 
 ## How the touch stack works
 
