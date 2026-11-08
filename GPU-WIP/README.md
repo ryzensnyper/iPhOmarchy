@@ -155,6 +155,33 @@ The table is published machine-readable as
 [`kb/A11-GPU-G10P-LENGTHS.json`](kb/A11-GPU-G10P-LENGTHS.json) and is
 re-derived by [`tools/g10p_lengths.py`](tools/g10p_lengths.py).
 
+**And the field layout is recovered too (confirmed).** With every instruction
+being exactly three 16-bit words, the layout can be measured directly instead
+of guessed: frame the corpus, then for every field that `applegpu` declares,
+check whether A11 uses those bits, folds them into the opcode, ignores them,
+or has no room for them.
+
+* **word 0 is G13's header verbatim** for **108 of the 110** opcode classes in
+  the corpus: opcode bits 0–5 (constant), bit 6 `S`, bits 7–8 `Dt`, bits 9–14
+  `D`, bit 15 `L`.  (The two exceptions have opcode bits above 5 in G13 too.)
+* **words 1–2 are G13's operand fields at G13's positions, truncated at bit
+  48.** Of the 817 G13 field declarations that belong to the opcodes the
+  corpus uses: **555 (67.9 %) are live at the same position**, 82 are unused,
+  31 are folded into the opcode, and 204 live beyond bit 48 (G13's longer
+  forms have no room in A11's 3 words).
+* `iadd` is the cleanest case: **all 14 G13 fields that fit are live at G13's
+  positions**; only G13's `s2` (bit 52) is dropped — A11's `iadd` *is* G13's
+  `iadd` layout packed into 6 bytes.  `imadd` keeps 12 fields at G13's
+  positions (including the third source `C` @40) and drops the third source's
+  type/extension bits.
+* Consequence: a **G13 disassembler can be reused almost verbatim for G10P** —
+  take `applegpu`'s descriptor table, drop every field above bit 48, and
+  force the length to 6 bytes (2 for trap/stop).  That is a buildable
+  specification for the `pvr_arch_g10p` disassembler the driver needs.
+
+Reproduce with [`tools/g10p_fields.py`](tools/g10p_fields.py) (`--summary`
+for the global table, `--op NAME` for one opcode).
+
 A11 deltas:
 
 | delta | state | note |

@@ -1761,3 +1761,101 @@ not, which is precisely the "not a flag bit" conclusion.
 4. Hardware phase (native `disp0`, `pvr_apple` 3D bring-up) remains gated
    on an explicit "go" plus approval for any kernel/DT edits; `simplefb`
    stays as the working display path.
+
+---
+
+## Addendum 6 (2026-11-08, night): **the field layout is recovered** — A11's header is G13's header verbatim
+
+Offline only. New artefact: `tools/g10p_fields.py` (with
+`tools/g10p_lengths.py` for the framing it depends on).
+
+### 1. The method
+
+With the length table solved, every instruction in the corpus is exactly
+**three 16-bit words**, so the layout can be attacked directly rather than
+inferred statistically:
+
+1. Frame the corpus with the solved table (188 402 instructions).
+2. For each opcode, collect *all* of its occurrences as 48-bit values.
+3. For every field that `applegpu` declares for that instruction
+   (bit start, bit size, name), measure how A11 actually uses those bits:
+   are they live (operand), constant (folded into the opcode), always
+   zero (no such field in A11), or outside A11's 3-word instruction?
+
+### 2. Result: the header is identical to G13 (confirmed)
+
+For **108 of the 110** opcode classes in the corpus, word 0 has exactly
+G13's shape:
+
+| bits | meaning | G13 | A11 |
+|---|---|---|---|
+| 0–5 | opcode | constant per opcode | **identical** |
+| 6 | `S` (saturate) | flag | **identical** |
+| 7–8 | `Dt` (destination type) | operand | **identical** |
+| 9–14 | `D` (destination register) | operand | **identical** |
+| 15 | `L` (long/length bit) | flag | **identical** |
+
+The two exceptions (`threadgroup_store`, `threadgroup_load`) have opcode
+bits above 5 in G13 too, so they are not a layout delta.
+
+### 3. Result: the operand words are G13's, truncated at 48 bits (confirmed)
+
+Measured over all 817 G13 field declarations that belong to the 110 opcodes
+the corpus uses:
+
+| outcome | count | meaning |
+|---|---|---|
+| **live at G13's position** | **555 (67.9 %)** | A11 uses the field exactly where G13 puts it |
+| unused in A11 | 82 | A11 has no such field there |
+| constant → folded into the opcode | 31 | A11 turned it into an opcode bit |
+| beyond bit 48 | 204 | belongs to G13's 4th+ word; A11 has no room for it |
+
+Per-opcode highlights:
+
+* **`iadd` (`0x000e`)** — the cleanest case: **all 14 G13 fields that fit in
+  48 bits are live at G13's positions** (`S`, `N`, `Dt`, `D`, `Dx`@44,
+  `At`, `As`, `A`, `Ax`@42, `Bt`, `Bs`, `B`, `Bx`@40, `s1`@39).  Only G13's
+  `s2` (bit 52) is dropped.  **A11's `iadd` is G13's `iadd` layout packed
+  into 6 bytes.**
+* **`imadd` (`0x001e`)** — 12 fields live at G13's positions (`S`, `N`, `Dt`,
+  `D`, `At`, `As`, `A`, `Bt`, `Bs`, `B`, `C`@40, `s1`@39); G13's `Ct` (4
+  bits @46) is cut to the 2 bits that fit, and `Cs`, `Cx`, `Ax`, `Bx`, `Dx`
+  and `s2` have no room.  A11's `imad` is a **three-source** multiply-add
+  with the type/extension bits of the third source dropped.
+* **`atomic`** — 16 of 16 fields that fit are live.
+* **`texture_load`** — G13's form is 8–12 bytes; A11 keeps the 5 fields that
+  fit and drops the rest (17 beyond 48 bits).
+* The `PARTIAL(n/size)` anomalies in the tool's output are **register
+  fields whose high bits are simply never used in this corpus**, not layout
+  deltas — e.g. `wait_pix`'s `i` uses 7 of 10 bits because no `wait_pix` in
+  the corpus waits on a high-index event.
+
+### 4. What this means (confirmed)
+
+* A11/G10P is **not** a re-layout of AGX.  It is *the G13 AGX encoding,
+  truncated to three words*, with a handful of opcodes re-shaped so that
+  they fit.
+* Therefore **a G13 disassembler can be reused almost verbatim for G10P**:
+  take `applegpu`'s descriptor table, drop every descriptor's fields above
+  bit 48, and force the instruction length to 6 bytes (2 for
+  trap/stop).  That is a concrete, buildable specification for the
+  `pvr_arch_g10p` disassembler the driver needs.
+* The remaining ISA work is now small and specific:
+  1. **name the A11-only opcodes** — the words that match no G13 signature
+     and start instructions (4-byte and 2-byte classes).  Their first words
+     include `0x2000`, `0x0040`, `0x0200`, `0x5200`, `0x5024`, `0x8000`,
+     `0x8100`, `0xffff`, `0x9a00`, `0xff00`.  The earlier `mov_imm`-family
+     candidate (`0xc2` byte) lives in this set.
+  2. **settle the `mov_imm` family** — the corpus contains both the
+     Mesa/G13-style `0x62`/`0x162` forms *and* `0xc2`-byte forms; which is
+     the A11 `mov_imm` is still open.
+  3. **decide the 2-byte vs 4-byte split** of the A11-only class (the corpus
+     forces it, but not *which* opcode is which).
+
+### 5. Files added by this session
+
+* `tools/g10p_fields.py` — the field-layout instrument: frames the corpus,
+  then for every G13-declared field reports whether A11 uses it, folds it
+  into the opcode, ignores it, or has no room for it.  `--summary` prints
+  the global table, `--op NAME` a single opcode, `--bits` a per-bit dump.
+

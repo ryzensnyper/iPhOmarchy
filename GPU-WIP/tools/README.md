@@ -20,6 +20,7 @@ variable instead of editing the file.
 | `kc_macho.py` | section-level compare of the local const blob against the kernelcache | `GPU_WIP_KC`, `GPU_WIP_LOCAL` |
 | `g10p_solve.py` | **WIP** constraint solver for the A11 length table: frames every corpus object, treating Mesa's public table as the prior and solving the lengths of the A11-only opcodes jointly across the corpus | `GPU_WIP_CORPUS`, `GPU_WIP_REF` |
 | `g10p_lengths.py` | **the A11 length table, solved and validated.** Uses Dougall Johnson's `applegpu` descriptor table as the opcode dictionary, measures the 6-byte quantum from the local repetition period, tiles every corpus object with an exact forward-reachability DP, applies a minimal-deviation repair, cross-validates (solve on half / test on the other half), checks the 64-byte function alignment, and emits the table as JSON | `GPU_WIP_CORPUS`, `GPU_WIP_APPLEGPU` (directory holding `applegpu.py`) |
+| `g10p_fields.py` | **the A11 field layout.** Frames the corpus with the solved length table, then for every field `applegpu` declares, reports whether A11 uses it at the same position, folds it into the opcode, ignores it, or has no room for it.  `--summary` = the global table, `--op NAME` = one opcode, `--bits` = a per-bit dump | `GPU_WIP_CORPUS`, `GPU_WIP_APPLEGPU` |
 
 `g10p_lengths.py` is the current instrument; it supersedes `g10p_solve.py`,
 which framed only a handful of the 94 objects because the A11 dialect changes
@@ -55,6 +56,7 @@ export GPU_WIP_REF=/path/to/reference-agx-isa      # needs Mesa's agx_opcodes.py
 export GPU_WIP_APPLEGPU=/path/to/applegpu          # needs applegpu.py
 python3 tools/g10p_census.py
 python3 tools/g10p_lengths.py --json lengths.json
+python3 tools/g10p_fields.py --summary
 ```
 
 The scripts expect the artefacts they read to exist locally (corpus objects,
