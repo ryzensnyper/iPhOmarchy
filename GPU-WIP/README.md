@@ -103,11 +103,25 @@ built-in kernel — `/lib/modules/<ver>` contains no modules at all.
 - Upstream panthor is likewise the Mali driver. The *Apple* GPU driver lives
   out-of-tree in the Asahi tree; upstream currently has only the DT bindings
   (`gpu/apple,agx.yaml`), not the driver.
-- Consequently a G10P probe needs an **out-of-tree** GPU driver built against
-  this kernel — either Asahi's Apple backend or our own. The Mesa side in use
-  here is the PowerVR-style `src/imagination` tree (G9P), which has no Asahi
-  frontend, so the A11 instruction encoding has to come from our own reverse
-  engineering.
+- **The Asahi tree was cloned and checked** (read-only, branch
+  `apple-soc/drivers-7.3` plus `asahi` and `apple-soc/dt-7.3`):
+  * `drivers/gpu/drm/asahi/` (branch `asahi`, written in **Rust** — which is
+    why it is not upstreamed) has hardware configs for `t600x`, `t602x`,
+    `t8103` (M1) and `t8112` (M2) — **no `t8015`**. Its firmware-ABI enum
+    does know the value `G10P = 5`, but there is no chip support, no
+    firmware path and no DT node for the A11.
+  * `drivers/gpu/drm/apple/` is the A12+ **DCP display** driver; the A11's
+    display controller is `disp0,t8015`, which nothing binds.
+  * `arch/arm64/boot/dts/apple/t8015-common.dtsi` describes the display as
+    `apple,simple-framebuffer` only and contains **no `gpu@` node**.
+- **Conclusion: no A11/G10P GPU driver exists in any tree** — upstream,
+  Asahi or Orchard. A G10P probe is a from-scratch driver project, not a
+  DT-and-config job. The A10 G9P `OrchardLinux/gpu` work is the natural
+  template, and our own G10P firmware RE already covers the init-data
+  layout, runtime size `0x8f000` and the Fender path.
+- The Mesa side in use here is the PowerVR-style `src/imagination` tree
+  (G9P), which has no Asahi frontend, so the A11 instruction encoding has to
+  come from our own reverse engineering.
 
 ### 5. The instruction set — framing solved at the dialect level (confirmed / candidate)
 
@@ -153,20 +167,26 @@ Negative results worth keeping (they close dead ends):
   list (`.agc-target-.g5p-b0.g9p-a0.g10p-b0.g11p-a0.…`). The A11 tables are
   there, but not in Mesa's shape.
 
-### 6. What a G10P 3D probe needs (three independent prerequisites)
+### 6. What a G10P 3D probe needs
 
-1. **A GPU driver** — Asahi's Apple backend (or ours), built out-of-tree for
-   this kernel. Nothing in-tree can bind a G10P.
+Since **no A11 driver exists anywhere** (see §4), a probe needs:
+
+1. **A G10P GPU driver** — a new kernel driver for the A11 GPU (A10 G9P
+   `OrchardLinux/gpu` work as the template; our own G10P firmware RE already
+   supplies the init-data layout, runtime size `0x8f000` and the Fender
+   register path).
 2. **A DT node** — `gpu@…` with `apple,t8015-gpu`, the ADT map above
    (RGX `0x04000000`, Fender `0x04D00000`, IOP `0x04D20000`), the GPU mailbox
-   and IRQs 259–262.
+   and IRQs 259–262 — plus the `gfx-kf`/IOP node and the RTBuddy firmware
+   service node.
 3. **The PMP firmware** — `apple/pmp-t8015.bin` (extracted, validated, not yet
    installed) so GFX power transitions work.
 
-The **native display path is much closer**: the kernel already has
-`adpdrm` + `adpdrm_mipi` + `apple,summit`; it needs only a DSI controller node
-and a panel node carrying the A11 panel timings. The m1n1/simplefb display
-keeps working meanwhile and needs no changes.
+The **native display path needs drivers too**, not just DT: an A11 display
+controller driver (`disp0,t8015`), a Synopsys DSI controller driver
+(`mipi-dsim-1,synopsys`) and a `lcd,pinot` panel driver with the 1080×1920
+timings (the timings live in the `display-eeprom` blob, not in the ADT node).
+The m1n1/simplefb display keeps working meanwhile and needs no changes.
 
 ## Honesty rules used in this area
 

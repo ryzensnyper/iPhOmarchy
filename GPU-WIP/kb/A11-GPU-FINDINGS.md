@@ -723,3 +723,104 @@ coprocessor directly.
    contains `adpdrm` + `adpdrm_mipi` + `apple,summit`; it only needs a DSI
    controller node and a panel node with the A11 timings.
 
+## The A11 has no GPU driver anywhere — checked in the Asahi tree (2026-11-08, confirmed)
+
+The Asahi kernel tree was cloned read-only (`/home/doug/asahi-linux`, branch
+`apple-soc/drivers-7.3`, plus `asahi` and `apple-soc/dt-7.3` fetched
+shallowly).  Result:
+
+| artefact | what it supports | A11 / G10P? |
+|---|---|---|
+| `drivers/gpu/drm/panthor/` (in `apple-soc/drivers-7.3` **and** in the Orchard tree) | the **Mali** driver only — `dt_match` = mt8196 / rk3588 / mali-valhall-csf | **no** |
+| `drivers/gpu/drm/asahi/` (branch `asahi`, written in **Rust**, which is why it is not upstreamed) | hardware configs `hw/t600x.rs`, `hw/t602x.rs`, `hw/t8103.rs` (M1), `hw/t8112.rs` (M2) | **no** — no `t8015` |
+| `drivers/gpu/drm/apple/` (branch `asahi`) | the **DCP display** driver (A12+ `apple,h7-display-pipe` family) | **no** — the A11's display controller is `disp0,t8015` |
+| `arch/arm64/boot/dts/apple/t8015-common.dtsi` (`apple-soc/dt-7.3`) | display = `apple,simple-framebuffer` only; **no `gpu@` node at all** | n/a |
+
+The Asahi driver's firmware-ABI enum even lists `G10P = 5` (`GpuCore` in
+`drivers/gpu/drm/asahi/hw/mod.rs`) — i.e. the *value* is known to the driver
+family, but there is **no chip support, no firmware path and no DT node** for
+`t8015`.
+
+### What this means (confirmed)
+
+* A G10P 3D probe is **not** a DT-and-config job on top of an existing
+  driver — no kernel driver for the A11 exists in any tree, upstream or
+  otherwise.  The A11 GPU port is a from-scratch driver project (the A10 G9P
+  `OrchardLinux/gpu` work is the natural template; our own G10P firmware RE
+  already covers the init-data layout, runtime size `0x8f000` and the Fender
+  path).
+* The **native display** path is likewise not "DT only": it needs an A11
+  display-controller driver (`disp0,t8015`), a Synopsys DSI controller driver
+  (`mipi-dsim-1,synopsys`) and a `lcd,pinot` panel driver with the 1080×1920
+  timings — none of which exist in any tree today.  The m1n1/simplefb display
+  remains the working path and is not at risk.
+* The ISA work (corpus framing, A11 deltas, exact lengths) is therefore not
+  blocked by anybody else: it is on the critical path for *any* G10P driver,
+  and it is the one piece where our own RE is ahead of the public state.
+
+## ADT node data for the GPU and the display (read-only, 2026-11-08)
+
+Read from `/home/doug/omarchy-iphone/adt/adt.txt` (iOS ADT capture, read-only
+with explicit approval).  These are the properties a Linux DT node would have
+to reproduce.
+
+**GPU (`sgx`, `compatible = [gpu,t8015]`)**
+
+| property | value |
+|---|---|
+| `reg` | `0x04000000` size `0x00100000` (RGX core), `0x04D00000` size `0x00020000` (Fender) |
+| `clock-ids` | `[265]` |
+| `power-gates` | `[148, 123]` (GFX, GFX-KF) |
+| `has-kf` | `1` |
+| `metal-standard` / `opengl-standard` | `256` / `768` |
+| `perf-states` | 20 entries, **all `freq = 0, volt = 0`** — the bootloader fills them at runtime ✓ (so the ADT alone cannot give the OPP table) |
+
+**GPU coprocessor (`gfx-kf`, phandle 148, `device_type = gfx-kf`, `role = GFX`)**
+
+| property | value |
+|---|---|
+| `reg` | `0x04D20000` size `0x00020000` (IOP), `0x04D00000` size `0x00020000` (Fender) |
+| `interrupts` | `[260, 259, 262, 261]` — the GPU mailbox IRQs (the set 259–262 ✓) |
+| `clock-ids` / `clock-gates` | `[269]` / `[149]` |
+| `iop-version` | `1` |
+| `power-gates` | `[149]` |
+
+**GPU firmware service (`iop-gfx-nub`, phandle 149)** — `compatible =
+[iop-nub,rtbuddy-v2]`, `firmware-name = GFX`, `no-firmware-service`,
+`power-managed = true` → this is the RTBuddy path that serves the GFX
+firmware (the `AGXFirmwareKextG10PRTBuddy` role).
+
+**Display (`disp0`, `compatible = [disp0,t8015]`, `device_type =
+display-subsystem`)**
+
+| property | value |
+|---|---|
+| `reg` | `0x18000000` size `0x002A6000`; `0x18708000` size `0x1000`; `0x320B8000` size `0x1000` |
+| `interrupts` | `[220, 226, 217, 218, 219, 221, 216, 227]` |
+| `clock-ids` / `clock-gates` | `[317, 315]` / `[254, 118, 116, 115]` |
+| `power-gates` | `[254]` |
+| `iommu-parent` | `127` |
+
+**DSI (`mipi-dsim`, `compatible = [mipi-dsim-1,synopsys]`, `device_type =
+mipi-dsim`)** — `reg 0x18400000` size `0x00100000`, `interrupts = [225]`,
+`clock-ids = [273]`, `clock-gates = [113]`, `power-gates = [113]`,
+`mipi-version = 5`, `agile-line-count = 9`, and a child
+**`lcd { compatible = [lcd,pinot] }`** — the iPhone 8 Plus panel ("pinot"),
+with its timings in the `display-eeprom` blob rather than in the node.
+
+### Correction: the native display path needs *drivers*, not just a DT node
+
+The A11's panel is a **DSI panel** driven by `disp0` + `mipi-dsim`
+(Synopsys DSI), not by the GPU.  The kernel we surveyed has:
+
+* `adpdrm` — binds **`apple,h7-display-pipe`** (A12+/M1), *not* `disp0,t8015` ✗
+* `panel-summit` — binds `apple,summit` but is a **60×2008** panel (some other
+  Apple device), *not* the 8 Plus's 1080×1920 ✗
+* no driver for `disp0,t8015` ✗, no driver for `mipi-dsim-1,synopsys` ✗, no
+  panel driver for `lcd,pinot` ✗
+
+So `disp0` on this device needs: an A11 display-controller driver, a Synopsys
+DSI controller driver, and a `pinot` panel driver with the 1080×1920 timings
+(readable from the `display-eeprom` blob) — plus the DT nodes.  The
+m1n1/simplefb path stays the working display.
+

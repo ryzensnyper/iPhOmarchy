@@ -95,11 +95,14 @@ part — the **init-data layout re-derived from the G10P firmware/kext**.
 4. **GPU performance states** — the ADT `sgx` table is zero-filled with
    `gpu-num-perf-states = 2`; a real m1n1 capture is needed for the OPP
    table the bootloader fills.
-5. **A GPU driver that can bind a G10P.** The tree this device boots has
-   panthor as the **Mali-only** upstream snapshot (no Apple compatible at
-   all), and upstream panthor is likewise Mali-only — the Apple backend lives
-   out-of-tree in the Asahi tree. So this is an out-of-tree driver build, not
-   a DT-only job.
+5. **A GPU driver that can bind a G10P — and there is none.** Checked in the
+   Asahi tree (2026-11-08): upstream panthor is the **Mali-only** driver, and
+   Asahi's own AGX driver (`drivers/gpu/drm/asahi/`, Rust, hence not
+   upstreamed) supports `t600x`, `t602x`, `t8103` (M1) and `t8112` (M2) —
+   **no `t8015`**. Upstream's `t8015-common.dtsi` has the display as
+   `simple-framebuffer` only and **no `gpu@` node**. So the A11 port is a
+   from-scratch driver project (the A10 G9P work here is the template), not a
+   DT-and-config job.
 6. **Shader ISA — exact A11 length table.** The corpus framing is solved at
    the dialect level: the A11 shaders are Mesa's public AGX dialect
    (word-aligned, Mesa opcode values) plus a handful of A11 deltas
