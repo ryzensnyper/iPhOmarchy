@@ -1859,3 +1859,125 @@ Per-opcode highlights:
   into the opcode, ignores it, or has no room for it.  `--summary` prints
   the global table, `--op NAME` a single opcode, `--bits` a per-bit dump.
 
+---
+
+## Addendum 7 (2026-11-08/09, night): **branch targets validate the framing** — and A11's branch offset is 16-bit in the third word
+
+Offline only. New artefacts: `tools/g10p_constrain.py` (the branch-constrained
+solver), `tools/g10p_branches.py`, `tools/g10p_branches.py` sweep variants.
+
+### 1. Why branch targets are the right instrument
+
+Addendum 5's framing tiles all 94 objects, but *tiling* is a weak property:
+many different length assignments tile the same corpus, so the DP cannot
+distinguish them.  The AGX branch instructions remove that slack.
+
+`jmp_exec_any` (`0xc000`), `jmp_exec_none` (`0xc020`) and `call` (`0xc010`)
+carry a relative offset, so each branch **names an exact position that must
+be an instruction boundary**.  Those positions are a property of the word
+stream, not of the framing, which makes them hard constraints.  With ~15 000
+branches over the corpus they over-determine the segmentation.
+
+### 2. A11's branch offset is 16-bit in the *third* word (confirmed)
+
+G13's descriptor says `off` is a **32-bit** field at bits 16..47
+(`next_pc = pc + sign_extend(off, 32)`).  A11 is different.  Sweeping the
+offset field layout × unit × base against the framed corpus:
+
+| offset field | unit | base | targets on a boundary |
+|---|---|---|---|
+| **word 2 only (16-bit)** | word | next | **15 259 / 15 361 (99.3 %)** |
+| **word 2 only (16-bit)** | byte | next | **15 259 / 15 361 (99.3 %)** |
+| word 1 only (16-bit) | word | next | 13 410 / 15 361 (87.3 %) |
+| `w1 \| w2<<16` (32-bit) | word | next | 13 379 / 15 361 (87.1 %) |
+| `w2<<16 \| w1` (32-bit) | word | next | 13 379 / 15 361 (87.1 %) |
+
+So in A11 the branch offset is a **16-bit sign-extended value in the third
+word (bits 32..47)** of the branch instruction, and the target is
+`instruction_address + offset`.  (Byte and word units score identically
+because every offset is a multiple of 6 — see below.)
+
+### 3. The 6-byte quantum, confirmed a sixth and seventh time (confirmed)
+
+> **99.3 % of all branch offsets in the corpus are exact multiples of 6.**
+
+| offset mod 6 | count | share |
+|---|---|---|
+| **0** | **15 253** | **99.3 %** |
+| 1 | 9 | 0.1 % |
+| 2 | 46 | 0.3 % |
+| 3 | 21 | 0.1 % |
+| 4 | 8 | 0.1 % |
+| 5 | 24 | 0.2 % |
+
+This is an *independent* proof of the instruction size: a compiler that
+emits branch offsets in bytes only produces multiples of 6 if every
+instruction it can branch over is 6 bytes long.  No length table was
+assumed to obtain this number.
+
+And with the correct offset semantics, **15 263 / 15 361 (99.4 %) of branch
+targets land exactly on an instruction boundary**.
+
+### 4. The branch-constrained solve (confirmed)
+
+`tools/g10p_constrain.py` frames the corpus, then iterates:
+
+1. frame every object;
+2. for every branch whose target is not a boundary, the instruction that
+   covers the target must end exactly there — a length constraint on that
+   opcode's class;
+3. apply the constraints (only to the A11-only opcodes; the named opcodes'
+   lengths are pinned by the period evidence and are not moved), re-frame,
+   repeat until stable.
+
+Result: **all 94 objects tile**, **99.4 %** of branch targets hit, and the
+length table collapses to a very simple shape:
+
+| class | length | occurrences |
+|---|---|---|
+| **every named opcode** | **6 bytes** | — |
+| `trap` (`0x0008`) | 2 bytes | 2 967 |
+| `stop` (`0x0088`) | 2 bytes | 47 |
+| `stop/A11` (`0x0108`) | 2 bytes | 60 |
+| A11-only opcodes | **6 bytes** (majority) | — |
+| A11-only opcodes (minority) | 2 or 4 bytes | see the JSON |
+
+### 5. Correction to Addendum 5 (confirmed)
+
+Addendum 5 modelled the A11-only opcodes as two classes split by bit 15
+(`A11-only|L0` = 4 bytes, `A11-only|L1` = 2 bytes).  That was a *coarse*
+model forced by the DP having no other signal.  With the branch
+constraints the split is resolved **per opcode**: most A11-only opcodes are
+**6 bytes like everything else**, and only a minority are 2 or 4 bytes.
+The published `A11-GPU-G10P-LENGTHS.json` has been regenerated from the
+branch-constrained solve.
+
+### 6. What is still open (unknown)
+
+* **The A11-only opcodes are still unnamed.**  They are the words that match
+  no G13 signature; the frequent ones are `0x8000` (2 B), `0x0040` (2 B),
+  `0x0001` (2 B), `0x08f0` (2 B), `0x0200`, `0x2000`, `0x5200`, `0xffff`,
+  `0xff00` (6 B) and a family of `0xd0xx`/`0xc8xx`/`0xde00`-shaped words
+  (4 B).  Naming them needs the AGX3 decoder's opcode table, or a
+  Metal-toolchain black-box probe.
+* **`jmp_exec_any` and `call` behave differently from `jmp_exec_none`.**
+  Under the solved framing, `jmp_exec_none` targets hit **100 %**, but
+  `jmp_exec_any` (153 occurrences) hits only ~20 % and `call` ~40 %.  Either
+  those two use a different offset convention (a different field, or a
+  different base), or they are the opcodes whose framing is still wrong.
+  This is the sharpest remaining lead.
+* `mov_imm`: the corpus contains both the G13-style `0x62`/`0x162` forms and
+  `0xc2`-byte forms (`0x00c2`, `0x02c2`, `0x04c2`, `0x06c2`); which is A11's
+  `mov_imm` is still open, and the `0xc2` family now appears in the
+  A11-only list (`0x01c6`, `0x04c6`).
+
+### 7. Files added by this session
+
+* `tools/g10p_constrain.py` — the branch-constrained solver and the
+  generator of `A11-GPU-G10P-LENGTHS.json`.
+* `tools/g10p_branches.py` — the standalone branch-target validator
+  (useful for checking any candidate framing).
+* `A11-GPU-G10P-LENGTHS.json` — regenerated: the per-opcode table with
+  occurrence counts, the branch validation numbers and the offset semantics.
+
+

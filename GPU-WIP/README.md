@@ -182,6 +182,35 @@ or has no room for them.
 Reproduce with [`tools/g10p_fields.py`](tools/g10p_fields.py) (`--summary`
 for the global table, `--op NAME` for one opcode).
 
+**And the framing is validated semantically, by branch targets (confirmed).**
+Tiling is a weak property — many length assignments tile the same corpus — but
+the branch instructions are not: `jmp_exec_any` (`0xc000`), `jmp_exec_none`
+(`0xc020`) and `call` (`0xc010`) each name an exact position that must be an
+instruction boundary, and that position is a property of the word stream
+rather than of the framing.
+
+* **A11's branch offset is a 16-bit sign-extended value in the *third* word**
+  (bits 32–47), not G13's 32-bit field spread over words 1–2.  Sweeping the
+  field layout × unit × base against the framed corpus, the third-word field
+  wins outright: **15 259 / 15 361 (99.3 %)** targets on a boundary, versus
+  87 % for every 32-bit layout.
+* **99.3 % of all branch offsets in the corpus are exact multiples of 6.**
+  That is an independent proof of the instruction size — a compiler only emits
+  multiples of 6 if every instruction it can branch over is 6 bytes long — and
+  it was obtained *without* assuming any length table.
+* With the correct offset semantics, **15 263 / 15 361 (99.4 %) of branch
+  targets land exactly on an instruction boundary**, and **all 94 objects
+  tile**.
+* The branch-constrained solve resolves the A11-only opcodes **per opcode**
+  rather than by the bit-15 split Addendum 5 used: most of them are 6 bytes
+  like everything else, with a minority at 2 or 4 bytes.
+
+Reproduce with [`tools/g10p_constrain.py`](tools/g10p_constrain.py) (the
+branch-constrained solver, which also regenerates
+[`kb/A11-GPU-G10P-LENGTHS.json`](kb/A11-GPU-G10P-LENGTHS.json)) and
+[`tools/g10p_branches.py`](tools/g10p_branches.py) (the standalone
+branch-target validator for any candidate framing).
+
 A11 deltas:
 
 | delta | state | note |

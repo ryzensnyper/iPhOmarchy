@@ -21,14 +21,18 @@ variable instead of editing the file.
 | `g10p_solve.py` | **WIP** constraint solver for the A11 length table: frames every corpus object, treating Mesa's public table as the prior and solving the lengths of the A11-only opcodes jointly across the corpus | `GPU_WIP_CORPUS`, `GPU_WIP_REF` |
 | `g10p_lengths.py` | **the A11 length table, solved and validated.** Uses Dougall Johnson's `applegpu` descriptor table as the opcode dictionary, measures the 6-byte quantum from the local repetition period, tiles every corpus object with an exact forward-reachability DP, applies a minimal-deviation repair, cross-validates (solve on half / test on the other half), checks the 64-byte function alignment, and emits the table as JSON | `GPU_WIP_CORPUS`, `GPU_WIP_APPLEGPU` (directory holding `applegpu.py`) |
 | `g10p_fields.py` | **the A11 field layout.** Frames the corpus with the solved length table, then for every field `applegpu` declares, reports whether A11 uses it at the same position, folds it into the opcode, ignores it, or has no room for it.  `--summary` = the global table, `--op NAME` = one opcode, `--bits` = a per-bit dump | `GPU_WIP_CORPUS`, `GPU_WIP_APPLEGPU` |
+| `g10p_constrain.py` | **the branch-constrained solve.** Frames the corpus, then iterates: every branch whose target is not an instruction boundary becomes a length constraint on the opcode that covers it; the constraints are applied (only to the A11-only opcodes) and the corpus is re-framed until stable.  Reports the branch-target hit rate and the branch-offset modulus histogram, and emits `A11-GPU-G10P-LENGTHS.json` | `GPU_WIP_CORPUS`, `GPU_WIP_APPLEGPU` |
+| `g10p_branches.py` | **the standalone branch-target validator** for any candidate framing: does each branch's target land on an instruction boundary?  Use it to check a framing that was derived some other way | `GPU_WIP_CORPUS`, `GPU_WIP_APPLEGPU` |
 
-`g10p_lengths.py` is the current instrument; it supersedes `g10p_solve.py`,
+`g10p_constrain.py` is the current instrument; it supersedes `g10p_solve.py`,
 which framed only a handful of the 94 objects because the A11 dialect changes
 the *length* of far more Mesa opcodes than the two known at the time (`imad`,
 `texture_load`).  The "same-source differential" that was supposed to replace
 it turned out to be **dead** — the 32-instance groups are not
 same-code-different-constants — so the solver was rebuilt around an exact DP
-plus a cross-validated minimal-deviation repair.
+plus a cross-validated minimal-deviation repair (`g10p_lengths.py`), and
+finally around branch-target constraints (`g10p_constrain.py`), which are the
+strongest of the three because they are semantic rather than structural.
 
 ### The `applegpu` reference
 
@@ -57,6 +61,8 @@ export GPU_WIP_APPLEGPU=/path/to/applegpu          # needs applegpu.py
 python3 tools/g10p_census.py
 python3 tools/g10p_lengths.py --json lengths.json
 python3 tools/g10p_fields.py --summary
+python3 tools/g10p_constrain.py --iters 12
+python3 tools/g10p_branches.py
 ```
 
 The scripts expect the artefacts they read to exist locally (corpus objects,
