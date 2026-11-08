@@ -1,0 +1,70 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/soc/apple/apple,t8015-gfx-iop.yaml#
+$schema: http://devicetree.org/schemas/core.yaml#
+
+title: Apple T8015 GFX IOP (the AGX/G10P GPU's RTKit coprocessor)
+
+maintainers:
+  - corresponding author
+
+description: |
+  Apple / AGX's GPU on the T8015 (iPhone 8 Plus) is driven by a pair of
+  RTKit coprocessors: the PMP (power management; `apple,t8015-pmp-v1`) and the
+  GFX IOP (this binding), which runs the AGX firmware.
+
+  Stage 1 only: boot the GFX IOP's RTKit firmware and report the HELLO.
+  No RGX registers are touched by this binding.
+
+properties:
+  compatible:
+    enum:
+      - apple,t8015-gfx-iop
+
+  reg:
+    items:
+      - description: AKF window of the GFX IOP (window A)
+      - description: Fender window (window W), shared with the GPU node
+    reg-names:
+      items:
+        - const: akf
+        - const: fender
+
+  interrupts:
+    description: send/receive doorbell interrupts
+
+  firmware-name:
+    maxItems: 1
+    description: e.g. "apple/gfx-t8015.bin" (the G10P AGX firmware)
+
+  power-domains:
+    description: GFX domain and the GFX-KF domain
+
+additionalProperties: false
+
+required:
+  - compatible
+  - reg
+  - interrupts
+  - firmware-name
+
+examples:
+  - |
+    soc {
+      #address-cells = <2>;
+      #size-cells = <2>;
+
+      gfx_kf: gfx-kf@4d200000 {
+        compatible = "apple,t8015-gfx-iop";
+        reg = <0x0 0x04d20000 0x0 0x00020000>,
+              <0x0 0x04d00000 0x0 0x00020000>;
+        reg-names = "akf", "fender";
+        interrupts = <AIC_IRQ 260 IRQ_TYPE_LEVEL_HIGH>,
+                     <AIC_IRQ 259 IRQ_TYPE_LEVEL_HIGH>,
+                     <AIC_IRQ 262 IRQ_TYPE_LEVEL_HIGH>,
+                     <AIC_IRQ 261 IRQ_TYPE_LEVEL_HIGH>;
+        firmware-name = "apple/gfx-t8015.bin";
+        power-domains = <&ps_gfx>;
+      };
+    };
