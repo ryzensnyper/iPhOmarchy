@@ -1886,22 +1886,34 @@ G13's descriptor says `off` is a **32-bit** field at bits 16..47
 6 bytes), and **which word holds it depends on the branch opcode**.
 
 Sweeping the offset field layout × unit × base against the framed corpus,
-per branch opcode:
+per branch opcode, and then conditioning on the mod-6 invariant (a real
+branch offset in this corpus is a byte offset, so ~100 % of its values are
+multiples of 6):
 
-| branch opcode | offset field | unit | base | targets on a boundary |
-|---|---|---|---|---|
-| `jmp_exec_none` `0xc020` | **word 2** (bits 32–47) | byte | pc | **15 243 / 15 252 (99.9 %)** |
-| `jmp_exec_none` `0xc020` | `w1 \| w2<<16` (32-bit, G13's) | byte | next | 13 364 / 15 252 (87.6 %) |
-| `call` `0xc010` | **word 1** (bits 16–31) | byte | pc | **4 / 4 (100 %)** |
-| `jmp_exec_any` `0xc000` | word 1 | word | pc | 37 / 105 (35.2 %) — *not significant* |
-| `jmp_exec_any` `0xc000` | word 2 | word | next | 24 / 105 (22.9 %) — *not significant* |
+| branch opcode | offset field | targets on a boundary, `off ≡ 0 mod 6` | targets on a boundary, `off ≢ 0 mod 6` |
+|---|---|---|---|
+| `jmp_exec_none` `0xc020` | **word 2** (bits 32–47) | **15 243 / 15 244 (100.0 %)** | 2 / 8 (25.0 %) |
+| `call` `0xc010` | **word 1** (bits 16–31) | **4 / 4 (100.0 %)** | 0 / 0 |
+| `jmp_exec_any` `0xc000` | **word 1** (bits 16–31) | **33 / 40 (82.5 %)** | 4 / 65 (6.2 %) |
+| `jmp_exec_any` `0xc000` | word 2 | 6 / 11 (54.5 %) | 11 / 96 (11.5 %) |
+| `jmp_exec_any` `0xc000` | `w1 \| w2<<16` (G13's 32-bit) | 3 / 55 (5.5 %) | 2 / 52 (3.8 %) |
 
-The `jmp_exec_any` figures are at chance level: for the 105 occurrences, the
-18 that do land on a boundary have offsets scattered over all residues mod 6
-(0:6, 1:1, 2:10, 5:1) while the misses are equally scattered (0:3, 1:6,
-2:31, 3:19, 4:7, 5:21).  A real branch offset field would be almost entirely
-≡ 0 mod 6, exactly as `jmp_exec_none`'s is.  **So the `0xc000` offset field
-is not in word 1 or word 2 and remains unresolved** (see §6).
+The separation in the `jmp_exec_any` row is the decisive test: the 40
+occurrences whose word-1 value is a multiple of 6 hit 82.5 %, while the 65
+whose value is not hit 6.2 %.  That is the signature of a **real** offset
+field — and it also says that **most `0xc000` words that land on an
+instruction start are coincidental payload**, not real branches.  (Only 400
+`0xc000` words exist in the whole corpus, against 21 048 `0xc020` words.)
+
+So the rule is:
+
+> **A11's branch offset is a 16-bit sign-extended byte offset.  The word
+> that holds it depends on the opcode: `jmp_exec_none` (`0xc020`) uses the
+> third word (bits 32–47); `call` (`0xc010`) and `jmp_exec_any` (`0xc000`)
+> use the second word (bits 16–31).**
+
+That per-opcode difference is a real dialect delta from G13, where every
+branch carries a 32-bit `off` at bits 16–47.
 
 Corpus census for context (how rare each exec-mask opcode is):
 
@@ -1976,14 +1988,14 @@ branch-constrained solve.
   `0xff00` (6 B) and a family of `0xd0xx`/`0xc8xx`/`0xde00`-shaped words
   (4 B).  Naming them needs the AGX3 decoder's opcode table, or a
   Metal-toolchain black-box probe.
-* **`jmp_exec_any` (`0xc000`) is still unresolved.**  Unlike
-  `jmp_exec_none` (100 %) and `call` (100 % of 4), neither word 1 nor word 2
-  holds its offset: the 18 hits out of 105 are at chance level and their
-  offsets are scattered over all residues mod 6.  Either the offset lives in a
-  field we have not identified (the instruction may carry a condition and a
-  target), or `0xc000` is **not** a branch in A11 at all — it occurs only 400
-  times in the corpus, against 21 048 for `0xc020`.  This is the sharpest
-  remaining lead.
+* **`jmp_exec_any` (`0xc000`) is only partly understood.**  Its offset field
+  is the second word, like `call`'s — but only 40 of the 105 occurrences that
+  land on an instruction start have a word-1 value that is a multiple of 6,
+  and of those 40 only 33 hit.  So most `0xc000` words that land on an
+  instruction start are coincidental payload rather than real branches, and
+  the ~7 that are real branches with a multiple-of-6 offset still miss their
+  target: the framing is still wrong in their neighbourhood.  This is the
+  sharpest remaining lead.
 * `mov_imm`: the corpus contains both the G13-style `0x62`/`0x162` forms and
   `0xc2`-byte forms (`0x00c2`, `0x02c2`, `0x04c2`, `0x06c2`); which is A11's
   `mov_imm` is still open, and the `0xc2` family now appears in the

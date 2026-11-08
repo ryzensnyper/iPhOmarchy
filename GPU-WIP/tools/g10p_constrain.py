@@ -364,7 +364,7 @@ def main():
         for p, c, L in seq:
             if c[0] == "A" or words[p] not in BRANCH or p + 3 > n:
                 continue
-            off = words[p + 2]
+            off = words[p + 2] if words[p] == 0xC020 else words[p + 1]
             if off & 0x8000:
                 off -= 1 << 16
             t = p + off // 2
@@ -386,7 +386,7 @@ def main():
             if c[0] == "A" or words[p] not in BRANCH or p + 3 > n:
                 continue
             bnm = BRANCH[words[p]]
-            off = words[p + 2]
+            off = words[p + 2] if words[p] == 0xC020 else words[p + 1]
             if off & 0x8000:
                 off -= 1 << 16
             t = p + off // 2
@@ -394,9 +394,32 @@ def main():
                 hmod[bnm][off % 6] += 1
             else:
                 mmod[bnm][off % 6] += 1
+    cond = collections.defaultdict(lambda: {True: [0, 0], False: [0, 0]})
+    for fn, words, cands, f in framed:
+        if f is None:
+            continue
+        starts, seq = f
+        n = len(words)
+        for p, c, L in seq:
+            if c[0] == "A" or words[p] not in BRANCH or p + 3 > n:
+                continue
+            bnm = BRANCH[words[p]]
+            off = words[p + 2] if words[p] == 0xC020 else words[p + 1]
+            if off & 0x8000:
+                off -= 1 << 16
+            t = p + off // 2
+            k = (off % 6 == 0)
+            cond[bnm][k][0] += 1
+            if 0 <= t < n and t in starts:
+                cond[bnm][k][1] += 1
     for nm in sorted(bo):
         print("   %-14s %6d / %6d (%.1f%%)" % (nm, bh[nm], bo[nm],
                                                100.0 * bh[nm] / bo[nm]))
+        c0, c1 = cond[nm][True], cond[nm][False]
+        print("        conditional: off%%6==0 -> %d/%d hit (%.1f%%)   "
+              "off%%6!=0 -> %d/%d hit (%.1f%%)"
+              % (c0[1], c0[0], 100.0 * c0[1] / max(c0[0], 1),
+                 c1[1], c1[0], 100.0 * c1[1] / max(c1[0], 1)))
         for tag, h in (("hits", hmod[nm]), ("misses", mmod[nm])):
             if not h:
                 continue
@@ -514,14 +537,29 @@ def main():
                                "multiple_of_6": modhist.get(0, 0),
                                "multiple_of_6_fraction":
                                    (modhist.get(0, 0) / offcount) if offcount else 0},
+            "branch_target_hit_rate_by_opcode": {
+                "jmp_exec_none (0xc020, offset in word 2)":
+                    "%d/%d" % (bh["jmp_exec_none"], bo["jmp_exec_none"]),
+                "call (0xc010, offset in word 1)":
+                    "%d/%d" % (bh["call"], bo["call"]),
+                "jmp_exec_any (0xc000, offset in word 1)":
+                    "%d/%d (but 33/40 for the offsets that are multiples of "
+                    "6, versus 4/65 for the rest -- most 0xc000 words that "
+                    "land on an instruction start are coincidental payload, "
+                    "not real branches)" % (bh["jmp_exec_any"],
+                                            bo["jmp_exec_any"]),
+            },
             "branch_offset_semantics":
                 "16-bit sign-extended byte offset; target = "
-                "instruction_address + offset.  Field position is "
+                "instruction_address + offset.  The field position is "
                 "per-opcode: jmp_exec_none (0xc020) uses the THIRD word "
-                "(bits 32..47) and hits 100% of its targets; call (0xc010) "
-                "uses the SECOND word (bits 16..31) and hits 100% of its "
-                "(4) targets; jmp_exec_any (0xc000) does not match either "
-                "and remains unresolved.",
+                "(bits 32..47); call (0xc010) and jmp_exec_any (0xc000) use "
+                "the SECOND word (bits 16..31).  A real offset field is "
+                "~100% congruent to 0 mod 6, because every instruction is 6 "
+                "bytes; jmp_exec_none's is 15243/15244, call's is 4/4, and "
+                "jmp_exec_any's is 33/40 versus 4/65 for the non-multiples "
+                "(so most 0xc000 words that land on an instruction start are "
+                "coincidental payload).",
             "used_classes": used,
             "classes": tbl,
         }, f, indent=1, sort_keys=True)
