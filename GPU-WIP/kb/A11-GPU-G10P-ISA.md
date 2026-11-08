@@ -1489,3 +1489,47 @@ target — the tables are there, just not in Mesa's shape.
 `AGXCompilerCore`), `agx_table_scan.py` (table shape scan),
 `kc_fwscan.py`, `kc_tags.py`, `kc_pmp.py`, `kc_macho.py` (kernelcache
 firmware extraction).
+
+### 7. A constraint solver for the length table (WIP — honest status)
+
+`/tmp/opencode/g10p_solve.py` (also committed as
+`iPhOmarchy:GPU-WIP/tools/g10p_solve.py`) frames the corpus as
+`[instruction]* [padding]*` (padding = a run of `0x0008`/`0x0000` words),
+takes Mesa's public table as the prior, and solves jointly for the lengths of
+the A11-only opcodes: the same opcode value must have the same length in
+every object, which is what makes the problem a constraint problem rather
+than a guess.
+
+**Current result: it frames 5 of 94 objects** — i.e. it does *not* converge
+yet.  The reason is informative: with Mesa's lengths applied to the
+Mesa-valued A11 opcodes, the strict framing derails early in almost every
+object, so the solver's "unknown opcode" discovery starts absorbing *data*
+words.  In other words **the A11 dialect changes the length of more Mesa
+opcodes than the two already known (`imad`, `texture_load`)** — the candidate
+table in Addendum 3 is an under-estimate, not a final answer.
+
+The next instrument is therefore **not** more solver heuristics but the
+**same-source differential**: the 32 instances of each of the two
+`.constant_program` programs are the same program compiled with different
+constants, so aligning two instances of one program pins the length of every
+instruction whose encoding differs between them.  That yields the A11 length
+of the A11-only opcodes and of the Mesa opcodes that changed length, without
+guessing.
+
+### 8. Cross-check against the A10 (G9P) work (confirmed, and a useful warning)
+
+`OrchardLinux/gpu` (`a10/ISA.md`) documents the **A10** ISA: there, "bit 8 of
+every 16-bit word means another word follows" — a continuation-bit encoding,
+and the A10 notes derive it black-box from Apple's compiler
+(`metal-tt -arch applegpu_g9p`, differential probes).  The A11/G10P corpus
+does *not* behave that way: it frames with Mesa's `(exact, mask, length)`
+table, i.e. the **A12+-style encoding**.  So the G10P ISA is a *different
+generation* from G9P — the A10's decoder and bit-mapping tools do **not**
+port over, only the *method* (differential black-box probing) does.
+
+That method is still available to us in principle: the iOS dyld cache
+contains Apple's own AGX compiler (`AGXCompilerCore`, `AGXMetalA11`), and
+`metal-tt -arch applegpu_g10p`-style probing would settle every length and
+field question at once — but it needs a host that can run Apple's Metal
+toolchain (macOS) or the on-device compiler, i.e. it is a future hardware
+phase, not an offline one.

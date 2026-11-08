@@ -18,6 +18,13 @@ variable instead of editing the file.
 | `kc_tags.py` | enumerate the IMG4-ish firmware tags in the kernelcache (`AppleT8015SmartIO`, `AppleT8015PMPFirmware`, …) | `GPU_WIP_KC` |
 | `kc_pmp.py` | extract/validate the PMP firmware region and find embedded firmware Mach-Os | `GPU_WIP_KC` |
 | `kc_macho.py` | section-level compare of the local const blob against the kernelcache | `GPU_WIP_KC`, `GPU_WIP_LOCAL` |
+| `g10p_solve.py` | **WIP** constraint solver for the A11 length table: frames every corpus object, treating Mesa's public table as the prior and solving the lengths of the A11-only opcodes jointly across the corpus | `GPU_WIP_CORPUS`, `GPU_WIP_REF` |
+
+`g10p_solve.py` is honest work-in-progress: it frames only a handful of the 94
+objects so far, because the A11 dialect changes the *length* of more Mesa
+opcodes than the two known so far (`imad`, `texture_load`).  The next
+instrument is the same-source differential alignment (32 instances of each of
+the two `.constant_program` programs), not more guessing in the solver.
 
 Typical use:
 
