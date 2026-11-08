@@ -221,6 +221,28 @@ branch-constrained solver, which also regenerates
 [`tools/g10p_branches.py`](tools/g10p_branches.py) (the standalone
 branch-target validator for any candidate framing).
 
+**And the new table beats the old one, head to head.** Both framings checked
+with the *exact* DP (forward + backward reachability, so "the object tiles" is
+a proof rather than a greedy guess):
+
+| framing | objects tiled | `jmp_exec_none` identified | their targets hit | `jmp_exec_any` candidates | their targets hit |
+|---|---|---|---|---|---|
+| uniform 6-byte baseline | 72/94 | 7 176 | 7 172/7 172 (100 %) | 37 | 30/37 (81.1 %) |
+| **branch-constrained (published)** | **94/94** | **15 314** | **15 306/15 306 (100 %)** | 43 | **34/43 (79.1 %)** |
+| Addendum 5 (A11-only by L bit) | 94/94 | 12 856 | 12 846/12 847 (100 %) | 66 | 35/66 (53.0 %) |
+
+The published framing identifies **2 458 more `jmp_exec_none` instructions**
+than the Addendum 5 table, and every one of them has a well-formed offset and
+a target that lands on a boundary — so they are real, not coincidences.
+Addendum 5's table appears to find 23 more `jmp_exec_any` candidates, but
+only **53.0 %** of their targets land, against **79.1 %** for the published
+one: those extras are coincidental payload.  A second check confirms why the
+branch constraints were needed — the tiling requirement alone leaves **all
+4 401 A11-only classes with more than one tileable length**.
+
+Reproduce the comparison with
+[`tools/g10p_dpcheck.py`](tools/g10p_dpcheck.py).
+
 A11 deltas:
 
 | delta | state | note |

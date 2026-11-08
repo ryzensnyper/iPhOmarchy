@@ -1980,6 +1980,34 @@ constraints the split is resolved **per opcode**: most A11-only opcodes are
 The published `A11-GPU-G10P-LENGTHS.json` has been regenerated from the
 branch-constrained solve.
 
+**The new table is strictly better, and here is the head-to-head.**  Both
+framings are checked with the *exact* DP (forward + backward reachability,
+not the greedy walk), and the metrics are chosen so that they do not depend
+on the framing:
+
+| framing | objects tiled | `jmp_exec_none` identified | their targets hit | `jmp_exec_any` candidates | their targets hit |
+|---|---|---|---|---|---|
+| uniform 6-byte baseline | 72/94 | 7 176 | 7 172/7 172 (100 %) | 37 | 30/37 (81.1 %) |
+| **branch-constrained (published)** | **94/94** | **15 314** | **15 306/15 306 (100 %)** | 43 | **34/43 (79.1 %)** |
+| Addendum 5 (A11-only by L bit) | 94/94 | 12 856 | 12 846/12 847 (100 %) | 66 | **35/66 (53.0 %)** |
+
+* The published framing identifies **2 458 more `jmp_exec_none`
+  instructions** than Addendum 5's — and *every one* of them has a
+  perfectly-formed offset and a target that lands on a boundary, so they are
+  real instructions, not coincidences.
+* Addendum 5's framing appears to find **23 more** `jmp_exec_any`
+  candidates, but **only 53.0 % of their targets land on a boundary**,
+  against **79.1 %** for the published framing's: those extra candidates are
+  mostly coincidental payload words that happen to sit at a boundary and
+  happen to have a multiple-of-6 word after them.
+
+So the branch-constrained table **supersedes** Addendum 5's.
+
+A second, independent check: the tiling requirement alone does **not** pin
+the A11-only lengths — all 4 401 A11-only classes still have more than one
+tileable length in the published table.  It is the **branch targets** that
+fix them, which is exactly why the branch-constrained solve was needed.
+
 ### 6. What is still open (unknown)
 
 * **The A11-only opcodes are still unnamed.**  They are the words that match
@@ -2007,6 +2035,11 @@ branch-constrained solve.
   generator of `A11-GPU-G10P-LENGTHS.json`.
 * `tools/g10p_branches.py` — the standalone branch-target validator
   (useful for checking any candidate framing).
+* `tools/g10p_dpcheck.py` — the exact-DP validator: forward + backward
+  reachability instead of the greedy walk, so "the object tiles" is a proof;
+  compares candidate framings head-to-head on framing-independent metrics
+  (how many `jmp_exec_none` / `jmp_exec_any` instructions are identified and
+  how often their targets land on a boundary).
 * `A11-GPU-G10P-LENGTHS.json` — regenerated: the per-opcode table with
   occurrence counts, the branch validation numbers and the offset semantics.
 
