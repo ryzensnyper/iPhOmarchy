@@ -17,6 +17,7 @@ condensed result set.
 | [`kb/A11-GPU-FINDINGS.md`](kb/A11-GPU-FINDINGS.md) | broad findings: hardware map, firmware provenance, device survey, driver landscape |
 | [`kb/A11-GPU-G10P-LAYOUT.md`](kb/A11-GPU-G10P-LAYOUT.md) | driver/firmware layout: Fender, windows, init data, runtime constants |
 | [`kb/A11-GPU-G10P-ISA.md`](kb/A11-GPU-G10P-ISA.md) | the AGX/A11 instruction-set work: corpus, framing, opcode deltas, length table |
+| [`kb/A11-GPU-G10P-LENGTHS.json`](kb/A11-GPU-G10P-LENGTHS.json) | the solved A11 instruction-length table, machine-readable |
 | [`kb/A11-GPU-G10P-FIELDS.txt`](kb/A11-GPU-G10P-FIELDS.txt) | field/site dump of the extracted G10P firmware image |
 | [`tools/`](tools/) | the analysis scripts used (pure Python, no Apple data) |
 
@@ -123,7 +124,7 @@ built-in kernel — `/lib/modules/<ver>` contains no modules at all.
   (G9P), which has no Asahi frontend, so the A11 instruction encoding has to
   come from our own reverse engineering.
 
-### 5. The instruction set — framing solved at the dialect level (confirmed / candidate)
+### 5. The instruction set — the length table is solved (confirmed)
 
 The corpus (`ds.g10p` → 94 `*.g10p-o` files) is Apple's own precompiled A11
 shader set. Each object is a **Mach-O object** (`0xfeedfacf`, `MH_OBJECT`,
@@ -131,36 +132,84 @@ arm64) with the AGX words in `__TEXT,__text`, plus `__GPU_METADATA`,
 `__GPU_LD_MD`, `__GPU_ARCH_LD_MD`, `__GPU_STATS_MD`, `__GPU_REMARKS_MD`
 sections.
 
-Result (confirmed): the corpus is **Mesa's public AGX dialect** — word-aligned,
-Mesa opcode values — with a handful of A11-specific deltas. Mesa's
-`(exact, mask, length_short, length_long)` table tiles 89/94 objects at word
-level, and 93/94 with the A11 `stop` override; a bit-offset sweep peaks only at
-offset 0 (0.3539 hit rate vs 0.2363 random), so the stream is word-aligned,
-not byte-packed.
+**Result (confirmed): G10P uses a uniform 6-byte instruction quantum.** Every
+AGX instruction in the A11 corpus is exactly **6 bytes = 3 × 16-bit words**,
+except `trap` (`0x0008`) and the two terminators (`0x0088`, `0x0108`) at
+**2 bytes**, plus a catch-all of A11-only opcodes at **4 bytes** (L-bit clear)
+and **2 bytes** (L-bit set).
+
+This is a *different framing scheme* from Mesa's A12+ AGX, which mixes
+2/4/6/8/10/12 bytes and selects between two lengths with bit 15. The opcode
+*values* are Mesa-compatible; the *lengths* are not — so Mesa's table cannot be
+substituted, and the earlier "the corpus is Mesa's public AGX dialect" claim
+is superseded on the length half.
+
+The opcode dictionary used is Dougall Johnson's `applegpu` table (a
+data-driven descriptor table for Apple's own AGX ISA: 161 descriptors, 81
+distinct low-16 signatures, each with an explicit size pair and a length-bit
+position). It is a far better dictionary for this corpus than Mesa's 57
+opcodes, and its `jmp_exec_none` = `0xc020` is *exactly* the value this
+project had already measured independently in the corpus.
+
+The table is published machine-readable as
+[`kb/A11-GPU-G10P-LENGTHS.json`](kb/A11-GPU-G10P-LENGTHS.json) and is
+re-derived by [`tools/g10p_lengths.py`](tools/g10p_lengths.py).
 
 A11 deltas:
 
 | delta | state | note |
 |---|---|---|
-| `stop = 0x0108` | confirmed | Mesa's is `0x0088` |
-| `jmp_exec_none = 0xc020` | confirmed | Mesa's is `0xc200` |
+| `stop = 0x0108` | confirmed, 2 bytes | Mesa's is `0x0088` — and G13's `0x0088` also occurs in the corpus (109×) |
+| `jmp_exec_none = 0xc020` | confirmed, 6 bytes | Mesa's is `0xc200`; **G13's `applegpu` agrees (`0xc020`)** |
+| `trap = 0x0008` | confirmed, 2 bytes | G13 agrees; Mesa agrees |
 | 16-bit ALU opcodes carry **no L bit** | confirmed | `0x26` (fadd16), `0x36` (fma16), `0x16` (fmul16) |
 | `mov_imm` family uses opcode byte **`0xc2`**, destination in bits 8‑11 | candidate | `06c2 0020`, `04c2 0024`, `02c2 0028`, `00c2 002c`; the Mesa-style `0x62` form also occurs (646 instruction starts) |
-| `trap ≠ 0x0008` | candidate | `0x0008` is the A11 alignment *filler* word (runs of up to 26); A11 moved `trap` elsewhere — value unknown |
+| **`imad` = 6 bytes** (Mesa: 8) | confirmed | forced by the corpus — changing it to 12 B breaks an object |
+| **`texture_load` = 6 bytes** (Mesa: 8) | confirmed | the earlier "6 or 12" candidate is withdrawn |
+| `iadd`, `bfi`, `icmpsel`, `fcmpsel`, `atomic` = 6 bytes (Mesa: 8) | confirmed | same delta as `imad` |
+| `wait`, `threadgroup_barrier`, `ret`, `doorbell`, `call`(0x0004) = 6 bytes (Mesa/G13: 2) | confirmed | A11 is *longer* than G13 here |
+| A11-only opcodes (no G13 signature) | 4 B / 2 B | first words seen: `0x2000`, `0x0040`, `0x0200`, `0x5200`, `0x5024`, `0x8000`, `0x8100`, … — **not yet named** |
 
-Candidate A11 length table (bytes): `wait`/`trap`/`stop` 2 · `zs_emit`,
-`writeout`, `get_sr`, 16-bit `mov_imm` 4 · ALU `fadd/fmul/fma`, the compare
-family, `bitop`, `device_load`, `jmp_exec_*` 6 · `bfi`, `fcmpsel`,
-`device_store` 8 · **`imad` 6 or 12** (Mesa: 8) · **`texture_load` 6 or 12**
-(Mesa: 8) — the last two are the open item, and framing still breaks on
-A11-only opcodes that match no Mesa signature (blockers seen: `0x0f00`,
-`0x06c2`, `0x8041`, `0x0083`, `0x8b8c`, `0x724a`, `0x8800`).
+Evidence for the 6-byte quantum (five independent legs, all reproducible with
+`tools/g10p_lengths.py`):
+
+1. **Local repetition period** — where one instruction repeats, the period
+   *is* its length: `imadd` → 3 words in 5172 resolved cases, `fadd16` →
+   gcd 3, `trap` → 1 word in 877 cases. The global word autocorrelation peaks
+   at d = 3, 6, 9 words — every peak a multiple of 3.
+2. **Exact DP tiling** — with a fixed table, the tileable positions are a
+   forward-reachability DP, so "this object tiles" is a *proof*. The uniform
+   6-byte baseline tiles **72/94 objects and 477 051/492 190 words** exactly.
+3. **Minimal-deviation repair** — only three deviations are needed to reach
+   **94/94**; everything else stays at 6 bytes.
+4. **Independent structural check** — the next function after a terminator must
+   start on a **64-byte boundary**. With the solved framing that holds for
+   **80/125 (64.0 %)** of mid-section functions, against **3.1 %** by chance.
+5. **Cross-validation** — solve on half the corpus, test on the other half:
+   even→odd 36/47 train → **36/47 held out**; odd→even 47/47 train → **46/47
+   held out**.
+
+This converges with the *decoder-side* analysis of Apple's own AGX3
+disassembler in the iOS dyld cache, which independently established that the
+length is a **pure function of the opcode** (`ISA opcode → MC opcode →
+MCInstrDesc[MCopcode].Size`), that it is **not a flag bit**, and that the
+instruction is **16-bit-word granular** (`size == 2 × words`). The corpus-side
+table now supplies the *values* that `MCInstrDesc` would have given.
 
 Negative results worth keeping (they close dead ends):
 
-- The AGX3 encoder tables in libLLVM are a **different dialect** from the A11
-  corpus: only 9.0 % of tiled instructions match an AGX3 encoder template, and
-  libLLVM's AGX3 opcode space is all ≡7 mod 8 while Mesa's is not.
+- Mesa's `agx_opcodes.py` lengths cannot be substituted for A11's: under
+  Mesa's table the corpus tiles 0/94 objects.
+- The "same-source differential" instrument is **dead**: the 32-instance
+  groups are not same-code-different-constants (word counts 428→1091,
+  terminator offsets differ), so cross-instance alignment at fixed offsets
+  cannot work.
+- The "uniform 6-byte grid" refutation was an **artefact** of assuming no
+  2-byte instructions; with 2-byte trap/stop the phase shifts and the uniform
+  model survives.
+- The "indivisible motif" argument was Mesa-specific (`0x0000` matches Mesa's
+  mask-0 `device_store`/`uniform_store`); the conclusion survives only on the
+  independent period measurement.
 - `AGXCompilerCore` / `libGPUCompilerImpl` contain **no Mesa-shaped tables at
   all** (a scan of every data section for `(exact, mask, len, len)` runs found
   zero hits), even though `AGXCompilerCore` does carry a per-generation target

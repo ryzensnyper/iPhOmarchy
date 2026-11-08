@@ -19,19 +19,42 @@ variable instead of editing the file.
 | `kc_pmp.py` | extract/validate the PMP firmware region and find embedded firmware Mach-Os | `GPU_WIP_KC` |
 | `kc_macho.py` | section-level compare of the local const blob against the kernelcache | `GPU_WIP_KC`, `GPU_WIP_LOCAL` |
 | `g10p_solve.py` | **WIP** constraint solver for the A11 length table: frames every corpus object, treating Mesa's public table as the prior and solving the lengths of the A11-only opcodes jointly across the corpus | `GPU_WIP_CORPUS`, `GPU_WIP_REF` |
+| `g10p_lengths.py` | **the A11 length table, solved and validated.** Uses Dougall Johnson's `applegpu` descriptor table as the opcode dictionary, measures the 6-byte quantum from the local repetition period, tiles every corpus object with an exact forward-reachability DP, applies a minimal-deviation repair, cross-validates (solve on half / test on the other half), checks the 64-byte function alignment, and emits the table as JSON | `GPU_WIP_CORPUS`, `GPU_WIP_APPLEGPU` (directory holding `applegpu.py`) |
 
-`g10p_solve.py` is honest work-in-progress: it frames only a handful of the 94
-objects so far, because the A11 dialect changes the *length* of more Mesa
-opcodes than the two known so far (`imad`, `texture_load`).  The next
-instrument is the same-source differential alignment (32 instances of each of
-the two `.constant_program` programs), not more guessing in the solver.
+`g10p_lengths.py` is the current instrument; it supersedes `g10p_solve.py`,
+which framed only a handful of the 94 objects because the A11 dialect changes
+the *length* of far more Mesa opcodes than the two known at the time (`imad`,
+`texture_load`).  The "same-source differential" that was supposed to replace
+it turned out to be **dead** — the 32-instance groups are not
+same-code-different-constants — so the solver was rebuilt around an exact DP
+plus a cross-validated minimal-deviation repair.
+
+### The `applegpu` reference
+
+`g10p_lengths.py` needs Dougall Johnson's AGX descriptor table
+(`github.com/dougallj/applegpu`, BSD 3-Clause), which is **not** committed
+here — it is third-party code and stays a local reference like Mesa's
+`agx_opcodes.py`.  Fetch it once and point the tool at it:
+
+```sh
+git clone --depth 1 https://github.com/dougallj/applegpu.git
+export GPU_WIP_APPLEGPU=/path/to/applegpu
+```
+
+The table is 161 descriptors / 81 distinct low-16 `(mask, bits)` signatures,
+each with an explicit `(short, long)` byte-size pair and a length-bit
+position — i.e. it encodes the *framing rule*, not just the opcode bits.  Its
+`jmp_exec_none` = `0xc020` is exactly the value measured independently in the
+G10P corpus, which is why it is the right dictionary for A11.
 
 Typical use:
 
 ```sh
 export GPU_WIP_CORPUS=/path/to/ds-g10p
 export GPU_WIP_REF=/path/to/reference-agx-isa      # needs Mesa's agx_opcodes.py
+export GPU_WIP_APPLEGPU=/path/to/applegpu          # needs applegpu.py
 python3 tools/g10p_census.py
+python3 tools/g10p_lengths.py --json lengths.json
 ```
 
 The scripts expect the artefacts they read to exist locally (corpus objects,

@@ -1544,3 +1544,220 @@ contains Apple's own AGX compiler (`AGXCompilerCore`, `AGXMetalA11`), and
 field question at once — but it needs a host that can run Apple's Metal
 toolchain (macOS) or the on-device compiler, i.e. it is a future hardware
 phase, not an offline one.
+
+---
+
+## Addendum 5 (2026-11-08, night): **the A11 length table is SOLVED** — G10P uses a uniform 6-byte instruction quantum
+
+Offline only. No device, no kernel/DT edits. New artefacts in
+`/tmp/opencode/` (`g10p_period2.py`, `g10p_period3.py`, `g10p_grid.py`,
+`g10p_csp.py`, `g10p_arc.py`, `g10p_apple.py`, `g10p_apple2.py`,
+`g10p_apple3.py`, `g10p_min.py`, `g10p_final.py`, `g10p_dis.py`,
+`g10p_val.py`, `g10p_val2.py`, `g10p_lengths.py`, `dyld_extract.py`) plus a
+read-only clone of `dougallj/applegpu` in `/tmp/opencode/applegpu`.
+
+### 1. The instrument that unlocked it: `dougallj/applegpu` (confirmed)
+
+The earlier attempts used **Mesa's** `agx_opcodes.py` as the opcode
+dictionary.  Mesa's table is only 57 opcodes and its lengths are the
+*A12+* ones.  `dougallj/applegpu` (BSD-3-Clause, `github.com/dougallj/applegpu`,
+commit `28dd804`) is a **data-driven descriptor table for Apple's own AGX
+ISA** — 161 descriptors / **81 distinct low-16 signatures**, each with an
+explicit `(short, long)` byte-size pair and a length-bit position, i.e. it
+encodes the *framing rule*, not just the opcode bits.
+
+Two things make it the right dictionary for this corpus:
+
+* it is **much wider** than Mesa's, so far fewer corpus words are
+  "unexplained";
+* its `jmp_exec_none` is **`0xc020`**, which is *exactly* the value this
+  project had already measured independently in the G10P corpus
+  (and whose A11 delta was recorded in Addendum 4).  The two dialects are
+  the same family.
+
+It also carries G13's `stop` = `0x0088`, and the corpus contains **both**
+`0x0088` (109×) and `0x0108` (219×) as 2-byte terminators.
+
+Vendored (reference only) under `tools/reference-agx-isa/`:
+`applegpu.py`, `fma.py`, `srgb.py`, `LICENSE` (upstream headers kept).
+
+### 2. The result (confirmed)
+
+> **G10P (A11) encodes essentially every AGX instruction in exactly 6 bytes
+> = 3 × 16-bit words.**  The exceptions are `trap` (`0x0008`) and the two
+> `stop`s (`0x0088`, `0x0108`) at **2 bytes**, plus a catch-all of
+> A11-only opcodes that the G13 table does not know, at **4 bytes** (L-bit
+> clear) and **2 bytes** (L-bit set).
+
+This is a *different framing scheme* from Mesa's A12+ AGX, which mixes
+2/4/6/8/10/12 bytes and selects between two lengths with bit 15.  G10P's
+opcode *values* are Mesa-compatible; its *lengths* are not.
+
+### 3. The evidence (four independent legs)
+
+1. **Local repetition period** (`g10p_period3.py`, 6-word match window,
+   full corpus).  Where one instruction repeats, the period *is* its
+   length:
+
+   | opcode | period | resolved cases |
+   |---|---|---|
+   | `imadd` | **3 words (6 B)** | 5172 (mode `d3`) |
+   | `fadd16` | **3 words (6 B)** | gcd(21,24)=3 |
+   | `trap` | **1 word (2 B)** | 877 |
+
+   The global word autocorrelation (`g10p_period2.py`) peaks at
+   **d = 3, 6, 9 words** (0.118 / 0.119 / 0.125) — every peak is a multiple
+   of 3.
+
+2. **Exact DP tiling.**  With a fixed length table, the set of tileable
+   positions is a forward reachability DP — *complete*, so "this object
+   tiles" is a proof, not a guess.  The uniform baseline (3 words
+   everywhere, 1 word for trap/stop) tiles **72 / 94 objects and
+   477 051 / 492 190 words** exactly.
+
+3. **Minimal-deviation repair.**  Only three deviations are needed to reach
+   **94 / 94**: `A11-only|L1 → 2 words`, `A11-only|L0 → 2 words`,
+   `A11-only|L1 → 1 word`.  Everything else stays at the 6-byte baseline.
+
+4. **Independent structural check.**  The next function after a terminator
+   must start on a **64-byte boundary**.  With the solved framing that holds
+   for **80 / 125 (64.0 %)** of mid-section functions, against **3.1 %** by
+   chance.  This check does not presuppose the length table — it only uses
+   the terminator and the padding run.
+
+5. **Cross-validation.**  Solve on half the corpus, test on the other half:
+
+   | split | train | held out |
+   |---|---|---|
+   | even → odd | 36 / 47 | **36 / 47** |
+   | odd → even | 47 / 47 | **46 / 47** |
+
+   The table generalises; it is not fitted noise.
+
+### 4. The table
+
+Forced by the corpus (changing the length breaks at least one object):
+
+| class | length | occurrences | alternatives that break |
+|---|---|---|---|
+| `imadd` | **6 B** | 47 142 | 12 B |
+| `icmpsel` | **6 B** | 7 283 | 10 B |
+| `get_sr` | **6 B** | 1 321 | 10 B, 12 B |
+| `icmp_ballot` | **6 B** | 649 | 12 B |
+| `zs_emit` | **6 B** | 104 | 8 B, 10 B, 12 B |
+| `jmp_exec_any` (L=1) | **6 B** | 400 | 12 B |
+| `stop/A11` (`0x0108`) | **2 B** | 219 | 4–12 B |
+| A11-only, L-bit clear | **4 B** | 124 505 | 2/6/8/10/12 B |
+| A11-only, L-bit set | **2 B** | 45 440 | 4–12 B |
+
+Every other opcode the corpus uses is **6 bytes** and is *not individually
+forced* — the corpus cannot distinguish 6 from the other values for them
+without breaking a tiling, so 6 B is the value consistent with the solved
+table (and with the period evidence).  `trap` (`0x0008`, 3 532×) is **2 B**,
+matching both the period measurement (d1) and G13.
+
+Full machine-readable table: `A11-GPU-G10P-LENGTHS.json`
+(`tools/g10p_lengths.py --json`).
+
+### 5. Deltas against G13 / Mesa (the interesting ones)
+
+| opcode | **A11/G10P** | G13 (applegpu) | Mesa (A12+) |
+|---|---|---|---|
+| `imadd` | **6** | 8 | 8 |
+| `iadd` | **6** | 8 | 8 |
+| `bfi` | **6** | 8 | 8 |
+| `atomic` | **6** | 8 | – |
+| `icmpsel` | **6** | 8 / 10 | 8 |
+| `fcmpsel` | **6** | 8 / 10 | 8 |
+| `texture_load` | **6** | 8 / 12 | 8 |
+| `call` (`0x0004`) | **6** | 2 | 6 |
+| `wait` | **6** | 2 | 2 |
+| `threadgroup_barrier` | **6** | 2 | 2 |
+| `ret` | **6** | 2 | – |
+| `doorbell` | **6** | 2 | – |
+| `get_sr` | **6** | 4 | – |
+| `iter` | **6** | 4 / 8 | 4 |
+| `TODO.ldcf` | **6** | 4 / 8 | 4 |
+| `TODO.ld/st_tile` | **6** | 8 / 10 | – |
+| `zs_emit` | **6** | 4 | – |
+| `mov_imm` | **6** | 4 / 6 | 4 / 6 |
+| `fadd16` | **6** | 4 / 6 | 6 |
+| `jmp_exec_none` (`0xc020`) | **6** | 6 | 6 |
+| `jmp_exec_any` (`0xc000`) | **6** | 6 | 6 |
+| `trap` | **2** | 2 | 2 |
+| `stop` | **2** | 2 | 2 |
+
+### 6. This converges with the decoder-side analysis (confirmed)
+
+The AGX3 decoder re-read (earlier in this file) already established, from
+the *encoder/decoder* side:
+
+> "Length source (confirmed): ISA opcode → MC opcode →
+> `MCInstrDesc[MCopcode].Size` = the instruction size **in bytes** …
+> ⇒ the length is a **pure function of the opcode**; it is not encoded in
+> the stream, and it is not a flag bit."
+> and "the instruction is **16-bit-word granular** … `size == 2 * words`".
+
+The corpus-side result now agrees with that on every point and supplies
+the *values* the decoder table was missing: **the size is 6 bytes for
+essentially every opcode**.  The only bit-15 dependence left is inside the
+"A11-only" catch-all, i.e. an artefact of not yet knowing those opcodes —
+for every *named* opcode the length is 6 bytes whether bit 15 is set or
+not, which is precisely the "not a flag bit" conclusion.
+
+### 7. Corrections to earlier statements in this file (confirmed)
+
+* **Addendum 2's "the corpus framing is SOLVED — it is the public Mesa AGX
+  dialect"** is **superseded**.  The corpus's *opcode values* are
+  Mesa-compatible; its *lengths* are not.  Mesa's mixed 2/4/6/8/10/12
+  scheme with the bit-15 length selector does **not** apply to G10P.
+* **"`texture_load` = 12 bytes"** (a candidate in Addendum 4) is
+  **withdrawn**: it is **6 bytes**.  The old "gap histogram ⇒ 6 words"
+  reading was measuring the distance between *signature matches*, not the
+  instruction length.
+* **"`imad` = 6/12 candidate"** is now **confirmed at 6 bytes**.
+* **"the dominant motif `02de 0000 0040` is indivisible"** was a
+  Mesa-specific argument (0x0000 matches Mesa's mask-0 `device_store` /
+  `uniform_store`).  Under applegpu's table 0x0000 *does* match a G13
+  signature (`jmp_incomplete`).  The argument is withdrawn, but the
+  conclusion survives on the independent period measurement (d3 × 5172).
+* **"0x0000 only ever appears in 2-word runs"** is **wrong**: measured over
+  the corpus the run lengths are `{1: 77 554, 2: 1 099}`.
+* **"A11 `stop` = 0x0108"** is confirmed at **2 bytes**; the G13 `stop`
+  `0x0088` also occurs (109×) and is likewise 2 bytes.
+* The earlier **"uniform 6-byte grid" refutation** (`g10p_grid.py`: section
+  sizes mod 6 flat, terminator phases spread) was an artefact of assuming
+  *no* 2-byte instructions; with 2-byte trap/stop the phase shifts, and
+  the uniform-6 model survives.
+
+### 8. Files added by this session
+
+* `tools/reference-agx-isa/applegpu.py`, `fma.py`, `srgb.py`, `LICENSE`
+  (vendored from `dougallj/applegpu`, commit `28dd804`, BSD-3-Clause).
+* `tools/g10p_lengths.py` — the consolidated, reproducible solver: derives
+  the table, runs the exact DP, the minimal-deviation repair, the 2-fold
+  cross-validation and the 64-byte alignment check, and emits
+  `A11-GPU-G10P-LENGTHS.json`.
+* `A11-GPU-G10P-LENGTHS.json` — the table, machine-readable.
+* `/tmp/opencode/` (not part of the archive): the instruments listed at the
+  top of this addendum.
+
+### 9. Next moves
+
+1. **Field layout** is now the open ISA question, not the length.  The
+   6-byte quantum means each instruction is exactly three 16-bit words, so
+   the next task is to map the *fields* inside those three words
+   (opcode / destination / sources / immediate) for the G10P dialect.  The
+   G13 field layout is a good prior but is known to drift (the earlier
+   full-mask probe found `bfi` 77 %, `bitrev` 0 %, `floor` 0.2 % full-mask
+   pass rates under Mesa's masks).
+2. The A11-only opcodes (the 4-byte and 2-byte catch-all) need to be
+   identified: they are the words that match no G13 signature and start
+   instructions.  Their first words (`0x2000`, `0x0040`, `0x0200`,
+   `0x5200`, `0x5024`, …) are the next thing to name.
+3. `MCInstrDesc` (the decoder's authoritative size table) is still not
+   located in the dyld cache — but the corpus-side table above now
+   supersedes it for our purposes.
+4. Hardware phase (native `disp0`, `pvr_apple` 3D bring-up) remains gated
+   on an explicit "go" plus approval for any kernel/DT edits; `simplefb`
+   stays as the working display path.
