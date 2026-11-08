@@ -160,14 +160,32 @@ known-good display (`simplefb`).
 - A powervr-variant driver (or `panfrost`/`asahi`-style) — a large project.
 - The disassembler we built (ISA KB) for the shader side.
 
-## 7. Immediate offline work before the “go”
+## 8. Incident (2026-11-08/09): a raw `/dev/mem` read of the Fender window hangs the application processor
 
-1. ~~RE `AGXG10P__TEXT_EXEC.bin` for the IOP boot path~~ — **done**
-   (see §4).  The window blocks match A10 exactly; the runtime size is
-   `0x8f000`; Fender+0x1000 is confirmed.  The remaining two items
-   (IOP window enable stride, the constructed run bit) are same-silicon
-   assumptions and are only relevant to Stage 2.
-2. Draft the `apple,t8015-gfx-iop` DT binding + node patch and the driver
-   source (out-of-tree module), ready to build.
-3. Prepare the firmware copy script + checksums, and the uninstall/rollback
-   script.
+On this phone, before the GFX domain was enabled by any Linux driver, an
+attempt to `mmap` `/dev/mem` at `0x04D00000` (Fender) and read it killed the
+running Linux: the bus appeared to stall indefinitely, the watchdog kicked,
+and the phone rebooted into the default boot chain (iOS).  The same applies
+to `0x04D20000` (GFX IOP): both were attempted in the same script; the device
+stopped before any output was produced.
+
+**Rules derived from the incident**
+
+1. **No AP access to any GPU/Fender/IOP register, even reads, until the
+   GFX power domain is known-on via the proper boot path.**  The A10 notes
+   said the same thing (`ps_gfx` f/f first) — they were correct, and ignoring
+   that ordering here crashed the phone.
+2. Stage 1 must be done **inside the kernel** (a driver that powers GFX,
+   then boots the IOP), not via `/dev/mem` from userspace.  The current
+   design of a userspace probe is **withdrawn**.
+3. The PMP driver is the closest existing example of the required pattern:
+   it powers nothing on the GPU side, only the PMP IOP itself, and it works.
+   An analogous G10P IOP + power-domain device tree node is required before
+   any register access is meaningful.
+4. `/dev/mem` is "read-only-looking but not safe" for device registers on
+   this kernel and in this power state.  Anything that maps a device window
+   must be fault-handled (synchronous abort → no panic/reboot) or done in
+   the kernel.
+5. The only persistent change made to the device before the reset was a
+   temporary `touch`/`rm` of `/lib/firmware/apple/.writetest`; the firmware
+   was never installed, and no DT/kernel/system file was modified.
