@@ -18,6 +18,14 @@ working (`event1`, IRQ 71 firing); every `apple_z2.ko` on disk has the
 correct vermagic.  Likely a stale artifact from the previous module tree;
 recheck on the next boot.
 
+## Phase 2.2 — built, NOT booted (2026-11-09)
+
+Patch `d616c1dbc383` (`gpu/phase2.2`) plus the firmware
+(`apple/gfx-t8015.bin`, sha `bd7b98e2…`) are in the payload
+(`4987f034…`): kernel strings, DTB (mbox node + `mboxes`/`power-domains`)
+and initramfs blob all verified, build EXIT 0.  Boot #2 is the next
+decision.  Kit and evidence: `phase2.2/`.
+
 ## Verified against the G10P kext / this repo's analysis
 
 | item | state |

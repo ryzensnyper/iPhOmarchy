@@ -1,7 +1,8 @@
 # Phase 2.2 patch kit — boot the GFX IOP, wait for RTKit HELLO
 
-**Status: draft, NOT applied.  The kernel tree has not been touched, no
-firmware has been installed, and the phone has not been touched.**
+**Status: applied as `d616c1dbc383` on branch `gpu/phase2.2`, firmware
+installed, built (EXIT 0).  NOT booted — boot #2 needs its own go.**  See
+"Build result" below.
 
 Context: `../kb/A11-GPU-G10P-STAGE2.md` (Phase 2.2) and
 `../kb/A11-GPU-G10P-BOOTCHAIN.md` (verified facts + the three traps).
@@ -101,15 +102,30 @@ makes the apply and the firmware install separable.
    lists `ps_gfx` as its domain, so its probe-time register writes happen with
    the domain on.
 
-## Approvals (each separate)
+## Build result (2026-11-09 — applied and built, NOT booted)
 
-1. apply the patch to `d21-touchgood` + build — the result is safe to boot
-   even without the firmware (gate);
-2. install the firmware into the payload (`install-firmware.sh`) + rebuild
-   (adds 381 728 B to the initramfs);
-3. boot #2 — one go, one attempt.
+Applied as `d616c1dbc383` on `gpu/phase2.2`, with the firmware installed.
+`orchard build` exited 0; `apple-t8015-gfx.o` compiled with no warnings.
 
-(1) and (2) can share one build if approved together.
+| item | value |
+|---|---|
+| payload | `out/apple-16k/linux.bin`, 61 097 072 B, sha256 `4987f034e7e78a79ee5e6199844c61b39ede25bb844c48495dfd891ec44cc515` (copy `/tmp/opencode/phase2.2-linux.bin`) |
+| kernel | `Image.gz` 8 327 567 B, sha256 `7f669d35b7d9912b…`; contains the 2.2 strings; release still `7.3.0-rc1-orchard-apple-16k` |
+| DTB | `t8015-d21.dtb` sha256 `064ce2538d55cd50…`; `gpu` has `mboxes = <&gpu_mbox>` and `power-domains = <&ps_gfx>` (phandle 0x31, `label = "gfx"`); `gpu_mbox@4d24000` present with IRQ order 260/259/262/261 |
+| firmware | `lib/firmware/apple/gfx-t8015.bin` inside the initramfs, 381 728 B, sha256 `bd7b98e2833142d834bf3ac08dfc4a1d1f00d25a06ce04a67731a808a92bcc5c` (matches `g10p.img`) |
+| receipt | kernel / D21 DTB / initramfs component hashes match `linux.bin.json` |
+
+**Recovery side effect:** same as 2.1 — `out/` now holds the 2.2 payload,
+not the known-good one.  Copy the frozen payload
+(`f44886c1…`) back before any `--no-build` recovery boot.
+
+Approvals 1 and 2 are done; **approval 3 (boot #2) is pending**.
+
+## Approval status
+
+1. apply + build — **done** (`d616c1dbc383`, EXIT 0)
+2. install firmware + rebuild — **done** (`bd7b98e2…` in the initramfs)
+3. boot #2 — **pending, one go, one attempt**
 
 ## Verification after boot #2
 
