@@ -137,6 +137,14 @@ Rollback: reboot — reverts to the known-good state; nothing on NVMe changed
 except the module tree of `7.3.0-rc1-orchard-apple-16k`, which the payload
 refreshes on every boot anyway (`A11-GPU-G10P-BOOTCHAIN.md` §5).
 
+**Result (2026-11-09): PASSED on hardware.**  Booted the payload built from
+`5744368dec2c` on D21 (`1f790b08…`).  `pm_genpd/gfx/current_state` = `on`
+with `4000000.gpu` in the domain and bound to `apple-t8015-gfx`; dmesg marker
+at 0.65 s; `powervr` not loaded; fb0 1080×1920×32, `apple-z2` IRQ and NVMe
+root unchanged; domain still on at 101 s.  The only unexpected line was a
+late, harmless `apple_z2` version-magic coldplug attempt (module already
+loaded and working).  Full evidence: `GPU-WIP/probe/phase2.1/README.md`.
+
 **Do not** enable `DRM_POWERVR_APPLE` / `apple,t8010-gpu` in the config at
 this phase — the driver must not touch hardware yet.  (Note:
 `CONFIG_DRM_POWERVR_APPLE=y` is *already* set in the tree's

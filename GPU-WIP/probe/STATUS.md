@@ -3,6 +3,21 @@
 **Scope of the probe: Stage 1 only** (RTKit HELLO from the GFX IOP).
 Stage 2 (Fender + CORE_ID) and Phase 2 (init data, jobs) are not part of this.
 
+## Phase 2.1 — PASSED on hardware (2026-11-09)
+
+Booted the Phase 2.1 kernel (tree `5744368dec2c`, payload `1f790b08…`) on
+D21: `pm_genpd/gfx/current_state` = **`on`**, `devices` = `4000000.gpu`,
+device bound to `apple-t8015-gfx` with the `ps_gfx` controller as its
+supplier, dmesg marker at 0.65 s, `powervr` not loaded, fb0/touch/NVMe
+unchanged, domain still on at 101 s.  Evidence in `phase2.1/README.md`.
+
+Benign boot noise: a late coldplug attempt logged
+`apple_z2: version magic '7.3.0-rc1-g0c549fd6bed0' … should be
+'7.3.0-rc1-orchard-apple-16k'`.  The touch module was already loaded and
+working (`event1`, IRQ 71 firing); every `apple_z2.ko` on disk has the
+correct vermagic.  Likely a stale artifact from the previous module tree;
+recheck on the next boot.
+
 ## Verified against the G10P kext / this repo's analysis
 
 | item | state |

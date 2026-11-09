@@ -105,6 +105,30 @@ cd /home/doug/orchard
 ```
 
 
+## Result — PASSED (booted 2026-11-09)
+
+`verify.sh` exited 0, all checks pass:
+
+| check | observed |
+|---|---|
+| driver probe | `[0.652587] apple-t8015-gfx 4000000.gpu: GFX power domain is up; no hardware access in this phase` |
+| domain | `current_state` = **`on`**, `devices` = `4000000.gpu` (still `on` at 101 s) |
+| binding | `4000000.gpu` → `/sys/bus/platform/drivers/apple-t8015-gfx`; supplier is `…power-controller@80338` (`ps_gfx`) |
+| PowerVR | `powervr` not in `/proc/modules` |
+| display | `simpledrmdrmfb`, 1080×1920×32 |
+| touch | `apple_z2` loaded, `iPhone 8 Plus Touchscreen` = `event1`, IRQ 71 firing |
+| storage | NVMe root `nvme0n1p3` mounted |
+| modules loaded | `rfkill`, `fuse`, `apple_z2`, `nvme`, `nvme_apple`, `nvme_core` |
+
+Benign oddity, investigated: a late coldplug attempt logged
+`apple_z2: version magic '7.3.0-rc1-g0c549fd6bed0' … should be
+'7.3.0-rc1-orchard-apple-16k'`.  The module was already loaded and working;
+`modinfo` on both on-disk `apple_z2.ko` copies reports the correct vermagic.
+It is a stale-tree/coldplug artifact, unrelated to the GPU change; recheck on
+the 2.2 boot.
+
+Phone left running this kernel; reboot returns to the known-good payload.
+
 ## Open choices (flagged for the reviewer)
 
 * **Compatible**: the node uses `"apple,t8015-gpu"`, which matches no
