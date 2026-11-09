@@ -1,0 +1,39 @@
+/* SPDX-License-Identifier: GPL-2.0-only */
+/*
+ * Apple T8015 (A11) G10P GPU — Phase 2.1 devicetree fragment.
+ *
+ * Drop-in content for arch/arm64/boot/dts/apple/t8015.dtsi (inside the
+ * "soc" node, near the other coprocessor nodes).  Included here as its own
+ * file only so the patch is reviewable before it is applied.
+ *
+ * Addresses and sizes are the live ADT's, exactly:
+ *   sgx    : reg = 0x04000000/0x100000 (RGX), 0x04D00000/0x20000 (Fender)
+ *   gfx-kf : reg = 0x04D20000/0x20000 (IOP), 0x04D00000/0x20000 (Fender)
+ * (see A11-GPU-G10P-BOOTCHAIN.md §6).  The A10's Linux node combines the
+ * same windows into one "gpu" node with the same reg-names, so the eventual
+ * PowerVR/AGX driver will find what it expects.
+ *
+ * The compatible deliberately matches no in-tree driver: the PowerVR match
+ * table entry is "apple,t8010-gpu", and the payload's init cold-plugs every
+ * device modalias, so any node carrying that string would load the full
+ * driver and boot the firmware at boot time (see BOOTCHAIN.md §3).
+ *
+ * Phase 2.1 has no mailbox node: the in-tree apple mailbox driver writes
+ * its IRQ mask registers at probe (BOOTCHAIN.md §4).  The mailbox node is
+ * Phase 2.2.
+ */
+
+gpu: gpu@4000000 {
+	compatible = "apple,t8015-gpu";
+	reg = <0x0 0x04000000 0x0 0x100000>,	/* RGX  */
+	      <0x0 0x04d00000 0x0 0x20000>,	/* Fender */
+	      <0x0 0x04d20000 0x0 0x20000>;	/* GFX IOP */
+	reg-names = "rgx", "fender", "iop";
+
+	/*
+	 * This phandle is the whole point of Phase 2.1.  The platform core
+	 * attaches the device and runs the domain's power_on (PS_TARGET =
+	 * 0xf, poll PS_ACTUAL) before the driver's ->probe() is called.
+	 */
+	power-domains = <&ps_gfx>;
+};
