@@ -153,6 +153,11 @@ this phase — the driver must not touch hardware yet.  (Note:
 
 ### Phase 2.2 — boot the GFX IOP (Stage 1 proper)
 
+**Patch kit drafted 2026-11-09 (not applied, no firmware installed):**
+`GPU-WIP/probe/phase2.2/` — extended `apple-t8015-gfx.c`, the gpu/mbox DT
+fragment, `install-firmware.sh`, `verify.sh`, and the review points.  The
+driver is gated on the blob: without it the same kernel is a 2.1 boot.
+
 With 2.1 in place and the phone known-good:
 
 1. Install the firmware `apple/gfx-t8015.bin` (the `g10p.img` copy — sha256

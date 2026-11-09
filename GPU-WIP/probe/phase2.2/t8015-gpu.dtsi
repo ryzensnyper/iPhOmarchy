@@ -1,0 +1,53 @@
+/* SPDX-License-Identifier: GPL-2.0-only */
+/*
+ * Apple T8015 (A11) G10P GPU — Phase 2.2 devicetree fragment.
+ *
+ * This is the Phase 2.1 gpu node plus the mailbox node and the two properties
+ * the RTKit library and the driver need.  Drop-in content for
+ * arch/arm64/boot/dts/apple/t8015.dtsi (inside the "soc" node).
+ *
+ * Differences from Phase 2.1:
+ *   - gpu gets "mboxes" and "firmware-name";
+ *   - a new gpu_mbox node at IOP + 0x4000 (the A10's relative layout).
+ *
+ * The mailbox driver writes its IRQ-mask registers at probe, which is why the
+ * node appears only now, with the GFX domain already a consumer (2.1).
+ *
+ * The compatible stays "apple,t8015-gpu" (our driver).  Never use
+ * "apple,t8010-gpu": that is the PowerVR match-table entry and the payload's
+ * init cold-plugs every device modalias (BOOTCHAIN.md §3).
+ *
+ * IRQ order is the live ADT's gfx-kf array [260, 259, 262, 261], mapped in
+ * that order to the four mailbox names (BOOTCHAIN.md §6).  If RTKit never
+ * receives HELLO, this mapping is the first suspect.
+ */
+
+gpu: gpu@4000000 {
+	compatible = "apple,t8015-gpu";
+	reg = <0x0 0x04000000 0x0 0x100000>,	/* RGX  */
+	      <0x0 0x04d00000 0x0 0x20000>,	/* Fender */
+	      <0x0 0x04d20000 0x0 0x20000>;	/* GFX IOP */
+	reg-names = "rgx", "fender", "iop";
+
+	mboxes = <&gpu_mbox>;
+
+	/* Phase 2.1: the platform core powers ps_gfx on before ->probe(). */
+	power-domains = <&ps_gfx>;
+
+	/* Installed into the payload at lib/firmware/apple/gfx-t8015.bin. */
+	firmware-name = "apple/gfx-t8015.bin";
+};
+
+gpu_mbox: mbox@4d24000 {
+	compatible = "apple,t8010-a7iop-mailbox";	/* in-tree variant, reused */
+	reg = <0x0 0x04d24000 0x0 0x1000>;		/* = IOP + 0x4000 */
+	interrupt-parent = <&aic>;
+	interrupts = <AIC_IRQ 260 IRQ_TYPE_LEVEL_HIGH>,
+		     <AIC_IRQ 259 IRQ_TYPE_LEVEL_HIGH>,
+		     <AIC_IRQ 262 IRQ_TYPE_LEVEL_HIGH>,
+		     <AIC_IRQ 261 IRQ_TYPE_LEVEL_HIGH>;
+	interrupt-names = "send-empty", "send-not-empty",
+			  "recv-empty", "recv-not-empty";
+	#mbox-cells = <0>;
+	power-domains = <&ps_gfx>;
+};
