@@ -19,6 +19,15 @@ AP-side access of an *unpowered* GPU window).
 Every register poke in this plan goes through the kernel's PMGR power-domain
 framework or a driver inside it — never `/dev/mem`, never userspace.
 
+> **Verified 2026-11-09** (read-only; nothing executed on hardware).  The
+> details behind Phase 2.1 below are recorded in
+> **`A11-GPU-G10P-BOOTCHAIN.md`**: which tree builds the booting image
+> (`d21-touchgood` @ the known-good commit `c2a38a5d`), the verified
+> `ps_gfx` node, the confirmed mailbox base (`0x04D24000`), and three traps
+> (the `apple,t8010-gpu` match + the payload's coldplug modprobe, the
+> mailbox writing registers at probe, and the module-tree write that every
+> payload boot performs on the phone's NVMe).
+
 ## Objective
 
 Enable the A11's GFX (G10P) power domain from Linux, verify it online,
@@ -31,9 +40,9 @@ stage.
 | node | purpose | reg / base |
 |---|---|---|
 | `pmgr` | PMGR block | `power-management@232000000`, size `0x8c000` |
-| `ps_gfx` | **GFX power-state** | `power-controller@80338`, 32-bit, compatible `apple,t8015-pmgr-pwrstate` (driver `drivers/pmdomain/apple/pmgr-pwrstate.c`, built-in) |
-| `gpu` (to add) | RGX + Fender + GFX IOP | see the sketch below |
-| `gpu_mbox` (to add) | RTKit mailbox | A `+0x4000` ⇒ absolute `0x04D24000` (by analogy with A10's `mbox@201d24000 = A+0x4000`) |
+| `ps_gfx` | **GFX power-state** | `power-controller@80338`, 32-bit, compatible `apple,t8015-pmgr-pwrstate` (driver `drivers/pmdomain/apple/pmgr-pwrstate.c`, built-in); `reg` is **PMGR-relative** `0x80338` ⇒ absolute `0x23280338` |
+| `gpu` (to add) | RGX + Fender + GFX IOP | ADT-exact: RGX `0x04000000/0x100000`, Fender `0x04D00000/0x20000`, IOP `0x04D20000/0x20000` |
+| `gpu_mbox` (to add) | RTKit mailbox | **confirmed 2026-11-09**: `0x04D24000`, size `0x1000` (IOP `+0x4000`; A10's `mbox@201d24000` is IOP `+0x4000` too); in-tree variant `apple,t8010-a7iop-mailbox` |
 | GFX IOP IRQs | `[260, 259, 262, 261]` | parent = AIC (`interrupt-parent = 28`) |
 | RGX IRQs | `[255, 256, 257, 258, 263]` | unused here |
 
@@ -45,25 +54,53 @@ then poll `PS_ACTUAL == 0xf`.  Nothing new needs writing for 2.1.
 
 ### Phase 2.1 — socket the GFX domain behind a real consumer (needed for any AP access)
 
+**Verified 2026-11-09** (read-only inspection of the tree, the ADT and the
+running phone — see `A11-GPU-G10P-BOOTCHAIN.md`).  What that changes here:
+
+* the `ps_gfx` node is `power-controller@80338` with `reg = <0x80338 4>`
+  **relative to the PMGR** (`power-management@232000000`), i.e. absolute
+  `0x23280338`; its driver (`apple,pmgr-pwrstate`) is **built in**, so
+  powering the domain is one existing driver write
+  (`PS_TARGET = 0xf`, poll `PS_ACTUAL == 0xf`, 100 ms timeout) — **no new
+  power-domain code is needed**;
+* on the running phone the domain exists and is currently **`off-0`** with
+  no devices attached (`/sys/kernel/debug/pm_genpd/gfx/current_state`);
+* the GFX **mailbox base is `0x04D24000`** (IOP `+0x4000` — the A10's
+  relative layout, confirmed by the G10P kext RE) — but the mailbox driver
+  *writes* its mask registers at probe, so **the mailbox node belongs to
+  Phase 2.2, not 2.1**;
+* **never use `compatible = "apple,t8010-gpu"`**: that string is in the
+  in-tree PowerVR match table (`pvr_drv.c`, `CONFIG_DRM_POWERVR_APPLE=y`
+  even in the running kernel), and the payload's `init` cold-plugs every
+  device modalias — such a node would load the full driver and boot the
+  firmware by accident.  `"apple,t8015-gpu"` matches nothing in-tree.
+
 Add to the d21 kernel tree, in `arch/arm64/boot/dts/apple/t8015.dtsi` (or a
 new `t8015-gpu.dtsi` referenced from it):
 
 ```dts
-/* sketch; every address is taken from the ADT (see A11-GPU-G10P-FINDINGS.md) */
+/* Phase 2.1 only: the domain + the window descriptions, no mailbox node.
+ * Addresses/sizes are the ADT's (see A11-GPU-G10P-BOOTCHAIN.md §6); the
+ * compatible deliberately matches no in-tree driver. */
 gpu: gpu@4000000 {
     compatible = "apple,t8015-gpu";
     reg = <0x0 0x04000000 0x0 0x100000>,   /* RGX  */
           <0x0 0x04d00000 0x0 0x20000>,    /* Fender window W */
           <0x0 0x04d20000 0x0 0x20000>;   /* GFX IOP window A */
     reg-names = "rgx", "fender", "iop";
-    mboxes = <&gpu_mbox>;
     power-domains = <&ps_gfx>;
-    firmware-name = "apple/gfx-t8015.bin";
 };
+```
 
+The A10's node (`gpu@201000000` / `mbox@201d24000` in `t8010.dtsi`) has the
+same layout and the same `ps_gfx` domain, minus the mailbox, which moves to
+Phase 2.2:
+
+```dts
+/* Phase 2.2 */
 gpu_mbox: mbox@4d24000 {
-    compatible = "apple,t8015-a7iop-mailbox";
-    reg = <0x0 0x04d24000 0x0 0x1000>;
+    compatible = "apple,t8010-a7iop-mailbox";   /* in-tree variant, reused */
+    reg = <0x0 0x04d24000 0x0 0x1000>;         /* = IOP + 0x4000 */
     interrupt-parent = <&aic>;
     interrupts = <AIC_IRQ 260 IRQ_TYPE_LEVEL_HIGH>,
                  <AIC_IRQ 259 IRQ_TYPE_LEVEL_HIGH>,
@@ -76,25 +113,35 @@ gpu_mbox: mbox@4d24000 {
 };
 ```
 
-This mirrors the A10 node (`gpu@201000000 … mbox@201d24000`, in
-`t8010.dtsi` — the same tree layout, same `ps_gfx` domain).
-
-Then a *minimal* driver for the `gpu` node that:
-* requests `power-domains = <&ps_gfx>` at probe (domain comes up),
-* registers the platform device,
-* maps RGX / Fender / IOP **but touches no register**,
-* does not load any firmware, does not boot the IOP.
+Then a *minimal* driver that:
+* binds the `gpu` node, so that the genpd framework powers `ps_gfx` on at
+  probe (this is the whole point of 2.1 — **no** new power-domain code);
+* maps **nothing** and touches **no** register (not even the windows it
+  describes);
+* does not load any firmware, does not boot the IOP;
+* owns a compatible of its own for this phase (e.g.
+  `apple,t8015-gpu-power`), so that Phase 2.2's real driver can take over
+  the `"apple,t8015-gpu"` node without a match conflict.
 
 Build, boot once ("go"), verify:
-* `dmesg` shows the power domain activated,
-* `/sys/kernel/debug/pm_genpd/…` (or equivalent) lists `gfx` as enabled,
-* `simplefb` display still up, `apple-z2` touch IRQ firing, fb0 1080×1920×32,
-* `/dev/rtc0`, NVMe, network all unchanged.
+* `dmesg` shows the GFX domain coming up, and
+  `/sys/kernel/debug/pm_genpd/gfx/current_state` reads **`on`** (not
+  `off-0`) with our device listed in `…/gfx/devices`;
+* `simplefb` display still up, `apple-z2` touch IRQ firing, fb0
+  1080×1920×32;
+* `/dev/rtc0`, NVMe, network all unchanged;
+* `lsmod` shows **no** `powervr` module loaded (the trap in
+  `A11-GPU-G10P-BOOTCHAIN.md` §3).
 
-Rollback: reboot — reverts to the known-good state; nothing on NVMe changed.
+Rollback: reboot — reverts to the known-good state; nothing on NVMe changed
+except the module tree of `7.3.0-rc1-orchard-apple-16k`, which the payload
+refreshes on every boot anyway (`A11-GPU-G10P-BOOTCHAIN.md` §5).
 
-**Do not** enable `DRM_POWERVR_APPLE` / `apple,t8015-gpu` in the config at this
-phase — the driver must not touch hardware yet.
+**Do not** enable `DRM_POWERVR_APPLE` / `apple,t8010-gpu` in the config at
+this phase — the driver must not touch hardware yet.  (Note:
+`CONFIG_DRM_POWERVR_APPLE=y` is *already* set in the tree's
+`orchard_apple16k_defconfig`; what keeps it dormant in 2.1 is the
+`compatible` of the new node, not the config.)
 
 ### Phase 2.2 — boot the GFX IOP (Stage 1 proper)
 
@@ -115,7 +162,7 @@ With 2.1 in place and the phone known-good:
    zero crashlog bytes.
 
 **Do not** send the AGX init data, **do not** write RGX/USC, **do not** bind
-a GL/ایکVulkan stack.  Success = HELLO received.
+a GL/Vulkan stack.  Success = HELLO received.
 
 ### Phase 2.3 — power the core, read identity (Stage 2)
 
@@ -153,13 +200,20 @@ that is Stage 2's whole claim.
 
 ## Explicit approvals required before any device action
 
-1. Approval to touch the kernel tree for the DT node and the IOP driver
-   (`d21-touchgood` or the chosen tree) — **not granted yet**.
+1. Approval to touch the kernel tree for the DT node and the IOP driver —
+   **the tree is `d21-touchgood`** (confirmed 2026-11-09: it is the tree
+   the booting image is built from; see `A11-GPU-G10P-BOOTCHAIN.md` §1).
+   The known-good commit `c2a38a5d` is the rollback point for the tree
+   itself; the G10P commits `bbdbdb1` / `b7c9bc0c` sit on top of it.
 2. Approval to rebuild the kernel and reboot the phone with it.
 3. One "go" per boot (2.1, 2.2, 2.3) — three boots total.
 4. Approval to install `apple/gfx-t8015.bin` (only for 2.2).
-5. Confirmation that the known-good payload stays the fallback (no NVMe
-   changes).
+5. Confirmation that the known-good payload stays the fallback.  The
+   payload image itself is untouched (it lives in the RAM payload, pinned
+   by sha256), **but** every payload boot refreshes
+   `/usr/lib/modules/7.3.0-rc1-orchard-apple-16k` on the phone's NVMe —
+   that is the payload's own behaviour, not a GPU change, and it is the
+   only storage write a GPU boot makes (`A11-GPU-G10P-BOOTCHAIN.md` §5).
 6. Decision point after 2.1: stop, or continue to 2.2.
 
 ## Evidence to collect (all boots)
