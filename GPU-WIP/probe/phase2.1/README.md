@@ -70,8 +70,40 @@ changed.  The driver's `dev_info` line is the dmesg marker.
 
 `git checkout -- arch/arm64/boot/dts/apple/t8015.dtsi drivers/soc/apple/...`
 or `git reset --hard c2a38a5d` on the tree, then reboot the known-good
-payload (`--no-build`, sha256 `f44886c1…`).  Nothing on the phone's storage
-holds this kernel.
+payload.  Nothing on the phone's storage holds this kernel.
+
+## Build result (2026-11-09, applied and built — NOT booted)
+
+Applied as `5744368dec2c` on branch `gpu/phase2.1` in `d21-touchgood`.
+`orchard build` exited 0; the driver compiled
+(`CC drivers/soc/apple/apple-t8015-gfx.o`), no warnings from the new files.
+
+Proof that the payload contains this kernel:
+
+| item | value |
+|---|---|
+| payload | `/home/doug/omarchy-iphone/d21-desktop-boot/out/apple-16k/linux.bin`, 60 972 513 B, sha256 `1f790b08a7bf6c84cde9448120b932b8a1907a0123455fae261b6d1d1d605f31` (copy at `/tmp/opencode/phase2.1-linux.bin`) |
+| kernel `Image.gz` | 8 326 410 B, sha256 `02b55a87c254a11a9ff2f75ccc09807c240bf4264b7135573ca826538a2fa60a` |
+| release | `7.3.0-rc1-orchard-apple-16k` (unchanged, so the phone's module tree is refreshed in place) |
+| built config | `CONFIG_APPLE_T8015_GFX=y`, `CONFIG_APPLE_PMGR_PWRSTATE=y` |
+| D21 DTB | 45 907 B, sha256 `edb4efc9bb3c0a7b9e1eea429f90799bac89015f140f787a187f46ed62b80033`; `gpu@4000000` present, `power-domains = <0x30>`, and `ps_gfx`'s phandle is `0x30` |
+| driver in the Image | `strings Image.gz` contains `GFX power domain is up; no hardware access in this phase` |
+
+**Recovery side effect:** `out/apple-16k/linux.bin` is no longer the
+known-good payload.  `--no-build` now boots the Phase-2.1 kernel.  To recover,
+copy `/home/doug/Known Good State/payload/linux.bin` (sha `f44886c1…`) over
+it first — see `Known Good State/README.md` §"Return to this state".
+
+**Boot (needs the go):**
+
+```sh
+cd /home/doug/orchard
+./bin/orchard run /home/doug/omarchy-iphone/d21-desktop-boot \
+    --device d21 --no-build \
+    --pongo "/home/doug/Known Good State/loaders/Pongo.bin" -y
+# then: sh verify.sh
+```
+
 
 ## Open choices (flagged for the reviewer)
 

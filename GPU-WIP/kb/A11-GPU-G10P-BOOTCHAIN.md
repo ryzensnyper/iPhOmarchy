@@ -62,21 +62,31 @@ cd /home/doug/orchard
     --kernel-tree /home/doug/projects/OrchardLinux/trees/d21-touchgood \
     --pongo "/home/doug/Known Good State/loaders/Pongo.bin"
 
-# boot it (this is the action that needs a "go"):
+# boot the built payload (this is the action that needs a "go";
+# --no-build reuses out/apple-16k/linux.bin and does not touch the tree):
 ./bin/orchard run /home/doug/omarchy-iphone/d21-desktop-boot \
-    --device d21 --kernel-tree …/trees/d21-touchgood \
+    --device d21 --no-build \
     --pongo "/home/doug/Known Good State/loaders/Pongo.bin" -y
 
-# recovery boot — the *prebuilt* known-good payload, no build, no tree:
+# recovery boot — the *frozen* known-good payload.  Copy it into the
+# build's out/ first: --no-build reads that file, NOT payload/linux.bin.
+cp "/home/doug/Known Good State/payload/linux.bin" \
+   /home/doug/omarchy-iphone/d21-desktop-boot/out/apple-16k/linux.bin
+sha256sum /home/doug/omarchy-iphone/d21-desktop-boot/out/apple-16k/linux.bin
+# must be f44886c1dd7c94de475b1dbfa8a5a9636259172cd37a8df4c5e4a1fe30fb5b53
 ./bin/orchard run /home/doug/omarchy-iphone/d21-desktop-boot \
     --device d21 --no-build \
     --pongo "/home/doug/Known Good State/loaders/Pongo.bin" -y
 ```
 
-The recovery command is pinned by `--no-build` to `payload/linux.bin`,
-sha256 `f44886c1dd7c94de475b1dbfa8a5a9636259172cd37a8df4c5e4a1fe30fb5b53`
-(`Known Good State/MANIFEST.sha256`) — that payload is the `c2a38a5d` kernel
-and is **not** affected by anything we do to the tree.
+**`--no-build` pins the build output, not `payload/linux.bin`.**  While
+`out/apple-16k/linux.bin` was a copy of the known-good image the two were the
+same; the 2026-11-09 Phase-2.1 build replaced it
+(sha256 `1f790b08…`, copy kept at `/tmp/opencode/phase2.1-linux.bin`), so the
+copy step above is now mandatory.  The frozen payload in `Known Good State/`
+was not touched.  Also, a `--kernel-tree …` boot **rebuilds** from whatever
+branch is checked out there, so it is not a recovery path once the tree
+carries GPU work.
 
 ---
 
