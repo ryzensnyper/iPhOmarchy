@@ -162,14 +162,79 @@ produced a false PASS in boot #2), the mailbox IRQ check greps the
 `4d24000.mbox-*` lines, and two hard checks were added for a failed probe
 and for the firmware gate.
 
+## Boot #3 result (2026-11-10/11 — executed, hard reset, no output)
+
+The retry payload `a0bbc549…` (kernel `15ade92a…`, fix `485453dd66d9`)
+uploaded fine (`RUN_EXIT=0`) and the phone **reset to iOS within a second
+or two, with no text on the screen**.
+
+**No text is the expected symptom of a probe that is too early.**
+`drivers/Makefile` links `soc/` (line 46) **before** `gpu/` (line 68), and
+both `apple-t8015-gfx` and `simpledrm` register at `device_initcall`.
+So the GPU driver probes at ~0.65 s, *before* simpledrm has registered the
+framebuffer; the VT console has nothing to draw on and every `dev_info()`
+of the driver is lost.  Nothing of boot #3 was observable, on screen or in
+a log.
+
+**What boot #3 did reach.**  It was the first boot that touched **any** GFX
+register: the mailbox driver only *maps* its page (`apple_mbox_probe()`
+writes nothing — the mask and FIFO-enable writes live in
+`apple_mbox_start()`, which only runs when RTKit starts).  The first-ever
+GFX accesses were therefore, in order:
+
+| # | access | code |
+|---|---|---|
+| 1 | mailbox mask `0x1111` → `IOP+0x4000`, mask clear `0x1001` → `+0x4004`, FIFO enables → `+0x4008` / `+0x4020`, `enable_irq` | `apple_mbox_start()` in `devm_apple_rtkit_init()` |
+| 2 | Fender window `+0x200c..+0x2020` (6 words, 4-byte stride) | `apple_t8015_gfx_set_window()` |
+| 3 | IOP window `+0x08..+0x30` (6 words, 8-byte stride) | `apple_t8015_gfx_set_window()` |
+| 4 | IOP window enable `+0x38 = 1` | `apple_t8015_gfx_set_window()` |
+| 5 | run bit `Fender+0x2048` RMW bit 0 | `apple_t8015_gfx_probe()` |
+| 6 | `apple_rtkit_wake()` (a mailbox message — cannot reset the SoC) | `apple_t8015_gfx_probe()` |
+
+The A10 reference in this repo (`drivers/gpu/drm/imagination/pvr_apple.c`,
+proven on a J71b iPad 6 at 60 fps) uses the same order, the same register
+offsets and the same mailbox driver, so the *sequence* is not the suspect;
+what differs on the A11 is the power/clock state of the GFX block.
+
+## Boot #4 (diagnostic) — what the next build changes
+
+Only the driver changes; the **register sequence is untouched**.
+
+| change | why |
+|---|---|
+| register the driver at `late_initcall` instead of `device_initcall` | `late_initcall` runs after every `device_initcall`, i.e. after simpledrm registered the framebuffer: the VT console is live and can show the log |
+| `msleep(2000)` before the first GFX access | gives the console time to take the VT over and the user time to watch the screen |
+| `GFX-STAGE n/6:` line + `msleep(1200)` before each step | the last line on screen names the access that stalled the bus, even if the reset is immediate |
+
+Expected on the phone's screen, in this order:
+
+```
+GFX-DIAG: first IOP access in 2 s; watch the screen
+GFX-STAGE 1/6: mailbox (RTKit) init
+GFX-STAGE 2/6: Fender window copy
+GFX-STAGE 3/6: IOP window copy
+GFX-STAGE 4/6: IOP window enable
+GFX-STAGE 5/6: release the IOP (run bit)
+GFX-STAGE 6/6: RTKit wake
+```
+
+**How to read the result.**  If the phone resets to iOS, the last
+`GFX-STAGE` line that appeared is the access that hung the bus (read the
+screen while it boots; the phone clears it on reset).  If the phone stays up
+and reaches SSH, the driver got past every step and the failure is in the
+handshake, not in an access.  If a kernel oops appears, the trace is on the
+screen.
+
 ## Approval status
 
 1. apply + build — **done** (`d616c1dbc383`, EXIT 0)
 2. install firmware + rebuild — **done** (`bd7b98e2…` in the initramfs)
 3. boot #2 — **done 2026-11-10: failed safely, see above**
-4. fix + rebuild — **pending** (tree fix `485453dd66d9`, build not run)
-5. boot #3 (2.2 retry) — **pending; uses the boot originally planned for
-   2.3, which would then need a fourth**
+4. fix + rebuild — **done** (tree fix `485453dd66d9`, payload `a0bbc549…`)
+5. boot #3 (2.2 retry) — **done 2026-11-10/11: hard reset, no output, see
+   above**
+6. diagnostic rebuild (late_initcall + stage lines) — **pending approval**
+7. boot #4 (diagnostic) — **pending: needs an explicit go**
 
 ## Verification after boot #2
 

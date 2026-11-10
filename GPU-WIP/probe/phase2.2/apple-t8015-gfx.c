@@ -37,6 +37,8 @@
 #include <linux/dma-mapping.h>
 #include <linux/firmware.h>
 #include <linux/io.h>
+#include <linux/delay.h>
+#include <linux/init.h>
 #include <linux/ioport.h>
 #include <linux/module.h>
 #include <linux/of.h>
@@ -125,6 +127,17 @@ static const struct apple_rtkit_ops apple_t8015_gfx_rtkit_ops = {
 	.shmem_destroy = apple_t8015_gfx_shmem_destroy,
 };
 
+/*
+ * Diagnostic (Phase 2.2 boot #4): print the step and give the VT console a
+ * moment to show it.  If the next access bus-stalls the phone, the last line
+ * on screen names the step that faulted even when the reset is immediate.
+ */
+static void apple_t8015_gfx_stage(struct apple_t8015_gfx *gfx, const char *what)
+{
+	dev_info(gfx->dev, "GFX-STAGE %s\n", what);
+	msleep(1200);
+}
+
 /* The window is programmed in two copies: Fender (4-byte) and IOP (8-byte). */
 static void apple_t8015_gfx_set_window(struct apple_t8015_gfx *gfx)
 {
@@ -138,10 +151,15 @@ static void apple_t8015_gfx_set_window(struct apple_t8015_gfx *gfx)
 	};
 	unsigned int i;
 
-	for (i = 0; i < ARRAY_SIZE(fields); i++) {
+	apple_t8015_gfx_stage(gfx, "2/6: Fender window copy");
+	for (i = 0; i < ARRAY_SIZE(fields); i++)
 		writel(fields[i], gfx->fender + FENDER_WINDOW + 4 * i);
+
+	apple_t8015_gfx_stage(gfx, "3/6: IOP window copy");
+	for (i = 0; i < ARRAY_SIZE(fields); i++)
 		writel(fields[i], gfx->iop + IOP_WINDOW + 8 * i);
-	}
+
+	apple_t8015_gfx_stage(gfx, "4/6: IOP window enable");
 	writel(1, gfx->iop + IOP_WINDOW_ENABLE);
 }
 
@@ -188,10 +206,21 @@ static int apple_t8015_gfx_probe(struct platform_device *pdev)
 		return -ENOMEM;
 
 	/*
+	 * Diagnostic (Phase 2.2 boot #4): the display console only takes the
+	 * VT over once simpledrm has probed, so a fault in the first GFX
+	 * register access is invisible if it happens at ~0.65 s.  Delay the
+	 * first access until the console is up; the stage lines then survive
+	 * on screen if the access bus-stalls the phone.
+	 */
+	dev_info(dev, "GFX-DIAG: first IOP access in 2 s; watch the screen\n");
+	msleep(2000);
+
+	/*
 	 * Start the mailbox first: it is what receives HELLO.  If the mailbox
 	 * device has not probed yet this returns -EPROBE_DEFER, and the big
 	 * allocations below are never made on the retry path.
 	 */
+	apple_t8015_gfx_stage(gfx, "1/6: mailbox (RTKit) init");
 	gfx->rtk = devm_apple_rtkit_init(dev, gfx, NULL, 0,
 					 &apple_t8015_gfx_rtkit_ops);
 	if (IS_ERR(gfx->rtk))
@@ -233,10 +262,12 @@ static int apple_t8015_gfx_probe(struct platform_device *pdev)
 		 fw->size, GFX_WINDOW_SIZE, &gfx->win_dma);
 
 	apple_t8015_gfx_set_window(gfx);
+	apple_t8015_gfx_stage(gfx, "5/6: release the IOP (run bit)");
 	writel(readl(gfx->fender + FENDER_RUN) | FENDER_RUN_ENABLE,
 	       gfx->fender + FENDER_RUN);
 	dev_info(dev, "GFX IOP released; waiting for RTKit HELLO\n");
 
+	dev_info(dev, "stage 6/6: RTKit wake\n");
 	ret = apple_rtkit_wake(gfx->rtk);
 	if (ret) {
 		/*
@@ -275,7 +306,26 @@ static struct platform_driver apple_t8015_gfx_driver = {
 		.of_match_table = apple_t8015_gfx_of_match,
 	},
 };
-module_platform_driver(apple_t8015_gfx_driver);
+/*
+ * Diagnostic (Phase 2.2 boot #4): the driver registers at late_initcall, not
+ * at device_initcall.  drivers/soc/ links before drivers/gpu/, so a
+ * device_initcall probe runs *before* simpledrm has registered the
+ * framebuffer: the VT console cannot show anything yet, which is why boot
+ * #3 produced no text at all.  At late_initcall the framebuffer exists and
+ * the console is live, so a bus stall leaves its last line on the screen.
+ */
+static int __init apple_t8015_gfx_driver_init(void)
+{
+	return platform_driver_register(&apple_t8015_gfx_driver);
+}
+
+static void __exit apple_t8015_gfx_driver_exit(void)
+{
+	platform_driver_unregister(&apple_t8015_gfx_driver);
+}
+
+late_initcall(apple_t8015_gfx_driver_init);
+module_exit(apple_t8015_gfx_driver_exit);
 
 MODULE_AUTHOR("Doug");
 MODULE_DESCRIPTION("Apple T8015 (A11) G10P GPU — GFX IOP boot (Phase 2.2)");

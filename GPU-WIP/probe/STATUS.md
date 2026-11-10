@@ -36,6 +36,44 @@ unaffected.  Rebuilt 2026-11-10 with the fix (payload `a0bbc549…`, kernel
 `15ade92a…`, DTB/firmware unchanged, receipt verified, EXIT 0).  Boot #3
 (the retry) is ready and waiting on Pongo.  Kit: `phase2.2/`.
 
+## Phase 2.2 — boot #3 executed: hard reset, no output (2026-11-10/11)
+
+Boot #3 ran the retry payload `a0bbc549…` (kernel `15ade92a…`).  The upload
+succeeded (`RUN_EXIT=0`), the phone **reset to iOS within a second or two and
+showed no text at all**.
+
+**Why there was no text (the real trap).**  The driver probes at
+`device_initcall`, and in `drivers/Makefile` `soc/` (line 46) is linked
+**before** `gpu/` (line 68) — so `apple-t8015-gfx` probes *before*
+`simpledrm` (also `device_initcall`, `drivers/gpu/drm/sysfb/simpledrm.c`)
+has registered the framebuffer.  At 0.65 s no framebuffer exists, the VT
+console cannot show anything, and every `dev_info()` of the driver is
+thrown away.  A fault in the first GFX access is therefore *invisible* on
+this platform unless the driver probes after `simpledrm`.
+
+**What is now known.**  Boot #3 is the first boot that touched **any** GFX
+register: in boot #2 the mailbox driver only *mapped* its page
+(`apple_mbox_probe()` writes nothing; the mask/FIFO-enable writes happen in
+`apple_mbox_start()`, which runs when RTKit starts).  So the order of the
+first-ever GFX accesses is:
+
+| # | access | where |
+|---|---|---|
+| 1 | mailbox mask `0x1111` → `IOP+0x4000`, mask clear `0x1001` → `+0x4004`, FIFO enables → `+0x4008`/`+0x4020`, `enable_irq` | `apple_mbox_start()` inside `devm_apple_rtkit_init()` |
+| 2 | Fender window `+0x200c..+0x2020` (6 words) | `apple_t8015_gfx_set_window()` |
+| 3 | IOP window `+0x08..+0x30` (6 words) | `apple_t8015_gfx_set_window()` |
+| 4 | IOP window enable `+0x38 = 1` | `apple_t8015_gfx_set_window()` |
+| 5 | run bit `Fender+0x2048` RMW bit 0 | `apple_t8015_gfx_probe()` |
+| 6 | `apple_rtkit_wake()` (mailbox message, cannot reset) | `apple_t8015_gfx_probe()` |
+
+**Boot #4 (diagnostic, next):** the driver registers at `late_initcall`
+(after `simpledrm`), waits 2 s, and prints a `GFX-STAGE n/6:` line with a
+1.2 s pause before each of the six steps.  The register sequence itself is
+**unchanged** — only the initcall level, the delays and the log lines.
+The last `GFX-STAGE` line on the phone's screen names the access that
+stalled the bus.  Expected on screen: `GFX-DIAG: first IOP access in 2 s`,
+then `GFX-STAGE 1/6: mailbox (RTKit) init` … `GFX-STAGE 6/6: RTKit wake`.
+
 ## Verified against the G10P kext / this repo's analysis
 
 | item | state |
