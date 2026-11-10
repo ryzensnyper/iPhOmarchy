@@ -225,6 +225,29 @@ and reaches SSH, the driver got past every step and the failure is in the
 handshake, not in an access.  If a kernel oops appears, the trace is on the
 screen.
 
+## Boot #4 build (2026-11-11)
+
+Tree commit `e9c4c84d0c6e` (driver only), rebuilt from
+`d21-touchgood` with `orchard build --device d21 --kernel-tree …`:
+
+| item | value |
+|---|---|
+| payload `linux.bin` | `6f595e1b911ffb97c901f7f5eca9a8c828b9bc6018976721a3785297b457d1be` (61 096 872 B) |
+| kernel `Image.gz` | `584703e9a8f15f5197b9ad52f9dac30abbe2d0fb71fdf528cc52253ef57f1e1c` (8 327 367 B) |
+| DTB `t8015-d21` | `064ce2538d55cd50…` (unchanged) |
+| initramfs | `d54f35e291ea5c47…` (unchanged) |
+| firmware `apple/gfx-t8015.bin` | `bd7b98e2833142d8…` (unchanged) |
+| build | **EXIT 0** (`/tmp/opencode/phase2.2c-build.log`) |
+
+Two upload attempts failed **before any image byte was transferred** — the
+failing transfer is the 4-byte "image size" control request, before the
+bulk transfer starts (`USB control 1: LIBUSB_ERROR_TIMEOUT`), and the
+second attempt then failed at `libusb_set_configuration`.  PongoOS ended
+its session and the phone fell back to iOS (`mode: other`, PID `05ac:12a8`).
+**No Linux boot happened**; the phone was in PongoOS for a long time before
+the attempt, and a fresh PongoOS session has clean memory for the 61 MB
+upload buffer.
+
 ## Approval status
 
 1. apply + build — **done** (`d616c1dbc383`, EXIT 0)

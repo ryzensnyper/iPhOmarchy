@@ -74,6 +74,32 @@ The last `GFX-STAGE` line on the phone's screen names the access that
 stalled the bus.  Expected on screen: `GFX-DIAG: first IOP access in 2 s`,
 then `GFX-STAGE 1/6: mailbox (RTKit) init` … `GFX-STAGE 6/6: RTKit wake`.
 
+## Phase 2.2 — boot #4 executed: the console works, the fault is still open (2026-11-11)
+
+Tree commit `e9c4c84d0c6e` (driver only: `late_initcall` registration, 2 s
+wait, `GFX-STAGE n/6:` line + 1.2 s pause before each step), rebuilt with
+EXIT 0: payload `6f595e1b…` (61 096 872 B), kernel `584703e9…`, DTB
+`064ce253…` and initramfs `d54f35e2…` unchanged, firmware `bd7b98e2…`
+unchanged.
+
+Two upload attempts failed **before any image byte was sent** (the failing
+transfer is the 4-byte "image size" control request, before the bulk
+transfer starts); PongoOS then ended its session and the phone fell back to
+iOS.  **No Linux boot happened.**  A fresh PongoOS session fixed the
+upload: attempt 3 succeeded (`RUN_EXIT=0`).
+
+**Boot #4 result:** the phone booted, **the kernel log was visible on the
+display for the first time** (the `late_initcall` change works: simpledrm
+has registered the framebuffer by then, so the VT console is live), and the
+phone reset to iOS again.  The user was not reading the screen at the
+moment of the reset, so the `GFX-STAGE` line that names the faulting access
+was not captured.  The next attempt must be read off the screen (or
+photographed).
+
+Useful consequence: with a live console, a bus stall now also produces the
+kernel's own **soft-lockup trace** (~22 s) with the call trace of the
+stuck access — on the same screen, before any hardware reset.
+
 ## Verified against the G10P kext / this repo's analysis
 
 | item | state |
