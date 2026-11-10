@@ -108,13 +108,18 @@ makes the apply and the firmware install separable.
 Applied as `d616c1dbc383` on `gpu/phase2.2`, with the firmware installed.
 `orchard build` exited 0; `apple-t8015-gfx.o` compiled with no warnings.
 
+**Rebuild 2026-11-10 (after the boot-#2 fix `485453dd66d9`):** payload
+`a0bbc54995249af42c2eccaa8b3d47c4ff26fd47a212c5dea5ac0afd0e4b44d1`
+(copy `/tmp/opencode/phase2.2b-linux.bin`).  This is the row the retry
+boot uses.
+
 | item | value |
 |---|---|
-| payload | `out/apple-16k/linux.bin`, 61 097 072 B, sha256 `4987f034e7e78a79ee5e6199844c61b39ede25bb844c48495dfd891ec44cc515` (copy `/tmp/opencode/phase2.2-linux.bin`) |
-| kernel | `Image.gz` 8 327 567 B, sha256 `7f669d35b7d9912b…`; contains the 2.2 strings; release still `7.3.0-rc1-orchard-apple-16k` |
-| DTB | `t8015-d21.dtb` sha256 `064ce2538d55cd50…`; `gpu` has `mboxes = <&gpu_mbox>` and `power-domains = <&ps_gfx>` (phandle 0x31, `label = "gfx"`); `gpu_mbox@4d24000` present with IRQ order 260/259/262/261 |
-| firmware | `lib/firmware/apple/gfx-t8015.bin` inside the initramfs, 381 728 B, sha256 `bd7b98e2833142d834bf3ac08dfc4a1d1f00d25a06ce04a67731a808a92bcc5c` (matches `g10p.img`) |
-| receipt | kernel / D21 DTB / initramfs component hashes match `linux.bin.json` |
+| payload | `out/apple-16k/linux.bin`, 61 097 072 B, sha256 `a0bbc54995249af42c2eccaa8b3d47c4ff26fd47a212c5dea5ac0afd0e4b44d1` |
+| kernel | `Image.gz` 8 327 488 B, sha256 `15ade92aa88a2191…`; contains the 2.2 strings; release still `7.3.0-rc1-orchard-apple-16k` |
+| DTB | unchanged, `t8015-d21.dtb` sha256 `064ce2538d55cd50…`; `gpu` has `mboxes = <&gpu_mbox>` and `power-domains = <&ps_gfx>`; `gpu_mbox@4d24000` present with IRQ order 260/259/262/261 |
+| firmware | unchanged in the initramfs, 381 728 B, sha256 `bd7b98e2833142d834bf3ac08dfc4a1d1f00d25a06ce04a67731a808a92bcc5c` (matches `g10p.img`) |
+| receipt | kernel / D21 DTB / initramfs component hashes match `linux.bin.json` (build EXIT 0) |
 
 **Recovery side effect:** same as 2.1 — `out/` now holds the 2.2 payload,
 not the known-good one.  Copy the frozen payload
@@ -162,8 +167,9 @@ and for the firmware gate.
 1. apply + build — **done** (`d616c1dbc383`, EXIT 0)
 2. install firmware + rebuild — **done** (`bd7b98e2…` in the initramfs)
 3. boot #2 — **done 2026-11-10: failed safely, see above**
-4. fix + rebuild — **pending** (tree fix applied, build not run)
-5. boot #3 (2.2 retry) — **pending; this consumes the last planned boot**
+4. fix + rebuild — **pending** (tree fix `485453dd66d9`, build not run)
+5. boot #3 (2.2 retry) — **pending; uses the boot originally planned for
+   2.3, which would then need a fourth**
 
 ## Verification after boot #2
 

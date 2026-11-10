@@ -32,7 +32,9 @@ device had already claimed; `devm_platform_ioremap_resource_byname()`
 requests the whole region.  Fix (`485453dd66d9`): map only the first 4 KiB
 with `devm_ioremap()`; the window registers are at `+0x08..+0x38`.  Same
 latent bug in `pvr_apple.c`.  No crashlog, no oops; display/touch/NVMe
-unaffected.  Rebuild and boot #3 pending.  Kit: `phase2.2/`.
+unaffected.  Rebuilt 2026-11-10 with the fix (payload `a0bbc549…`, kernel
+`15ade92a…`, DTB/firmware unchanged, receipt verified, EXIT 0).  Boot #3
+(the retry) is ready and waiting on Pongo.  Kit: `phase2.2/`.
 
 ## Verified against the G10P kext / this repo's analysis
 
