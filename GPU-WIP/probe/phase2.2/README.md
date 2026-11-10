@@ -1,8 +1,9 @@
 # Phase 2.2 patch kit — boot the GFX IOP, wait for RTKit HELLO
 
-**Status: applied as `d616c1dbc383` on branch `gpu/phase2.2`, firmware
-installed, built (EXIT 0).  NOT booted — boot #2 needs its own go.**  See
-"Build result" below.
+**Status: boot #2 executed 2026-11-10 — the driver hit a resource conflict
+and unwound before any register write.  Cause found and fixed in the tree
+(`gpu/phase2.2` working tree); **the fix is not built yet**.  See "Boot #2
+result" below.**
 
 Context: `../kb/A11-GPU-G10P-STAGE2.md` (Phase 2.2) and
 `../kb/A11-GPU-G10P-BOOTCHAIN.md` (verified facts + the three traps).
@@ -121,11 +122,48 @@ not the known-good one.  Copy the frozen payload
 
 Approvals 1 and 2 are done; **approval 3 (boot #2) is pending**.
 
+## Boot #2 result (2026-11-10 — executed, driver did not bind)
+
+The payload booted and reached userspace in ~15 s.  The GPU driver probed
+and unwound immediately, **before touching any register**:
+
+```
+apple-t8015-gfx 4000000.gpu: GFX power domain is up
+apple-t8015-gfx 4000000.gpu: error -EBUSY: can't request region for resource [mem 0x04d20000-0x04d3ffff]
+apple-t8015-gfx 4000000.gpu: probe with driver apple-t8015-gfx failed with error -16
+```
+
+Cause: the `iop` window (`0x4d20000..0x4d3ffff`) contains the mailbox page
+(`0x4d24000..0x4d24fff`), which the mailbox device claimed when it probed.
+`devm_platform_ioremap_resource_byname("iop")` calls `request_mem_region()`
+on the whole window, so it failed with `-EBUSY`; the probe unwound, the
+device detached, and the domain dropped to `off-0`.
+
+Safety: no Fender/IOP/RGX write happened (the failure is the second driver
+line), no crashlog, no oops; display, touch and NVMe unaffected.
+
+**Fix (applied to the tree, not yet built):** map only the first 4 KiB of
+the IOP window with `devm_ioremap()`, which does not claim the region.  The
+window registers used here are at `+0x08..+0x38`, below the mailbox page at
+`+0x4000`; the mailbox's page is never mapped by this driver.
+
+**Latent bug elsewhere:** `drivers/gpu/drm/imagination/pvr_apple.c` maps
+`"iop"` the same way, so the PowerVR path would hit the identical `-EBUSY`.
+Fix it there before that driver is ever booted.
+
+**Verifier fixes for the retry:** the HELLO check is now scoped to
+`4000000.gpu` (macsmc and nvme-apple also log `RTKit: Initializing`, which
+produced a false PASS in boot #2), the mailbox IRQ check greps the
+`4d24000.mbox-*` lines, and two hard checks were added for a failed probe
+and for the firmware gate.
+
 ## Approval status
 
 1. apply + build — **done** (`d616c1dbc383`, EXIT 0)
 2. install firmware + rebuild — **done** (`bd7b98e2…` in the initramfs)
-3. boot #2 — **pending, one go, one attempt**
+3. boot #2 — **done 2026-11-10: failed safely, see above**
+4. fix + rebuild — **pending** (tree fix applied, build not run)
+5. boot #3 (2.2 retry) — **pending; this consumes the last planned boot**
 
 ## Verification after boot #2
 

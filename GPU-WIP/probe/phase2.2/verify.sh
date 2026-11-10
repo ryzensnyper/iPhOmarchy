@@ -23,14 +23,21 @@ timeout -k 5 20 $SSH 'cat /proc/uptime; uname -a' \
     || { echo "SSH failed"; exit 2; }
 
 say "RTKit HELLO (the Phase 2.2 success criterion)"
-M=$(timeout -k 5 20 $SSH 'dmesg | grep "RTKit: Initializing"' || true)
-if [ -n "$M" ]; then ok "$M"; else bad "no RTKit HELLO line"; fi
+# Scoped to the GPU device: macsmc and nvme-apple also log "RTKit: Initializing".
+M=$(timeout -k 5 20 $SSH 'dmesg | grep "4000000.gpu: RTKit: Initializing"' || true)
+if [ -n "$M" ]; then ok "$M"; else bad "no RTKit HELLO line from 4000000.gpu"; fi
+# The driver must have found the blob, not taken the 2.1 gate.
+G=$(timeout -k 5 20 $SSH 'dmesg | grep "not installed; IOP not started"' || true)
+if [ -z "$G" ]; then ok "firmware blob was present"; else bad "gate taken: $G"; fi
 
 say "driver boot markers"
 I=$(timeout -k 5 20 $SSH 'dmesg | grep "GFX IOP released"' || true)
 F=$(timeout -k 5 20 $SSH 'dmesg | grep "GFX firmware is up"' || true)
 [ -n "$I" ] && ok "$I" || bad "IOP was never released"
 [ -n "$F" ] && ok "$F" || bad "no 'firmware is up' marker"
+# Boot #2 failed here: the probe unwound before any write (resource conflict).
+P=$(timeout -k 5 20 $SSH 'dmesg | grep "probe with driver apple-t8015-gfx failed"' || true)
+if [ -z "$P" ]; then ok "probe did not fail"; else bad "$P"; fi
 
 say "firmware crash"
 C=$(timeout -k 5 20 $SSH 'dmesg | grep -i "GFX firmware crashed"' || true)
@@ -50,8 +57,9 @@ printf '%s\n' "$DEV" | grep -q '4d24000.mbox' && ok "mailbox consumer present" |
 say "mailbox device"
 DRV=$(timeout -k 5 20 $SSH 'readlink -f /sys/bus/platform/devices/4d24000.mbox/driver' || true)
 case "$DRV" in *apple-mailbox*) ok "bound to $DRV" ;; *) bad "mbox driver: '$DRV'" ;; esac
-IRQ=$(timeout -k 5 20 $SSH 'grep -i "apple-mailbox" /proc/interrupts' || true)
-if [ -n "$IRQ" ]; then ok "$IRQ"; else bad "no apple-mailbox IRQ lines"; fi
+# The IRQ lines are named after the device ("4d24000.mbox-recv/send").
+IRQ=$(timeout -k 5 20 $SSH 'grep -E "4d24000\.mbox-(recv|send)" /proc/interrupts' || true)
+if [ -n "$IRQ" ]; then ok "$IRQ"; else bad "no 4d24000.mbox IRQ lines"; fi
 
 say "powervr must NOT be loaded"
 PV=$(timeout -k 5 20 $SSH 'grep -i powervr /proc/modules' || true)

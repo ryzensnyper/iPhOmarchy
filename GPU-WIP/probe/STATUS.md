@@ -18,13 +18,21 @@ working (`event1`, IRQ 71 firing); every `apple_z2.ko` on disk has the
 correct vermagic.  Likely a stale artifact from the previous module tree;
 recheck on the next boot.
 
-## Phase 2.2 — built, NOT booted (2026-11-09)
+## Phase 2.2 — boot #2 executed, resource conflict fixed (2026-11-10)
 
-Patch `d616c1dbc383` (`gpu/phase2.2`) plus the firmware
-(`apple/gfx-t8015.bin`, sha `bd7b98e2…`) are in the payload
-(`4987f034…`): kernel strings, DTB (mbox node + `mboxes`/`power-domains`)
-and initramfs blob all verified, build EXIT 0.  Boot #2 is the next
-decision.  Kit and evidence: `phase2.2/`.
+Patch `d616c1dbc383` + firmware `bd7b98e2…` went into payload `4987f034…`
+(kernel, DTB and initramfs verified; build EXIT 0).  Boot #2 reached
+userspace in ~15 s, but the GPU driver unwound **before any register
+write**:
+
+    apple-t8015-gfx 4000000.gpu: error -EBUSY: can't request region for resource [mem 0x04d20000-0x04d3ffff]
+
+The `iop` window overlaps the mailbox page (`0x4d24000`), which the mailbox
+device had already claimed; `devm_platform_ioremap_resource_byname()`
+requests the whole region.  Fix (`485453dd66d9`): map only the first 4 KiB
+with `devm_ioremap()`; the window registers are at `+0x08..+0x38`.  Same
+latent bug in `pvr_apple.c`.  No crashlog, no oops; display/touch/NVMe
+unaffected.  Rebuild and boot #3 pending.  Kit: `phase2.2/`.
 
 ## Verified against the G10P kext / this repo's analysis
 
@@ -66,6 +74,12 @@ decision.  Kit and evidence: `phase2.2/`.
 * **The mailbox driver writes at probe** (`apple_mbox_a7iop_hw` masks the
   four IRQs in `regs + 0x00/0x04`), so the `mbox` node belongs to Phase
   2.2, not 2.1.
+* **The IOP window overlaps the mailbox page** (`0x4d24000..0x4d24fff` sits
+  inside `0x4d20000..0x4d3ffff`), and the mailbox device claims its page at
+  probe.  Any GPU driver that maps `"iop"` with
+  `devm_platform_ioremap_resource_byname()` fails `-EBUSY` before booting
+  the firmware.  Use `devm_ioremap()` (no region claim) for the window
+  page; found on boot #2 (2026-11-10).  `pvr_apple.c` still has the bug.
 * The payload refreshes `/usr/lib/modules/<release>` on the phone's NVMe on
   every boot; a GPU boot is therefore not storage-neutral (the kernel image
   itself stays in the RAM payload).

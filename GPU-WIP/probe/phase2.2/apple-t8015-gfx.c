@@ -37,6 +37,7 @@
 #include <linux/dma-mapping.h>
 #include <linux/firmware.h>
 #include <linux/io.h>
+#include <linux/ioport.h>
 #include <linux/module.h>
 #include <linux/of.h>
 #include <linux/platform_device.h>
@@ -150,6 +151,7 @@ static int apple_t8015_gfx_probe(struct platform_device *pdev)
 	const struct firmware *fw __free(firmware) = NULL;
 	const char *fw_name = "apple/gfx-t8015.bin";
 	struct apple_t8015_gfx *gfx;
+	struct resource *res;
 	int ret;
 
 	gfx = devm_kzalloc(dev, sizeof(*gfx), GFP_KERNEL);
@@ -171,9 +173,19 @@ static int apple_t8015_gfx_probe(struct platform_device *pdev)
 	gfx->fender = devm_platform_ioremap_resource_byname(pdev, "fender");
 	if (IS_ERR(gfx->fender))
 		return PTR_ERR(gfx->fender);
-	gfx->iop = devm_platform_ioremap_resource_byname(pdev, "iop");
-	if (IS_ERR(gfx->iop))
-		return PTR_ERR(gfx->iop);
+	/*
+	 * The IOP window contains the mailbox page at +0x4000, which the
+	 * mailbox device has already claimed; request_mem_region() on the
+	 * whole window fails with -EBUSY.  A plain ioremap is enough: the
+	 * window registers live at +0x08..+0x38, so only the first page is
+	 * mapped and the mailbox's page is never touched.
+	 */
+	res = platform_get_resource_byname(pdev, IORESOURCE_MEM, "iop");
+	if (!res || resource_size(res) < SZ_4K)
+		return -EINVAL;
+	gfx->iop = devm_ioremap(dev, res->start, SZ_4K);
+	if (!gfx->iop)
+		return -ENOMEM;
 
 	/*
 	 * Start the mailbox first: it is what receives HELLO.  If the mailbox
