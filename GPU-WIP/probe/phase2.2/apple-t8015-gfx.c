@@ -184,15 +184,15 @@ static void apple_t8015_gfx_set_window(struct apple_t8015_gfx *gfx)
 	};
 	unsigned int i;
 
-	apple_t8015_gfx_stage(gfx, "6/10: Fender window copy");
+	apple_t8015_gfx_stage(gfx, "6/11: Fender window copy");
 	for (i = 0; i < ARRAY_SIZE(fields); i++)
 		writel(fields[i], gfx->fender + FENDER_WINDOW + 4 * i);
 
-	apple_t8015_gfx_stage(gfx, "7/10: IOP window copy");
+	apple_t8015_gfx_stage(gfx, "7/11: IOP window copy");
 	for (i = 0; i < ARRAY_SIZE(fields); i++)
 		writel(fields[i], gfx->iop + IOP_WINDOW + 8 * i);
 
-	apple_t8015_gfx_stage(gfx, "8/10: IOP window enable");
+	apple_t8015_gfx_stage(gfx, "8/11: IOP window enable");
 	writel(1, gfx->iop + IOP_WINDOW_ENABLE);
 }
 
@@ -250,11 +250,19 @@ static void apple_t8015_gfx_dump_ps(struct apple_t8015_gfx *gfx)
 	}
 }
 
-/* The pmgr node, mapped for read.  The mapping covers all 16 MiB of PMGR, so
- * the DVFS block at +0xb4000 is addressable through it as well. */
+/*
+ * The pmgr node, mapped for read.  The *DT* maps PMGR as 0x8c000 (the A10's
+ * size), while the ADT says the block is 16 MiB and the DVFS/perf registers
+ * live at +0xb4000 -- outside the DT's window, which is why boot #9 took a
+ * level-3 translation fault at 0x2320b4350.  Map the whole 1 MiB needed
+ * (ps banks to +0x88000, clock at +0x78000, perf block to +0xb4d00) instead.
+ */
+#define PMGR_DIAG_MAP_SIZE	SZ_1M
+
 static void __iomem *apple_t8015_gfx_map_pmgr(struct apple_t8015_gfx *gfx)
 {
 	struct device_node *ps_node, *pmgr_node;
+	struct resource res;
 
 	ps_node = of_parse_phandle(gfx->dev->of_node, "power-domains", 0);
 	if (!ps_node)
@@ -262,8 +270,10 @@ static void __iomem *apple_t8015_gfx_map_pmgr(struct apple_t8015_gfx *gfx)
 	pmgr_node = of_get_parent(ps_node);
 	if (!pmgr_node)
 		return NULL;
+	if (of_address_to_resource(pmgr_node, 0, &res))
+		return NULL;
 
-	return of_iomap(pmgr_node, 0);
+	return ioremap(res.start, PMGR_DIAG_MAP_SIZE);
 }
 
 /*
@@ -273,22 +283,19 @@ static void __iomem *apple_t8015_gfx_map_pmgr(struct apple_t8015_gfx *gfx)
  * that register is where it shows; both candidate bases are dumped because
  * m1n1's own decoder disagrees with the ADT offsets.  Reads only.
  */
-static void apple_t8015_gfx_dump_dvfs(struct apple_t8015_gfx *gfx)
+static const struct { const char *name; u32 idx; } dvfs_known[] = {
+	{ "dvfs-MCC", 0x25 }, { "dvfs-DCS01", 0x26 }, { "dvfs-ACS", 0x28 },
+	{ "dvfs-DISP0_GP", 0x29 }, { "dvfs-PMP", 0x2a },
+	{ "dvfs-PMS_SRAM", 0x2b }, { "dvfs-GFX", 0x2c },
+	{ "dvfs-SEP", 0x2d }, { "dvfs-ANS2", 0x2f },
+	{ "dev-MSR", 0x11 }, { "dev-PMP", 0x12 }, { "dev-PMS_SRAM", 0x13 },
+	{ "dev-PCIE", 0x14 }, { "dev-GFX", 0x16 }, { "dev-SEP", 0x17 },
+};
+
+/* One of the two candidate perf windows (see the block comment). */
+static void apple_t8015_gfx_dump_dvfs_win(struct apple_t8015_gfx *gfx,
+					  u32 base, const char *tag)
 {
-	/*
-	 * Two index namespaces share perf block 0: pmgr/power-domains (the
-	 * DVFS domains, e.g. GFX = 0x2c) and the per-device perf_idx in the
-	 * device table (e.g. GFX = 0x16, PMP = 0x12, SEP = 0x17).  Both are
-	 * printed, always, so a zero register is visible as a zero.
-	 */
-	static const struct { const char *name; u32 idx; } known[] = {
-		{ "dvfs-MCC", 0x25 }, { "dvfs-DCS01", 0x26 }, { "dvfs-ACS", 0x28 },
-		{ "dvfs-DISP0_GP", 0x29 }, { "dvfs-PMP", 0x2a },
-		{ "dvfs-PMS_SRAM", 0x2b }, { "dvfs-GFX", 0x2c },
-		{ "dvfs-SEP", 0x2d }, { "dvfs-ANS2", 0x2f },
-		{ "dev-MSR", 0x11 }, { "dev-PMP", 0x12 }, { "dev-PMS_SRAM", 0x13 },
-		{ "dev-PCIE", 0x14 }, { "dev-GFX", 0x16 }, { "dev-SEP", 0x17 },
-	};
 	void __iomem *pmgr = apple_t8015_gfx_map_pmgr(gfx);
 	unsigned int i, k;
 
@@ -297,25 +304,17 @@ static void apple_t8015_gfx_dump_dvfs(struct apple_t8015_gfx *gfx)
 		return;
 	}
 
-	for (k = 0; k < ARRAY_SIZE(known); k++) {
-		dev_info(gfx->dev, "dvfs %-9s low @%#x = %#010x  high @%#x = %#010x\n",
-			 known[k].name,
-			 PMGR_DVFS_LOW + known[k].idx * 0x10,
-			 readl(pmgr + PMGR_DVFS_LOW + known[k].idx * 0x10),
-			 PMGR_DVFS_HIGH + known[k].idx * 0x10,
-			 readl(pmgr + PMGR_DVFS_HIGH + known[k].idx * 0x10));
-	}
+	for (k = 0; k < ARRAY_SIZE(dvfs_known); k++)
+		dev_info(gfx->dev, "dvfs-%-4s %-9s @%#x = %#010x\n", tag,
+			 dvfs_known[k].name, base + dvfs_known[k].idx * 0x10,
+			 readl(pmgr + base + dvfs_known[k].idx * 0x10));
 
 	for (i = 0; i < PMGR_DVFS_COUNT; i++) {
-		u32 lo = readl(pmgr + PMGR_DVFS_LOW + i * 0x10);
-		u32 hi = readl(pmgr + PMGR_DVFS_HIGH + i * 0x10);
+		u32 val = readl(pmgr + base + i * 0x10);
 
-		if (lo)
-			dev_info(gfx->dev, "  dvfs-low[%#x] @%#x = %#010x\n",
-				 i, PMGR_DVFS_LOW + i * 0x10, lo);
-		if (hi)
-			dev_info(gfx->dev, "  dvfs-high[%#x] @%#x = %#010x\n",
-				 i, PMGR_DVFS_HIGH + i * 0x10, hi);
+		if (val)
+			dev_info(gfx->dev, "  dvfs-%s[%#x] @%#x = %#010x\n",
+				 tag, i, base + i * 0x10, val);
 	}
 }
 
@@ -430,7 +429,7 @@ static void apple_t8015_gfx_boot_work(struct work_struct *work)
 
 	/* Boot #9: everything below is only meaningful once the PMP -- the
 	 * block that owns this GPU's gates -- is a running RTKit peer. */
-	apple_t8015_gfx_stage(gfx, "0/10: wait for the PMP to come up");
+	apple_t8015_gfx_stage(gfx, "0/11: wait for the PMP to come up");
 	for (i = 0; i < GFX_PMP_READY_WAIT_MS / 500; i++) {
 		if (apple_t8015_pmp_up)
 			break;
@@ -439,20 +438,23 @@ static void apple_t8015_gfx_boot_work(struct work_struct *work)
 	dev_info(dev, "GFX-DIAG: PMP %s after %d ms\n",
 		 apple_t8015_pmp_up ? "is up" : "never came up", i * 500);
 
-	apple_t8015_gfx_stage(gfx, "1/10: ps_gfx power state (PMGR read)");
+	apple_t8015_gfx_stage(gfx, "1/11: ps_gfx power state (PMGR read)");
 	apple_t8015_gfx_dump_ps(gfx);
 
-	apple_t8015_gfx_stage(gfx, "2/10: DVFS/perf block (PMGR read)");
-	apple_t8015_gfx_dump_dvfs(gfx);
+	/* +0x100..+0x9c0 sits in the same PMGR window the PS banks do, so it
+	 * is known-safe; the +0xb4xxx window is only mapped by us and is read
+	 * last, after the GPU test, so a surprise there cannot cost the boot. */
+	apple_t8015_gfx_stage(gfx, "2/11: DVFS/perf block, low window (PMGR read)");
+	apple_t8015_gfx_dump_dvfs_win(gfx, PMGR_DVFS_LOW, "low");
 
-	apple_t8015_gfx_stage(gfx, "3/10: ps_gfx off->on (re-send the gate request)");
+	apple_t8015_gfx_stage(gfx, "3/11: ps_gfx off->on (re-send the gate request)");
 	if (!apple_t8015_gfx_retoggle_ps(gfx))
 		return;
 
-	apple_t8015_gfx_stage(gfx, "4/10: mailbox register read (IOP+0x4008)");
+	apple_t8015_gfx_stage(gfx, "4/11: mailbox register read (IOP+0x4008)");
 	apple_t8015_gfx_probe_mailbox(gfx);
 
-	apple_t8015_gfx_stage(gfx, "5/10: mailbox (RTKit) init");
+	apple_t8015_gfx_stage(gfx, "5/11: mailbox (RTKit) init");
 	gfx->rtk = devm_apple_rtkit_init(dev, gfx, NULL, 0,
 					 &apple_t8015_gfx_rtkit_ops);
 	if (IS_ERR(gfx->rtk)) {
@@ -461,7 +463,7 @@ static void apple_t8015_gfx_boot_work(struct work_struct *work)
 	}
 
 	apple_t8015_gfx_set_window(gfx);
-	apple_t8015_gfx_stage(gfx, "9/10: release the IOP (run bit)");
+	apple_t8015_gfx_stage(gfx, "9/11: release the IOP (run bit)");
 	writel(readl(gfx->fender + FENDER_RUN) | FENDER_RUN_ENABLE,
 	       gfx->fender + FENDER_RUN);
 	dev_info(dev, "GFX IOP released; waiting for RTKit HELLO\n");
@@ -487,8 +489,12 @@ static void apple_t8015_gfx_boot_work(struct work_struct *work)
 	}
 
 	/* Phase 2.3 precursor, last because a dark RGX window hangs the bus. */
-	apple_t8015_gfx_stage(gfx, "10/10: RGX core id read (0x4000000+0x18)");
+	apple_t8015_gfx_stage(gfx, "10/11: RGX core id read (0x4000000+0x18)");
 	apple_t8015_gfx_probe_rgx(gfx);
+
+	/* Last: read-only, but this window is the one boot #9 faulted on. */
+	apple_t8015_gfx_stage(gfx, "11/11: DVFS/perf block, high window (PMGR read)");
+	apple_t8015_gfx_dump_dvfs_win(gfx, PMGR_DVFS_HIGH, "high");
 }
 
 static int apple_t8015_gfx_probe(struct platform_device *pdev)

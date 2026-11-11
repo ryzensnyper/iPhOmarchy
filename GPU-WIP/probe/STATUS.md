@@ -497,6 +497,93 @@ Interpretation table:
 | `rgx: core id …` | Phase 2.3's identity read, for free |
 | `retoggle: ps_gfx stuck at actual …` | the PMGR handed the domain to the PMP (dock agent) and the PMP did not take it back |
 
+## Phase 2.2 — boot #9 executed: the PMP is now a running RTKit peer (2026-11-12)
+
+Payload `cf9a5dd7…` was **not** the one booted; boot #9 ran the first build of
+this round and the kit was rebuilt after it (see "Boot #10" below).  The log
+came off the phone again (the collector file holds boot #8's and boot #9's
+sections; boot #9 is the second one).
+
+### What worked: the whole handshake, in one millisecond
+
+```
+[   12.767685] pmp-t8015-v1 …: PMP-DIAG 0/4: firmware copy to SRAM
+[   13.795236] pmp-t8015-v1 …: PMP-DIAG 1/4: AKF remap (SRAM at 0x0)
+[   14.815691] pmp-t8015-v1 …: PMP-DIAG 2/4: start (control = 1)
+[   15.839697] pmp-t8015-v1 …: PMP-DIAG 3/4: RTKit init
+[   16.864062] pmp-t8015-v1 …: PMP-DIAG 4/4: RTKit wake (waiting for HELLO)
+[   16.864077] pmp-t8015-v1 …: RTKit: Initializing (protocol version 12)
+[   16.864177] pmp-t8015-v1 …: RTKit: received endpoint bitmap 0x1f with base 0x0
+[   16.864254] pmp-t8015-v1 …: RTKit: received endpoint bitmap 0x1 with base 0x1 (last)
+[   16.864920] pmp-t8015-v1 …: RTKit: IOP power state transition: 0x0 -> 0x20
+[   33.247679] pmp-t8015-v1 …: RTKit wake returned -62 (continuing)
+[   35.767680] pmp-t8015-v1 …: PMP-DIAG: forcing SET_AP_PWR_STATE(ON)
+[   35.767985] pmp-t8015-v1 …: RTKit: AP power state transition: 0x0 -> 0x20
+[   36.271675] pmp-t8015-v1 …: PMP is up (AP power state ON, RTKit peer running)
+```
+
+So within **one millisecond** of the wake message the PMP sent HELLO, both
+EPMAP chunks (`0x1f` → management/crashlog/syslog/debug/ioreport, plus
+endpoint 32 — its first *application* endpoint, which is why `0x1` with base 1
+arrives) and the IOP power ACK (`0x20` = ON).
+
+The persistent `-62` has nothing to do with HELLO: mainline's boot path, after
+the two waits, *sends* `SET_AP_PWR_STATE(ON)` and waits for **that** ACK too
+(`ap_pwr_ack_completion`), and the PMP does not answer the first one.  Our
+poll forced the same message again 2.5 s later and the PMP acked it in
+**0.3 ms**.  That is exactly the retry m1n1 gets for free by looping forever
+(`rtkit_switch_power_state()`), and it is why the AP power message is what
+boot #8 never sent.
+
+The AP now has a **fully booted PMP** (IOP ON + AP ON), i.e. the precondition
+for a gate request exists.
+
+### The `ps_gfx` bank did not change just because the PMP came up
+
+Read again at 38.7 s, with the PMP fully booted, the bank is byte-identical to
+boot #8's read (before the PMP was up): `@0x80338 = 0x1f0003ff`, actual 0xf,
+target 0xf, was-clk-gated, was-pwr-gated.  Nothing in the PMGR reflects the
+PMP's state, as expected for a gate that the PMP owns itself.
+
+### What still failed — and it is our bug
+
+The DVFS dump (stage 2) faulted:
+
+```
+[   40.735705] Unable to handle kernel paging request at virtual address ffff800081fb4350
+[   40.745469]   ESR = 0x96000007 … FSC = 0x7: level 3 translation fault
+[   40.784194] pc : apple_t8015_gfx_boot_work+0x3b8/0x8e8
+[   40.786645] lr : apple_t8015_gfx_boot_work+0x194/0x8e8
+```
+
+`0x2320b4350` — the *high* perf candidate, `PMGR_DVFS_HIGH + 0x25*0x10`.  The
+**DT maps the pmgr node as `0x8c000`** (the A10's size), not the 16 MiB the ADT
+describes, so `of_iomap()` produced a window that ends at `+0x8bfff`; the
+`+0xb4xxx` read was outside it.  The oops killed the GFX work item, so the
+retoggle, the mailbox read and the RTKit bring-up never ran — the phone stayed
+up in the payload (`mode: ram`).  Lesson recorded: no read outside the
+DT-declared window, and a nice-to-have dump must not sit in front of the one
+test the boot exists for.
+
+### Boot #10 (built, NOT booted — needs a go)
+
+Payload **`cf9a5dd7e28604e9…`** (kernel tree rebuilt; 2 files changed):
+
+* `apple-t8015-gfx.c`: `apple_t8015_gfx_map_pmgr()` now takes the pmgr
+  resource and `ioremap()`s **1 MiB** (ps banks to `+0x88000`, clock at
+  `+0x78000`, perf block to `+0xb4d00`), instead of `of_iomap()`'s DT-sized
+  window.
+* The DVFS read is split: the **low** window (`+0x100`, inside the declared
+  PMGR window, next to the safe PS banks) runs before the GPU test; the
+  **high** window (`+0xb4100`) runs **last**, after the RGX read, so it can
+  never again cost the test.
+* Stage numbering is now `0/11 … 11/11`.
+
+Everything else is boot #9's build, whose PMP half is proven: bring-up at
+12 s, poll + forced `SET_AP_PWR_STATE(ON)`, and the GFX side waiting for
+`apple_t8015_pmp_up` before it touches the block (PMP reported up at 36.6 s,
+the wait cost 11.5 s and returned immediately).
+
 ## Resolved (no longer a GUESS)
 
 | item | value | how it was resolved |
