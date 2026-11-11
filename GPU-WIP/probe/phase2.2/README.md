@@ -282,3 +282,63 @@ messages.
 
 * No AGX init page, no RGX reads, no Fender power state (2.3), no job, no
   display path change.
+
+## Boot #7 result (2026-11-11 — executed, log captured, mailbox READ hangs)
+
+Payload `074b84e2…` (kernel `357c690c…`) = the boot #6 build with the
+hardened log bridge.  The phone booted, the gadget came up (`05ac:4144`),
+15 966 bytes of kernel log arrived over the USB network, then the phone
+reset to iOS.  Last two lines:
+
+```
+[   12.767642] apple-t8015-gfx 4000000.gpu: GFX-STAGE 0/7: ps_gfx power state (PMGR read)
+[   14.815634] apple-t8015-gfx 4000000.gpu: GFX-STAGE 1/7: mailbox register read (IOP+0x4008)
+```
+
+So the fault is a **read** of the mailbox A2I register: the IOP block does
+not answer at all.  Nothing was written to it, and `enable_irq()` was never
+reached.  Stage 0's value did not print because that build's
+`of_parse_phandle_with_args(..., NULL, -1, ...)` returned `-EINVAL`; the
+next build uses `of_parse_phandle()` and logs every bail-out path.
+
+Also in the same log:
+
+```
+pmp-t8015-v1 232300000.pmp: Direct firmware load for apple/pmp-t8015.bin failed with error -2
+pmp-t8015-v1 232300000.pmp: unable to load firmware
+apple-pmgr-pwrstate ...:power-controller@80308: sync_state() pending due to 232300000.pmp
+apple-pmgr-pwrstate ...:power-controller@80310: sync_state() pending due to 232300000.pmp
+```
+
+`@80308`/`@80310` are `ps_pmp`/`ps_pms_sram` — powered, but nothing ever
+claimed the PMP device, so the PMP firmware has never run in any boot.
+
+## Boot #8 (PMP) — what the next build changes
+
+1. `install-pmp-firmware.sh` extracts the PMP image out of the D21
+   kernelcache (`tools/kc_pmp_extract.py`) and installs it as
+   `/lib/firmware/apple/pmp-t8015.bin`.  126 608 bytes, sha256
+   `2dcf73b5…`, byte-identical to the extraction in the A11 KB; identical in
+   the D21 and D22 kernelcaches; fits the PMP's `0x20000` SRAM window.
+2. `pmp_t8015_v1.c`: under the `gpu-diag` bootarg only, the bring-up
+   (`upload → AKF remap → start → RTKit init → wake`) is deferred to a work
+   item at 14 s and staged with `PMP-DIAG n/4: …` + 1 s holds, so the log
+   survives if the PMP block itself hangs.  Without the bootarg the driver
+   is unchanged (boots in probe).
+3. `apple-t8015-gfx.c`: the GFX diagnostic work moves 12 s → 20 s so the PMP
+   runs first; before the mailbox read it now dumps the PMGR `0x80300`
+   power-state bank and reads the RGX core id / revision, to distinguish
+   "whole domain dark" from "only the IOP sub-block dark".
+
+Payload `b9151d1a…` (kernel `00b70cc7…`, initramfs `14055d71…`), built and
+verified to contain both firmware files.  **Not booted — needs an explicit
+go.**
+
+What each outcome means:
+
+| log says | conclusion |
+|---|---|
+| silence after `PMP-DIAG 0/4` | the PMP block is dark too; gates are a lower-level problem |
+| `PMP is up`, then mailbox read hangs | PMP runs but does not gate the GPU unprompted → the AP must send the gate request; RE the AppleT8015PMPFirmware ↔ AppleA7IOP protocol |
+| `PMP is up`, RGX id printed, mailbox hangs | GPU domain alive, IOP sub-block gated on its own |
+| `PMP is up`, mailbox answers | the PMP is the gate owner → continue with RTKit HELLO |

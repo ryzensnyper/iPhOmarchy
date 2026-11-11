@@ -17,6 +17,8 @@ variable instead of editing the file.
 | `kc_fwscan.py` | locate firmware payloads in the iOS kernelcache and check them against a local copy | `GPU_WIP_KC`, `GPU_WIP_SMARTIO` |
 | `kc_tags.py` | enumerate the IMG4-ish firmware tags in the kernelcache (`AppleT8015SmartIO`, `AppleT8015PMPFirmware`, …) | `GPU_WIP_KC` |
 | `kc_pmp.py` | extract/validate the PMP firmware region and find embedded firmware Mach-Os | `GPU_WIP_KC` |
+| `kc_pmp_extract.py` | write `pmp-t8015.bin` (the `AppleT8015PMPFirmware` payload, 127 696 bytes) out of a D21/D22 kernelcache | `GPU_WIP_KC` |
+| `kmsg-host.py` | collect the phone's kernel log over the USB network (`/proc/kmsg` → `172.16.42.2:6666`), surviving a reset | port, output file |
 | `kc_macho.py` | section-level compare of the local const blob against the kernelcache | `GPU_WIP_KC`, `GPU_WIP_LOCAL` |
 | `g10p_solve.py` | **WIP** constraint solver for the A11 length table: frames every corpus object, treating Mesa's public table as the prior and solving the lengths of the A11-only opcodes jointly across the corpus | `GPU_WIP_CORPUS`, `GPU_WIP_REF` |
 | `g10p_lengths.py` | **the A11 length table, solved and validated.** Uses Dougall Johnson's `applegpu` descriptor table as the opcode dictionary, measures the 6-byte quantum from the local repetition period, tiles every corpus object with an exact forward-reachability DP, applies a minimal-deviation repair, cross-validates (solve on half / test on the other half), checks the 64-byte function alignment, and emits the table as JSON | `GPU_WIP_CORPUS`, `GPU_WIP_APPLEGPU` (directory holding `applegpu.py`) |

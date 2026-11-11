@@ -42,7 +42,9 @@
 #include <linux/ioport.h>
 #include <linux/module.h>
 #include <linux/of.h>
+#include <linux/of_address.h>
 #include <linux/platform_device.h>
+#include <linux/workqueue.h>
 #include <linux/sizes.h>
 #include <linux/soc/apple/rtkit.h>
 
@@ -71,7 +73,15 @@ struct apple_t8015_gfx {
 	void *win;
 	dma_addr_t win_dma;
 	size_t win_next;
+	struct delayed_work work;
 };
+
+/*
+ * Diagnostic (Phase 2.2): the bring-up runs this long after the probe, so
+ * the payload's init has brought up the USB gadget that carries the kernel
+ * log to the host before the first GFX access resets the phone.
+ */
+#define GFX_BOOT_DELAY_MS	20000	/* after the PMP diagnostic boot at 14 s */
 
 /*
  * RTKit's crashlog/ioremport/oslog/syslog buffers must be addressable by the
@@ -128,14 +138,15 @@ static const struct apple_rtkit_ops apple_t8015_gfx_rtkit_ops = {
 };
 
 /*
- * Diagnostic (Phase 2.2 boot #4): print the step and give the VT console a
- * moment to show it.  If the next access bus-stalls the phone, the last line
- * on screen names the step that faulted even when the reset is immediate.
+ * Diagnostic (Phase 2.2 boot #5): print the step and hold it on the console
+ * for three seconds before the access it describes.  The faulting access
+ * resets the phone at once (the display is cleared), so the line has to be
+ * readable *before* it, not after.
  */
 static void apple_t8015_gfx_stage(struct apple_t8015_gfx *gfx, const char *what)
 {
 	dev_info(gfx->dev, "GFX-STAGE %s\n", what);
-	msleep(1200);
+	msleep(2000);
 }
 
 /* The window is programmed in two copies: Fender (4-byte) and IOP (8-byte). */
@@ -151,16 +162,172 @@ static void apple_t8015_gfx_set_window(struct apple_t8015_gfx *gfx)
 	};
 	unsigned int i;
 
-	apple_t8015_gfx_stage(gfx, "2/6: Fender window copy");
+	apple_t8015_gfx_stage(gfx, "4/8: Fender window copy");
 	for (i = 0; i < ARRAY_SIZE(fields); i++)
 		writel(fields[i], gfx->fender + FENDER_WINDOW + 4 * i);
 
-	apple_t8015_gfx_stage(gfx, "3/6: IOP window copy");
+	apple_t8015_gfx_stage(gfx, "5/8: IOP window copy");
 	for (i = 0; i < ARRAY_SIZE(fields); i++)
 		writel(fields[i], gfx->iop + IOP_WINDOW + 8 * i);
 
-	apple_t8015_gfx_stage(gfx, "4/6: IOP window enable");
+	apple_t8015_gfx_stage(gfx, "6/8: IOP window enable");
 	writel(1, gfx->iop + IOP_WINDOW_ENABLE);
+}
+
+/*
+ * Diagnostic (Phase 2.2): what does the PMGR itself say about ps_gfx?  The
+ * register is the one the power-domain driver writes: PS_TARGET is the
+ * requested state, PS_ACTUAL the reached one, and the two "was" bits say
+ * whether the block was clock- or power-gated when the domain came up.
+ * Reading it is harmless: the PMGR is always on.
+ */
+static void apple_t8015_gfx_dump_ps(struct apple_t8015_gfx *gfx)
+{
+	struct device_node *ps_node, *pmgr_node;
+	void __iomem *pmgr;
+	u32 offset = 0, val;
+	int i;
+
+	ps_node = of_parse_phandle(gfx->dev->of_node, "power-domains", 0);
+	if (!ps_node) {
+		dev_info(gfx->dev, "ps_gfx: no power-domains phandle\n");
+		return;
+	}
+	if (of_property_read_u32(ps_node, "reg", &offset)) {
+		dev_info(gfx->dev, "ps_gfx: no reg on %pOF\n", ps_node);
+		return;
+	}
+	pmgr_node = of_get_parent(ps_node);
+	if (!pmgr_node) {
+		dev_info(gfx->dev, "ps_gfx: no parent for %pOF\n", ps_node);
+		return;
+	}
+	pmgr = of_iomap(pmgr_node, 0);
+	if (!pmgr) {
+		dev_info(gfx->dev, "ps_gfx: cannot map %pOF\n", pmgr_node);
+		return;
+	}
+
+	val = readl(pmgr + offset);
+	dev_info(gfx->dev,
+		 "ps_gfx: PS @%#x = %#x (auto %d, was clkgated %d, was pwrgated %d, actual %#x, target %#x)\n",
+		 offset, val, !!(val & BIT(28)), !!(val & BIT(9)), !!(val & BIT(8)),
+		 (val >> 4) & 0xf, val & 0xf);
+
+	/* Neighbours: the rest of the 0x80300 bank, so the console says which
+	 * device states are active around the GFX one. */
+	for (i = 0; i < 32; i++) {
+		u32 off = 0x80300 + i * 8;
+
+		val = readl(pmgr + off);
+		if (!val)
+			continue;
+		dev_info(gfx->dev, "  ps bank @%#x = %#x (auto %d, clk %d, pwr %d, actual %#x, target %#x)\n",
+			 off, val, !!(val & BIT(28)), !!(val & BIT(9)), !!(val & BIT(8)),
+			 (val >> 4) & 0xf, val & 0xf);
+	}
+}
+
+/*
+ * Diagnostic (Phase 2.2): does the RGX core answer?  The mailbox read that
+ * killed boot #5 and #6 is inside the IOP sub-block; reading the core ID of
+ * the GPU itself tells a dark power domain from a dark IOP sub-block.
+ */
+static void apple_t8015_gfx_probe_rgx(struct apple_t8015_gfx *gfx)
+{
+	u32 id = readl(gfx->rgx + 0x18);
+	u32 rev = readl(gfx->rgx + 0x20);
+
+	dev_info(gfx->dev, "rgx: core id %#x revision %#x\n", id, rev);
+}
+
+/*
+ * Diagnostic (Phase 2.2): is the mailbox page itself readable?  The mailbox
+ * device owns 0x4d24000 (IOP+0x4000); this maps it without claiming it and
+ * only reads the A2I control register, which the G10P kext reads as well.
+ * If the block is clocked and powered this returns a value; if it is not,
+ * the read hangs the bus like the write did.
+ */
+static void apple_t8015_gfx_probe_mailbox(struct apple_t8015_gfx *gfx)
+{
+	struct device_node *mbox_node = NULL;
+	struct resource res;
+	void __iomem *mbox;
+	u32 phandle = 0, val;
+
+	if (of_property_read_u32(gfx->dev->of_node, "mboxes", &phandle))
+		return;
+	mbox_node = of_find_node_by_phandle(phandle);
+	if (!mbox_node)
+		return;
+	if (of_address_to_resource(mbox_node, 0, &res))
+		return;
+	mbox = devm_ioremap(gfx->dev, res.start, SZ_4K);
+	if (!mbox)
+		return;
+	val = readl(mbox + 0x08);
+	dev_info(gfx->dev,
+		"mailbox: A2I control @%pa+0x08 = %#x (empty bit %d, full bit %d)\n",
+		&res.start, val, !!(val & BIT(17)), !!(val & BIT(16)));
+}
+
+/*
+ * The GFX bring-up: the mailbox first (it is what receives HELLO), then the
+ * firmware window in both copies, then the IOP's run bit, then the RTKit
+ * handshake.  Every step is announced and held on the console, because the
+ * access that faults resets the phone and takes the display with it.
+ */
+static void apple_t8015_gfx_boot_work(struct work_struct *work)
+{
+	struct apple_t8015_gfx *gfx =
+		container_of(to_delayed_work(work), struct apple_t8015_gfx, work);
+	struct device *dev = gfx->dev;
+	int ret;
+
+	apple_t8015_gfx_stage(gfx, "0/8: ps_gfx power state (PMGR read)");
+	apple_t8015_gfx_dump_ps(gfx);
+
+	apple_t8015_gfx_stage(gfx, "1/8: RGX core id read (0x4000000+0x18)");
+	apple_t8015_gfx_probe_rgx(gfx);
+
+	apple_t8015_gfx_stage(gfx, "2/8: mailbox register read (IOP+0x4008)");
+	apple_t8015_gfx_probe_mailbox(gfx);
+
+	apple_t8015_gfx_stage(gfx, "3/8: mailbox (RTKit) init");
+	gfx->rtk = devm_apple_rtkit_init(dev, gfx, NULL, 0,
+					 &apple_t8015_gfx_rtkit_ops);
+	if (IS_ERR(gfx->rtk)) {
+		dev_err(dev, "RTKit init failed\n");
+		return;
+	}
+
+	apple_t8015_gfx_set_window(gfx);
+	apple_t8015_gfx_stage(gfx, "7/8: release the IOP (run bit)");
+	writel(readl(gfx->fender + FENDER_RUN) | FENDER_RUN_ENABLE,
+	       gfx->fender + FENDER_RUN);
+	dev_info(dev, "GFX IOP released; waiting for RTKit HELLO\n");
+
+	dev_info(dev, "stage 8/8: RTKit wake\n");
+	ret = apple_rtkit_wake(gfx->rtk);
+	if (ret) {
+		/*
+		 * Keep the domain up and the machine alive: stop the IOP and
+		 * report.  The failure is visible in dmesg.
+		 */
+		dev_err(dev, "GFX firmware did not answer (%d); IOP stopped\n", ret);
+		writel(readl(gfx->fender + FENDER_RUN) & ~FENDER_RUN_ENABLE,
+		       gfx->fender + FENDER_RUN);
+		return;
+	}
+	dev_info(dev, "GFX firmware is up; RTKit handshake complete\n");
+
+	/* Endpoints are active only if the firmware advertised them in EPMAP. */
+	ret = apple_rtkit_start_ep(gfx->rtk, GFX_EP_AGX_INIT);
+	if (ret)
+		dev_warn(dev, "AGX init endpoint unavailable: %d\n", ret);
+	ret = apple_rtkit_start_ep(gfx->rtk, GFX_EP_AGX_DOORBELL);
+	if (ret)
+		dev_warn(dev, "AGX doorbell endpoint unavailable: %d\n", ret);
 }
 
 static int apple_t8015_gfx_probe(struct platform_device *pdev)
@@ -205,27 +372,6 @@ static int apple_t8015_gfx_probe(struct platform_device *pdev)
 	if (!gfx->iop)
 		return -ENOMEM;
 
-	/*
-	 * Diagnostic (Phase 2.2 boot #4): the display console only takes the
-	 * VT over once simpledrm has probed, so a fault in the first GFX
-	 * register access is invisible if it happens at ~0.65 s.  Delay the
-	 * first access until the console is up; the stage lines then survive
-	 * on screen if the access bus-stalls the phone.
-	 */
-	dev_info(dev, "GFX-DIAG: first IOP access in 2 s; watch the screen\n");
-	msleep(2000);
-
-	/*
-	 * Start the mailbox first: it is what receives HELLO.  If the mailbox
-	 * device has not probed yet this returns -EPROBE_DEFER, and the big
-	 * allocations below are never made on the retry path.
-	 */
-	apple_t8015_gfx_stage(gfx, "1/6: mailbox (RTKit) init");
-	gfx->rtk = devm_apple_rtkit_init(dev, gfx, NULL, 0,
-					 &apple_t8015_gfx_rtkit_ops);
-	if (IS_ERR(gfx->rtk))
-		return dev_err_probe(dev, PTR_ERR(gfx->rtk), "RTKit init failed\n");
-
 	ret = dma_set_mask_and_coherent(dev, DMA_BIT_MASK(40));
 	if (ret)
 		return dev_err_probe(dev, ret, "40-bit DMA mask not supported\n");
@@ -261,34 +407,17 @@ static int apple_t8015_gfx_probe(struct platform_device *pdev)
 	dev_info(dev, "firmware %zu bytes in a %#x-byte window at %pad\n",
 		 fw->size, GFX_WINDOW_SIZE, &gfx->win_dma);
 
-	apple_t8015_gfx_set_window(gfx);
-	apple_t8015_gfx_stage(gfx, "5/6: release the IOP (run bit)");
-	writel(readl(gfx->fender + FENDER_RUN) | FENDER_RUN_ENABLE,
-	       gfx->fender + FENDER_RUN);
-	dev_info(dev, "GFX IOP released; waiting for RTKit HELLO\n");
-
-	dev_info(dev, "stage 6/6: RTKit wake\n");
-	ret = apple_rtkit_wake(gfx->rtk);
-	if (ret) {
-		/*
-		 * Keep the domain up and the machine alive: stop the IOP and
-		 * report.  Probe still succeeds, so the device stays bound and
-		 * the failure is visible in dmesg.
-		 */
-		dev_err(dev, "GFX firmware did not answer (%d); IOP stopped\n", ret);
-		writel(readl(gfx->fender + FENDER_RUN) & ~FENDER_RUN_ENABLE,
-		       gfx->fender + FENDER_RUN);
-		return 0;
-	}
-	dev_info(dev, "GFX firmware is up; RTKit handshake complete\n");
-
-	/* Endpoints are active only if the firmware advertised them in EPMAP. */
-	ret = apple_rtkit_start_ep(gfx->rtk, GFX_EP_AGX_INIT);
-	if (ret)
-		dev_warn(dev, "AGX init endpoint unavailable: %d\n", ret);
-	ret = apple_rtkit_start_ep(gfx->rtk, GFX_EP_AGX_DOORBELL);
-	if (ret)
-		dev_warn(dev, "AGX doorbell endpoint unavailable: %d\n", ret);
+	/*
+	 * The hardware sequence runs from a work item: the probe must return
+	 * before the payload's init starts (the init brings up the USB gadget
+	 * that carries the kernel log to the host), and the access that
+	 * resets the phone must happen after that gadget is up.  It sits
+	 * behind the PMP's diagnostic boot: if the PMP is what performs the
+	 * GPU's clock/power gating, the mailbox only answers once it runs.
+	 */
+	INIT_DELAYED_WORK(&gfx->work, apple_t8015_gfx_boot_work);
+	schedule_delayed_work(&gfx->work, msecs_to_jiffies(GFX_BOOT_DELAY_MS));
+	dev_info(dev, "GFX-DIAG: IOP bring-up in %u s\n", GFX_BOOT_DELAY_MS / 1000);
 
 	return 0;
 }
@@ -299,8 +428,16 @@ static const struct of_device_id apple_t8015_gfx_of_match[] = {
 };
 MODULE_DEVICE_TABLE(of, apple_t8015_gfx_of_match);
 
+static void apple_t8015_gfx_remove(struct platform_device *pdev)
+{
+	struct apple_t8015_gfx *gfx = platform_get_drvdata(pdev);
+
+	cancel_delayed_work_sync(&gfx->work);
+}
+
 static struct platform_driver apple_t8015_gfx_driver = {
 	.probe = apple_t8015_gfx_probe,
+	.remove = apple_t8015_gfx_remove,
 	.driver = {
 		.name = "apple-t8015-gfx",
 		.of_match_table = apple_t8015_gfx_of_match,

@@ -100,7 +100,202 @@ Useful consequence: with a live console, a bus stall now also produces the
 kernel's own **soft-lockup trace** (~22 s) with the call trace of the
 stuck access — on the same screen, before any hardware reset.
 
-## Verified against the G10P kext / this repo's analysis
+## Phase 2.2 — boot #5 executed: the fault is the FIRST GFX access (2026-11-11)
+
+**Boot #5 pinned the fault.**  The user read the last line off a photograph
+of the phone's screen:
+
+```
+apple-t8015-gfx 4000000.gpu: GFX-STAGE 1/6: mailbox (RTKit) init
+```
+
+The driver announces a stage *before* the access it describes and holds it
+for three seconds, so that line means: **the very first access to the GFX
+block hung the bus** — the mailbox driver writing `IOP+0x4000`
+(`0x4d24000`): mask set `0x1111`, mask clear `0x1001`, the A2I/I2A FIFO
+enables, then `enable_irq()`.  Nothing else had touched the GFX block
+before it: the mailbox driver only *maps* its page at probe.
+
+So the A11's GFX IOP block is **not accessible** while `ps_gfx` is on, even
+though the PMGR reports the domain as active (Phase 2.1) and even though
+the A10 does the same sequence successfully on a J71b iPad 6.
+
+The likely reason: on the A11 the device **clock/power gates** are PMP
+services, not PMGR registers.  The ADT's `arm-io` node says so:
+
+```
+function-clock_gate = 30:clkG()
+function-power_gate  = 30:pwrG()
+```
+
+and the GFX nodes carry gate lists (`sgx`: `clock-gates = [148, 123]`,
+`power-gates = [148, 123]`; `gfx-kf`: `clock-gates = [149]`,
+`power-gates = [149]`).  Function 30 is the **PMP coprocessor**.  The
+payload carries no PMP firmware (`apple/pmp-t8015.bin` is missing; the
+D21 firmware recipe has only the touch and Wi-Fi blobs), so
+`pmp_t8015_v1.c` fails at probe ("unable to load firmware") and the PMP
+never runs — nothing can open those gates.  The display, USB and storage
+work because **m1n1 opens their gates** during the boot; the GPU is never
+touched by the bootloader, so its gates stay shut.
+
+Open questions: whether the gate IDs are PMGR device IDs (m1n1's reading,
+which on this ADT resolves to virtual devices and would do nothing) or
+PMP gate numbers; where the PMP firmware lives in the IPSW (the ADT calls
+it `t8015pmp`); and what the PMP mailbox protocol for a gate request looks
+like.
+
+## Phase 2.2 — boot #6: the payload never handed over (2026-11-11)
+
+Boot #6 ran a diagnostic build that (a) probes the PMGR power-state
+register of `ps_gfx` and (b) reads the mailbox's A2I control register
+before anything is written, both to tell "the block does not answer" from
+"the block answers and the write is what hurts"; it also moved the bring-up
+into a delayed work item (so the payload's init starts, brings up the USB
+gadget and streams the kernel log to the host before the first GFX
+access).
+
+**The phone never left PongoOS**: it sat on a white screen, the USB device
+never re-enumerated as the payload's gadget, and the host's log collector
+never saw a connection.  The upload itself reported success (`RUN_EXIT=0`).
+So this was a hand-over failure, not a GPU fault; the build was not
+exercised at all.
+
+## Phase 2.2 — boot #7 executed: the block does not answer a READ (2026-11-11)
+
+Boot #7 used payload `074b84e2…` (the boot #6 build, kernel `357c690c…`),
+whose only change from boot #6 was a hardened `/init`: the payload stays in
+the initramfs under the `gpu-diag` bootarg and streams `/proc/kmsg` over the
+USB network to `172.16.42.2:6666`.
+
+**The channel works, and it settles the question.**  The phone booted, the
+gadget came up (`05ac:4144`), 15 966 bytes of kernel log reached the host,
+and then the phone reset to iOS (~20 s after the gadget appeared).  The last
+two lines are:
+
+```
+[   12.767642] apple-t8015-gfx 4000000.gpu: GFX-STAGE 0/7: ps_gfx power state (PMGR read)
+[   14.815634] apple-t8015-gfx 4000000.gpu: GFX-STAGE 1/7: mailbox register read (IOP+0x4008)
+```
+
+Nothing follows the second line: **the access that faults is a read** of the
+mailbox's A2I control register, not a write, and not an interrupt-enable.
+The RGX/Fender/IOP window copies, the run bit and RTKit wake were never
+reached.  Stage 0's own value never printed — that build's
+`of_parse_phandle_with_args(..., NULL, -1, ...)` call failed silently, which
+is fixed in the next payload (`of_parse_phandle()` plus an error print on
+every bail-out path).
+
+Corroborating lines from the same log:
+
+```
+[    0.653008] pmp-t8015-v1 232300000.pmp: Direct firmware load for apple/pmp-t8015.bin failed with error -2
+[    0.653090] pmp-t8015-v1 232300000.pmp: unable to load firmware
+[    0.653098] pmp-t8015-v1 232300000.pmp: probe with driver pmp-t8015-v1 failed with error -2
+[   11.231913] apple-pmgr-pwrstate 232000000.power-management:power-controller@80310: sync_state() pending due to 232300000.pmp
+[   11.232038] apple-pmgr-pwrstate 232000000.power-management:power-controller@80308: sync_state() pending due to 232300000.pmp
+```
+
+`@80308` / `@80310` are `ps_pmp` / `ps_pms_sram`: they stay powered only
+because no driver ever claimed the PMP device.  The PMP coprocessor has
+never run in any of our boots.
+
+### What the same tree says about the gates
+
+* No driver in this kernel consumes `clock-gates` / `power-gates` (they are
+  ADT properties; `grep` over `drivers/` and `include/` finds nothing).
+* The GPU node has no `clocks` property, `t8015.dtsi` has no clock
+  controller, and `drivers/clk/` has only the NCO and the T8010 touch clock
+  (the touch one sets a PLL divider, not a device gate).
+* The PMGR power-state binding can expose a state register as a clock gate,
+  so a gate that *is* a PMGR register would show up as a DT node; the only
+  one near the GPU is `ps_gfx@0x80338` itself, which the genpd reports as
+  `actual 0xf`.
+* m1n1 only writes PMGR power states (`pmgr_adt_power_enable()`), and the
+  payload's m1n1 does not call it for the GPU — the orchard patch only fills
+  the OPP table.  Even if it did, the ADT's gate lists resolve to devices
+  the ADT marks as having no power-state register.
+
+So the IOP's clock is gated by something the kernel has no handle on, which
+is consistent with the ADT calling the gates PMP services (`30:clkG()` /
+`30:pwrG()`).
+
+### Where the PMP firmware is
+
+Not in the IPSW as a file — that part of the earlier hunt was right:
+
+* top-level `Firmware/`: AOP, SEP, baseband, touch (Callan/Multitouch),
+  DeviceTree/LLB/iBoot, Wi-Fi — no PMP;
+* the system volume's `/usr/standalone/firmware/`: `SLAM/`,
+  `SmartIOFirmwareT7000.bin`, `nfrestore/` — no PMP.
+
+But iOS does not fetch it from the firmware store either: it is **embedded in
+the kernelcache**, as the payload of the `AppleT8015PMPFirmware` kext, `0xff0`
+bytes after the kext's tag string (the same layout as `AppleT8015SmartIO`).
+The image is not IMG4-wrapped, which is why the `IM4P`/`pmpf` scan missed it;
+it starts with an AArch64 exception vector table (`b #0x60`, then `b .`
+entries) and ends right before the next `com.apple.driver.` tag:
+
+```
+image:  126608 bytes at 0x2c6c000..0x2c8ae90
+sha256: 2dcf73b5e13fe9c3f93731c7ef09de8e6244de9f610c34fff2981af90010cd52
+head:   180000ea feffffea feffffea …
+```
+
+The length rule is the one calibrated on the SmartIO image (which reproduces
+the device's file byte-for-byte): the payload ends `0x280` bytes before the
+next prelinked bundle id — here `com.apple.iokit.IOUserEthernet` at
+`0x2c8b110`.  A naive "next `com.apple.driver.` tag" search lands on
+`AppleUSBAudio` at `0x2c8b2d0` and overshoots by 1088 bytes of the next
+kext's prelink header; that was the 127 696-byte first cut.
+
+It is the PMP image, not just the kext: it carries `RTKit-2062.142.1.release`,
+`RTKit: %s - Client: %s`, `pm_enqueue_message failed status %u`,
+`Invalid AP power: %d`, `Mbox:%s (h=%p %x=%x)` and `ThIntr:%u,%u,%u,%u`, and
+its 126 608 bytes fit the PMP's `0x20000`-byte SRAM window (`reg-names =
+"akf", "control", "sram"`).
+
+**The D21 and D22 kernelcaches carry the identical image** (same offset, same
+hash), so the D21 build is the one to use.  `tools/kc_pmp_extract.py` writes
+it out, and `probe/phase2.2/install-pmp-firmware.sh` puts it into the payload
+overlay as `/lib/firmware/apple/pmp-t8015.bin`.
+
+### Capture channel (keep it)
+
+Host: `python3 GPU-WIP/tools/kmsg-host.py 6666 /tmp/phone-kmsg.log`, with the
+host's USB NIC on `172.16.42.2/30` (NetworkManager profile `phone-gadget`).
+Payload: the `gpu-diag` bootarg makes `/init` stay in the initramfs and, in
+the background, retry `busybox nc -w 3 172.16.42.2 6666` fed from
+`/proc/kmsg` (falling back to `dmesg` if the log is not readable).  A payload
+boot is only real when the phone re-enumerates as `05ac:4144`; `RUN_EXIT=0`
+alone proves nothing.
+
+### Next probe (payload `b9151d1a…`, built, NOT booted — needs a go)
+
+With the PMP firmware available, the next boot tests the gate theory directly
+instead of guessing at registers:
+
+* the PMP driver now has a **diagnostic boot**: under the `gpu-diag` bootarg
+  it defers its bring-up to a work item at 14 s, so the payload's init has
+  brought the log bridge up first, and prints `PMP-DIAG 0/4: firmware copy to
+  SRAM` … `4/4: RTKit wake (waiting for HELLO)` with a second's hold each.
+  Without the bootarg the driver behaves exactly as before (boot in probe).
+* the GFX diagnostic work moves from 12 s to 20 s, so the PMP boots first.
+* the first GFX probes are unchanged: the PMGR `0x80300` power-state bank
+  dump (`ps_msr`, `ps_pmp`, `ps_pms_sram`, `ps_pcie`, `ps_ans2`, `ps_gfx`,
+  `ps_isp_sys`, …; the decode is trustworthy because `ps_ans2` in the same
+  bank is what the NVMe driver successfully powers), then the RGX core id /
+  revision at `0x4000000+0x18` / `+0x20`, then the mailbox A2I read.
+
+Read-outs, in order of what they would settle:
+
+| log says | conclusion |
+|---|---|
+| silence after `PMP-DIAG 0/4` | the PMP block is dark too — the whole "PMP does the gating" chain is unproven, and the gate problem is not just missing firmware |
+| `PMP is up` then mailbox read hangs | the PMP runs but does not open the GPU gates on its own → the AP has to send the gate request (RE the AppleT8015PMPFirmware ↔ AppleA7IOP protocol) |
+| `PMP is up`, RGX core id printed, mailbox read still hangs | the GPU domain is alive but the IOP sub-block is gated on its own |
+| `PMP is up` and the mailbox answers | the PMP *is* the gate owner: continue with RTKit HELLO (Phase 2.2 proper) |
+
+
 
 | item | state |
 |---|---|
