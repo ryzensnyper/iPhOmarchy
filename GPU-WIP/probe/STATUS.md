@@ -380,6 +380,123 @@ The `-ETIME` HELLO also wants an answer first: m1n1's RTKit boot
 actually starts an A11-era IOP; compare its boot message/`AP power` handling
 with `apple_rtkit_wake()`.
 
+## Offline (2026-11-12): boot #8 re-read, the ADT power model, and the boot #9 plan
+
+No phone was needed for any of this; it is all kernelcache/ADT/firmware
+reading.  Three results change what boot #9 has to do.
+
+### 1. Boot #8 did get HELLO — and the `-ETIME` is the AP's own power message
+
+`RTKit: Initializing (protocol version 12)` is printed by
+`apple_rtkit_management_rx_hello()`, i.e. **only after the IOP sent HELLO**
+(`drivers/soc/apple/rtkit.c`).  The PMP therefore negotiated RTKit v12 with us.
+
+The timing settles which wait failed.  HELLO at `18.911989`, error at
+`20.959635` = **+2.048 s**, and mainline's waits are 1000 ms each
+(`apple_rtkit_wait_for_completion()`):
+
+| step | mainline `apple_rtkit_boot()` | boot #8 |
+|---|---|---|
+| 1 | wait `epmap_completion` | completed (~1 s, the PMP is slow) |
+| 2 | wait `iop_pwr_ack_completion` | **timed out** → `-ETIME` |
+| 3 | send `SET_AP_PWR_STATE(ON)` | **never sent** |
+
+m1n1 does the same sequence (`src/rtkit.c`) but waits for the IOP power ON
+**without any timeout at all** — so the PMP is not broken, it is slow, and the
+1 s is a mainline limitation for this coprocessor.  The knock-on effect is
+what matters for the GPU: because `boot()` aborted, the AP never declared
+itself powered on, and the PMP firmware *validates that message*
+(`Invalid AP power: %d` is a string in its image).  An AP that never said "I
+am on" cannot expect gate services.
+
+### 2. The GPU's gates have no PMGR register — the PMP owns them
+
+Decoded from the ADT with m1n1's own parser (`proxyclient/m1n1/adt.py`,
+`load_adt()` on `adt/dt_raw.bin`; the decoded `adt.txt` is incomplete — it
+drops `perf-regs` entirely):
+
+* `pmgr/ps-regs[11]` = `{reg, offset, mask}`; a device's PS register is
+  `ps_regs[psreg].offset + psidx*8` (m1n1 `pmgr_dev_get_offset()`), reg[0]
+  being PMGR and reg[1] `pmgr_mini` @ `0x235200000`.
+* The `0x80300` bank is now fully named — **`0x80338` really is `GFX`**:
+  `0x80300` MSR · `0x80308` PMP · `0x80310` PMS_SRAM · `0x80318` PCIE ·
+  `0x80320` PCIE_AUX · `0x80328` ANS2 · `0x80330` PCIE_DIRECT ·
+  **`0x80338` GFX** · `0x80388` VDEC0 · `0x80398` VENC_SYS · `0x803a8` AVD_SYS.
+* `GFX` (id 124) has **no parents**: it is a root domain like PMP/SEP/PCIE,
+  so nothing is holding it down from above.
+* The devices the `sgx` node gates (`power-gates`/`clock-gates` = `[148, 123]`,
+  and `gfx-kf`'s `[149]`) are `GFX-SGX`, `GFX-BUSY` and `GFX-KF` — all three
+  are `no_ps` (`PMGR_FLAG_VIRTUAL` in m1n1, which skips them) and their only
+  parent is `GFX`.  **No PMGR write can open them.**  They are logical gates
+  that only the PMP can act on.
+* The evidence that the PMP is meant to act on them:
+  `pmgr` carries `pmp = 1`, `pmgr-dock-fifo-agent = 1`,
+  `pmgr-dock-fifo-channel = 3` — the PMGR *is* an agent of the PMP's dock
+  FIFO, i.e. a PS transition is the hardware's way of telling the PMP about a
+  device.  `sgx` also has `pmp-sw-interrupt = 1`.
+* `pmgr/perf-regs` (in the raw ADT only) = 3 DVFS blocks
+  `{reg, offset, size}`: block 0 = PMGR+`0xb4000` (140 entries), block 1 =
+  `pmgr_mini`+`0xb4000` (32), block 2 = PMGR+`0xfc000` (10).
+  `pmgr/power-domains` (21 entries) is the DVFS domain list, and **GFX is
+  `perf_block 0, perf_idx 0x2c`** → `0x2320b4100 + 0x2c0 = 0x2320b43c0`
+  (m1n1's `dump_pmgr.py` computes `base + 0x100 + idx*0x10` without the perf
+  offset, which gives `0x2320003c0`; the two disagree, so boot #9 dumps both).
+* `clock-ids = [265]` (`sgx`) / `[269]` (`gfx-kf`) index **nothing** in this
+  ADT: `/arm-io` has `clock-frequencies` (81 zeros) and **no
+  `clock-frequencies-regs`**, and the `pmgr` clock tables stop at id 21.  The
+  "unconfigured clock source" candidate is therefore not actionable as a
+  register lookup; the perf block above is what can be read.
+
+### 3. PMP firmware internals (for the gate protocol later)
+
+* It is a **raw 32-bit ARM image** (vector table, `b #0x60` entry), not a
+  Mach-O.  Physical load base is `0x232500000` (`iop-pmp-nub`
+  `region-base`), but it is **linked at `0x01000000`** — an MMU maps that VA
+  onto the SRAM.  String xrefs only resolve with base `0x01000000`, so
+  disassemble with `llvm-objdump -d --triple=thumbv7` on an ELF wrapped by
+  `llvm-objcopy -I binary` (A32 for the vector table, **Thumb-2** for the
+  body).
+* It is a full RTKit client: `RTKit-2062.142.1.release`,
+  `MGMT msg=0x%llx st=%x`, `Not implemented`, `Invalid AP power: %d`, and the
+  system endpoints `management/crashlog/syslog/kdebug/ioreporting/main`
+  plus `PMON`/`pmon-hid-report`.
+* At file `0x17c68` sits a tunable table of 12-byte `{size, default,
+  reversed-4CC name}` entries: `DBUG`=`0xaff`, `DART`, **`DOCK`=`1`**,
+  **`PWRG`=`0`**, **`CLKG`=`1`**, `NRGD`=`1`, `NRGS`=`1`, `PMON`=`1`,
+  `PMUT`=`1`, `SMPL`=`0`, `TCAP`=`0`, `TGPH`=`0x3e8`, `BDID`, `PBAT`, …
+  So the dock and clock-gating features are **enabled by default in the
+  firmware**; they are not waiting on a DT property.
+
+### Boot #9 (built, not booted — needs a go)
+
+One change of substance plus read-only reconnaissance:
+
+* `rtkit.c`: the wait timeout goes 1 s → 15 s (diagnostic; m1n1 has no
+  timeout), and the HELLO/EPMAP/IOP-ACK/AP-ACK transitions now print at
+  `KERN_INFO` so the handshake is visible line by line.
+* `pmp_t8015_v1.c`: bring-up at 12 s; after `apple_rtkit_wake()` it polls
+  `apple_rtkit_is_running()` for up to 25 s, and if the AP power message was
+  never sent (because `boot()` aborted) it sends `SET_AP_PWR_STATE(ON)` by
+  hand (type `0xb` in bits 59:52, `0x20` in bits 15:0).  It exports
+  `apple_t8015_pmp_up`.
+* `apple-t8015-gfx.c`: waits (up to 40 s) for `apple_t8015_pmp_up` before
+  touching the GPU; dumps the PS bank and **both** DVFS/perf candidate blocks
+  (read-only); then **re-toggles `ps_gfx` off→on** so the PMGR re-sends the
+  gate request with the PMP up (skipping the GPU accesses entirely if the
+  domain does not come back); then the mailbox read, the RTKit bring-up, and
+  the RGX read last.
+
+Interpretation table:
+
+| what the log shows | conclusion |
+|---|---|
+| `IOP power state transition: 0x0 -> 0x220` then `-> 0x20`, then `PMP is up` | the PMP only needed time; the AP is now declared ON |
+| mailbox `A2I control` prints a value | the fender/IOP sub-block is clocked — the gate question is answered for the IOP |
+| mailbox read hangs after the PMP is up | the PMP being up is not sufficient; the gate request itself has to be sent |
+| `GFX firmware is up; RTKit handshake complete` | **Phase 2.2 passes** |
+| `rgx: core id …` | Phase 2.3's identity read, for free |
+| `retoggle: ps_gfx stuck at actual …` | the PMGR handed the domain to the PMP (dock agent) and the PMP did not take it back |
+
 ## Resolved (no longer a GUESS)
 
 | item | value | how it was resolved |

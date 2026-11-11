@@ -9,6 +9,13 @@
  * wait for RTKit's HELLO/EPMAP handshake.  It sends no AGX init data, does
  * not power the core, and does not read or write any RGX register.
  *
+ * Boot #9 sequence (see the boot #8 notes below): the PMP is booted first by
+ * pmp_t8015_v1.c and must report itself running, because the GPU's gates
+ * (GFX-SGX/GFX-KF/GFX-BUSY, all "no_ps" in the ADT) have no PMGR register of
+ * their own -- the PMP owns them.  Only then does the AP touch the block:
+ * ps/DVFS read-back, a ps_gfx off->on transition (the pmgr "dock fifo agent"
+ * signal), the mailbox read, the RTKit handshake, and finally the RGX read.
+ *
  * Sequence:
  *   1. ps_gfx is powered on by the platform core, before ->probe() (2.1);
  *   2. the mailbox is started through the RTKit library, so the HELLO cannot
@@ -81,7 +88,22 @@ struct apple_t8015_gfx {
  * the payload's init has brought up the USB gadget that carries the kernel
  * log to the host before the first GFX access resets the phone.
  */
-#define GFX_BOOT_DELAY_MS	20000	/* after the PMP diagnostic boot at 14 s */
+#define GFX_BOOT_DELAY_MS	22000	/* after the PMP diagnostic boot at 12 s */
+
+/*
+ * DIAG (Phase 2.2 boot #9): in boot #8 the PMP answered HELLO at 18.9 s and
+ * then mainline's 1 s waits expired, so the AP never declared itself powered
+ * on ("SET_AP_PWR_STATE(ON)" never left the AP) and no gate could be
+ * requested.  Boot #9 boots the PMP from pmp_t8015_v1.c, waits here for it to
+ * report itself running, and only then touches the GPU block.
+ */
+#define GFX_PMP_READY_WAIT_MS	40000
+extern bool apple_t8015_pmp_up;
+
+/* PMGR DVFS ("perf") block: two candidate layouts (see the dump below). */
+#define PMGR_DVFS_LOW		0x100	/* perf base 0 + 0x100 */
+#define PMGR_DVFS_HIGH		0xb4100	/* perf-regs[0].offset + 0x100 */
+#define PMGR_DVFS_COUNT		140	/* perf-regs[0].size */
 
 /*
  * RTKit's crashlog/ioremport/oslog/syslog buffers must be addressable by the
@@ -162,15 +184,15 @@ static void apple_t8015_gfx_set_window(struct apple_t8015_gfx *gfx)
 	};
 	unsigned int i;
 
-	apple_t8015_gfx_stage(gfx, "4/8: Fender window copy");
+	apple_t8015_gfx_stage(gfx, "6/10: Fender window copy");
 	for (i = 0; i < ARRAY_SIZE(fields); i++)
 		writel(fields[i], gfx->fender + FENDER_WINDOW + 4 * i);
 
-	apple_t8015_gfx_stage(gfx, "5/8: IOP window copy");
+	apple_t8015_gfx_stage(gfx, "7/10: IOP window copy");
 	for (i = 0; i < ARRAY_SIZE(fields); i++)
 		writel(fields[i], gfx->iop + IOP_WINDOW + 8 * i);
 
-	apple_t8015_gfx_stage(gfx, "6/8: IOP window enable");
+	apple_t8015_gfx_stage(gfx, "8/10: IOP window enable");
 	writel(1, gfx->iop + IOP_WINDOW_ENABLE);
 }
 
@@ -228,6 +250,128 @@ static void apple_t8015_gfx_dump_ps(struct apple_t8015_gfx *gfx)
 	}
 }
 
+/* The pmgr node, mapped for read.  The mapping covers all 16 MiB of PMGR, so
+ * the DVFS block at +0xb4000 is addressable through it as well. */
+static void __iomem *apple_t8015_gfx_map_pmgr(struct apple_t8015_gfx *gfx)
+{
+	struct device_node *ps_node, *pmgr_node;
+
+	ps_node = of_parse_phandle(gfx->dev->of_node, "power-domains", 0);
+	if (!ps_node)
+		return NULL;
+	pmgr_node = of_get_parent(ps_node);
+	if (!pmgr_node)
+		return NULL;
+
+	return of_iomap(pmgr_node, 0);
+}
+
+/*
+ * Diagnostic (Phase 2.2 boot #9): the ADT gives every DVFS domain a "perf"
+ * register (pmgr/perf-regs + pmgr/power-domains).  The GFX domain is
+ * perf_block 0, perf_idx 0x2c.  If the GPU's clock is simply unconfigured,
+ * that register is where it shows; both candidate bases are dumped because
+ * m1n1's own decoder disagrees with the ADT offsets.  Reads only.
+ */
+static void apple_t8015_gfx_dump_dvfs(struct apple_t8015_gfx *gfx)
+{
+	/*
+	 * Two index namespaces share perf block 0: pmgr/power-domains (the
+	 * DVFS domains, e.g. GFX = 0x2c) and the per-device perf_idx in the
+	 * device table (e.g. GFX = 0x16, PMP = 0x12, SEP = 0x17).  Both are
+	 * printed, always, so a zero register is visible as a zero.
+	 */
+	static const struct { const char *name; u32 idx; } known[] = {
+		{ "dvfs-MCC", 0x25 }, { "dvfs-DCS01", 0x26 }, { "dvfs-ACS", 0x28 },
+		{ "dvfs-DISP0_GP", 0x29 }, { "dvfs-PMP", 0x2a },
+		{ "dvfs-PMS_SRAM", 0x2b }, { "dvfs-GFX", 0x2c },
+		{ "dvfs-SEP", 0x2d }, { "dvfs-ANS2", 0x2f },
+		{ "dev-MSR", 0x11 }, { "dev-PMP", 0x12 }, { "dev-PMS_SRAM", 0x13 },
+		{ "dev-PCIE", 0x14 }, { "dev-GFX", 0x16 }, { "dev-SEP", 0x17 },
+	};
+	void __iomem *pmgr = apple_t8015_gfx_map_pmgr(gfx);
+	unsigned int i, k;
+
+	if (!pmgr) {
+		dev_info(gfx->dev, "dvfs: cannot map PMGR\n");
+		return;
+	}
+
+	for (k = 0; k < ARRAY_SIZE(known); k++) {
+		dev_info(gfx->dev, "dvfs %-9s low @%#x = %#010x  high @%#x = %#010x\n",
+			 known[k].name,
+			 PMGR_DVFS_LOW + known[k].idx * 0x10,
+			 readl(pmgr + PMGR_DVFS_LOW + known[k].idx * 0x10),
+			 PMGR_DVFS_HIGH + known[k].idx * 0x10,
+			 readl(pmgr + PMGR_DVFS_HIGH + known[k].idx * 0x10));
+	}
+
+	for (i = 0; i < PMGR_DVFS_COUNT; i++) {
+		u32 lo = readl(pmgr + PMGR_DVFS_LOW + i * 0x10);
+		u32 hi = readl(pmgr + PMGR_DVFS_HIGH + i * 0x10);
+
+		if (lo)
+			dev_info(gfx->dev, "  dvfs-low[%#x] @%#x = %#010x\n",
+				 i, PMGR_DVFS_LOW + i * 0x10, lo);
+		if (hi)
+			dev_info(gfx->dev, "  dvfs-high[%#x] @%#x = %#010x\n",
+				 i, PMGR_DVFS_HIGH + i * 0x10, hi);
+	}
+}
+
+/*
+ * Diagnostic (Phase 2.2 boot #9): the pmgr node declares itself a "dock fifo
+ * agent", so a power-state transition is what tells the PMP about the GPU.
+ * Boot #8 powered the domain while the PMP was still mid-handshake; power it
+ * down and back up now that the PMP is up, so the transition is re-sent.
+ */
+static bool apple_t8015_gfx_retoggle_ps(struct apple_t8015_gfx *gfx)
+{
+	struct device_node *ps_node;
+	void __iomem *pmgr = apple_t8015_gfx_map_pmgr(gfx);
+	u32 offset = 0, val;
+	int i;
+
+	if (!pmgr)
+		return true;
+	ps_node = of_parse_phandle(gfx->dev->of_node, "power-domains", 0);
+	if (!ps_node || of_property_read_u32(ps_node, "reg", &offset)) {
+		dev_info(gfx->dev, "retoggle: no ps_gfx offset\n");
+		return true;
+	}
+
+	val = readl(pmgr + offset);
+	dev_info(gfx->dev, "retoggle: before = %#010x\n", val);
+
+	/* Same field set m1n1's pmgr_set_mode() touches. */
+	writel((val & ~(BIT(28) | BIT(9) | BIT(8) | 0xf)), pmgr + offset);
+	msleep(20);
+
+	val = readl(pmgr + offset);
+	writel((val & ~(BIT(28) | BIT(9) | BIT(8) | 0xf)) | 0xf, pmgr + offset);
+	for (i = 0; i < 50; i++) {
+		val = readl(pmgr + offset);
+		if (((val >> 4) & 0xf) == 0xf)
+			break;
+		msleep(10);
+	}
+	dev_info(gfx->dev,
+		 "retoggle: after = %#010x (auto %d, clk %d, pwr %d, actual %#x, target %#x, %d ms)\n",
+		 val, !!(val & BIT(28)), !!(val & BIT(9)), !!(val & BIT(8)),
+		 (val >> 4) & 0xf, val & 0xf, i * 10);
+
+	/* If the domain did not come back, the GPU block is dark by our own
+	 * doing: any access below would hang the bus, so stop here. */
+	if (((val >> 4) & 0xf) != 0xf) {
+		dev_err(gfx->dev,
+			"retoggle: ps_gfx stuck at actual %#x; GPU accesses skipped\n",
+			(val >> 4) & 0xf);
+		return false;
+	}
+
+	return true;
+}
+
 /*
  * Diagnostic (Phase 2.2): does the RGX core answer?  The mailbox read that
  * killed boot #5 and #6 is inside the IOP sub-block; reading the core ID of
@@ -282,18 +426,33 @@ static void apple_t8015_gfx_boot_work(struct work_struct *work)
 	struct apple_t8015_gfx *gfx =
 		container_of(to_delayed_work(work), struct apple_t8015_gfx, work);
 	struct device *dev = gfx->dev;
-	int ret;
+	int ret, i;
 
-	apple_t8015_gfx_stage(gfx, "0/8: ps_gfx power state (PMGR read)");
+	/* Boot #9: everything below is only meaningful once the PMP -- the
+	 * block that owns this GPU's gates -- is a running RTKit peer. */
+	apple_t8015_gfx_stage(gfx, "0/10: wait for the PMP to come up");
+	for (i = 0; i < GFX_PMP_READY_WAIT_MS / 500; i++) {
+		if (apple_t8015_pmp_up)
+			break;
+		msleep(500);
+	}
+	dev_info(dev, "GFX-DIAG: PMP %s after %d ms\n",
+		 apple_t8015_pmp_up ? "is up" : "never came up", i * 500);
+
+	apple_t8015_gfx_stage(gfx, "1/10: ps_gfx power state (PMGR read)");
 	apple_t8015_gfx_dump_ps(gfx);
 
-	apple_t8015_gfx_stage(gfx, "1/8: RGX core id read (0x4000000+0x18)");
-	apple_t8015_gfx_probe_rgx(gfx);
+	apple_t8015_gfx_stage(gfx, "2/10: DVFS/perf block (PMGR read)");
+	apple_t8015_gfx_dump_dvfs(gfx);
 
-	apple_t8015_gfx_stage(gfx, "2/8: mailbox register read (IOP+0x4008)");
+	apple_t8015_gfx_stage(gfx, "3/10: ps_gfx off->on (re-send the gate request)");
+	if (!apple_t8015_gfx_retoggle_ps(gfx))
+		return;
+
+	apple_t8015_gfx_stage(gfx, "4/10: mailbox register read (IOP+0x4008)");
 	apple_t8015_gfx_probe_mailbox(gfx);
 
-	apple_t8015_gfx_stage(gfx, "3/8: mailbox (RTKit) init");
+	apple_t8015_gfx_stage(gfx, "5/10: mailbox (RTKit) init");
 	gfx->rtk = devm_apple_rtkit_init(dev, gfx, NULL, 0,
 					 &apple_t8015_gfx_rtkit_ops);
 	if (IS_ERR(gfx->rtk)) {
@@ -302,32 +461,34 @@ static void apple_t8015_gfx_boot_work(struct work_struct *work)
 	}
 
 	apple_t8015_gfx_set_window(gfx);
-	apple_t8015_gfx_stage(gfx, "7/8: release the IOP (run bit)");
+	apple_t8015_gfx_stage(gfx, "9/10: release the IOP (run bit)");
 	writel(readl(gfx->fender + FENDER_RUN) | FENDER_RUN_ENABLE,
 	       gfx->fender + FENDER_RUN);
 	dev_info(dev, "GFX IOP released; waiting for RTKit HELLO\n");
 
-	dev_info(dev, "stage 8/8: RTKit wake\n");
 	ret = apple_rtkit_wake(gfx->rtk);
 	if (ret) {
 		/*
-		 * Keep the domain up and the machine alive: stop the IOP and
-		 * report.  The failure is visible in dmesg.
+		 * Keep the domain up and the machine alive: report.  The IOP
+		 * is left running, so a later stage (Phase 2.3) can retry.
 		 */
-		dev_err(dev, "GFX firmware did not answer (%d); IOP stopped\n", ret);
-		writel(readl(gfx->fender + FENDER_RUN) & ~FENDER_RUN_ENABLE,
-		       gfx->fender + FENDER_RUN);
-		return;
-	}
-	dev_info(dev, "GFX firmware is up; RTKit handshake complete\n");
+		dev_err(dev, "GFX firmware did not answer (%d)\n", ret);
+	} else {
+		dev_info(dev, "GFX firmware is up; RTKit handshake complete\n");
 
-	/* Endpoints are active only if the firmware advertised them in EPMAP. */
-	ret = apple_rtkit_start_ep(gfx->rtk, GFX_EP_AGX_INIT);
-	if (ret)
-		dev_warn(dev, "AGX init endpoint unavailable: %d\n", ret);
-	ret = apple_rtkit_start_ep(gfx->rtk, GFX_EP_AGX_DOORBELL);
-	if (ret)
-		dev_warn(dev, "AGX doorbell endpoint unavailable: %d\n", ret);
+		/* Endpoints are only active if the firmware advertised them. */
+		ret = apple_rtkit_start_ep(gfx->rtk, GFX_EP_AGX_INIT);
+		if (ret)
+			dev_warn(dev, "AGX init endpoint unavailable: %d\n", ret);
+		ret = apple_rtkit_start_ep(gfx->rtk, GFX_EP_AGX_DOORBELL);
+		if (ret)
+			dev_warn(dev, "AGX doorbell endpoint unavailable: %d\n",
+				 ret);
+	}
+
+	/* Phase 2.3 precursor, last because a dark RGX window hangs the bus. */
+	apple_t8015_gfx_stage(gfx, "10/10: RGX core id read (0x4000000+0x18)");
+	apple_t8015_gfx_probe_rgx(gfx);
 }
 
 static int apple_t8015_gfx_probe(struct platform_device *pdev)

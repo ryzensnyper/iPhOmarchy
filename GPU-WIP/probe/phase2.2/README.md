@@ -369,3 +369,42 @@ Next, offline (no boot needed):
    `clk-apple-t8010-touch.c`'s register layout.
 3. Diagnose the `-ETIME`: compare `apple_rtkit_wake()` with m1n1's `rtkit.c`
    (the only reference that starts an A11-era IOP).
+
+## Boot #9 — DOSSIER (2026-11-12, built, NOT booted — needs a go)
+
+Items 1–3 above were worked offline; the results and the full ADT power model
+are in **`PMP-POWER-MODEL.md`** next to this file, and the boot #8 re-read is
+in `../STATUS.md`.  Summary of what changed:
+
+* **The `-ETIME` is not "no HELLO".**  `RTKit: Initializing (protocol version
+  12)` is printed by the HELLO handler, so the PMP *did* answer; the dispatch
+  never reached `SET_AP_PWR_STATE(ON)` because mainline waits 1000 ms for the
+  IOP power ACK and m1n1 waits forever.  The PMP firmware validates that AP
+  power message (`Invalid AP power: %d`), and an AP that never declares
+  itself on cannot expect gate services.
+* **The GPU's gates have no PMGR register.**  `GFX-SGX`/`GFX-KF`/`GFX-BUSY`
+  are `no_ps` (virtual) devices whose only parent is `GFX`; there is no
+  `pwrgate-regs` array on T8015 either.  The PMGR is a `pmgr-dock-fifo-agent`,
+  so a PS transition is only a *request* to the PMP.
+* **The GFX clock has two candidate registers** (`0x2320003c0` and
+  `0x2320b43c0`); boot #9 reads, never writes, that block.
+
+### Files this build touches (4)
+
+| file | change |
+|---|---|
+| `drivers/soc/apple/rtkit.c` | `APPLE_RTKIT_WAIT_MS` 1000 → **15000**; HELLO/EPMAP/IOP-ACK/AP-ACK transitions promoted to `dev_info` (DIAG) |
+| `drivers/soc/apple/pmp_t8015_v1.c` | bring-up at 12 s; poll `apple_rtkit_is_running()` for 25 s; send `SET_AP_PWR_STATE(ON)` by hand if `boot()` aborted; export `apple_t8015_pmp_up` (copy in this directory) |
+| `drivers/soc/apple/apple-t8015-gfx.c` | wait for `apple_t8015_pmp_up` (≤40 s); PS-bank + both DVFS windows (read-only); `ps_gfx` off→on re-toggle, aborting before the GPU accesses if the domain does not come back; then mailbox read, RTKit bring-up, RGX read (copy in this directory) |
+| payload `init` (unchanged) | `gpu-diag` early stop + kmsg bridge at `172.16.42.2:6666` |
+
+### Per-outcome interpretation
+
+| log | meaning |
+|---|---|
+| `IOP power state transition: 0x0 -> 0x220` then `-> 0x20` | the PMP only needed time |
+| `PMP is up (AP power state ON …)` | the AP power message landed; gates are now requestable |
+| `retoggle: ps_gfx stuck at actual …` | the PMGR handed the domain to the PMP and it did not come back — strong evidence for PMP-owned gating |
+| mailbox `A2I control` prints a value | the fender/IOP sub-block is clocked |
+| `GFX firmware is up; RTKit handshake complete` | **Phase 2.2 passes** |
+| `rgx: core id …` | Phase 2.3 identity read for free |

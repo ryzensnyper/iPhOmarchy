@@ -1,0 +1,63 @@
+diff --git a/drivers/soc/apple/rtkit.c b/drivers/soc/apple/rtkit.c
+index a6bce181d988..cd5d1fae84c8 100644
+--- a/drivers/soc/apple/rtkit.c
++++ b/drivers/soc/apple/rtkit.c
+@@ -163,9 +163,11 @@ static void apple_rtkit_management_rx_epmap(struct apple_rtkit *rtk, u64 msg)
+ 	unsigned long bitmap = FIELD_GET(APPLE_RTKIT_MGMT_EPMAP_BITMAP, msg);
+ 	u32 base = FIELD_GET(APPLE_RTKIT_MGMT_EPMAP_BASE, msg);
+ 
+-	dev_dbg(rtk->dev,
+-		"RTKit: received endpoint bitmap 0x%lx with base 0x%x\n",
+-		bitmap, base);
++	/* DIAG (boot #9): the endpoint map tells us which services the PMP has. */
++	dev_info(rtk->dev,
++		 "RTKit: received endpoint bitmap 0x%lx with base 0x%x%s\n",
++		 bitmap, base,
++		 (msg & APPLE_RTKIT_MGMT_EPMAP_LAST) ? " (last)" : "");
+ 
+ 	for_each_set_bit(i, &bitmap, 32) {
+ 		ep = 32 * base + i;
+@@ -219,8 +221,9 @@ static void apple_rtkit_management_rx_iop_pwr_ack(struct apple_rtkit *rtk,
+ {
+ 	unsigned int new_state = FIELD_GET(APPLE_RTKIT_MGMT_PWR_STATE, msg);
+ 
+-	dev_dbg(rtk->dev, "RTKit: IOP power state transition: 0x%x -> 0x%x\n",
+-		rtk->iop_power_state, new_state);
++	/* DIAG (boot #9): this ACK is the one that never arrived in boot #8. */
++	dev_info(rtk->dev, "RTKit: IOP power state transition: 0x%x -> 0x%x\n",
++		 rtk->iop_power_state, new_state);
+ 	rtk->iop_power_state = new_state;
+ 
+ 	complete_all(&rtk->iop_pwr_ack_completion);
+@@ -231,8 +234,9 @@ static void apple_rtkit_management_rx_ap_pwr_ack(struct apple_rtkit *rtk,
+ {
+ 	unsigned int new_state = FIELD_GET(APPLE_RTKIT_MGMT_PWR_STATE, msg);
+ 
+-	dev_dbg(rtk->dev, "RTKit: AP power state transition: 0x%x -> 0x%x\n",
+-		rtk->ap_power_state, new_state);
++	/* DIAG (boot #9): proves the SET_AP_PWR_STATE(ON) left the AP. */
++	dev_info(rtk->dev, "RTKit: AP power state transition: 0x%x -> 0x%x\n",
++		 rtk->ap_power_state, new_state);
+ 	rtk->ap_power_state = new_state;
+ 
+ 	complete_all(&rtk->ap_pwr_ack_completion);
+@@ -730,12 +734,18 @@ struct apple_rtkit *apple_rtkit_init(struct device *dev, void *cookie,
+ }
+ EXPORT_SYMBOL_GPL(apple_rtkit_init);
+ 
++/* DIAG (Phase 2.2 boot #9): the T8015 PMP sends HELLO immediately but only
++ * acks the IOP power state several seconds later; the firmware boots its own
++ * task graph first.  m1n1 never times out this wait at all.  1 s is far too
++ * short for this coprocessor. */
++#define APPLE_RTKIT_WAIT_MS 15000
++
+ static int apple_rtkit_wait_for_completion(struct completion *c)
+ {
+ 	long t;
+ 
+ 	t = wait_for_completion_interruptible_timeout(c,
+-						      msecs_to_jiffies(1000));
++						      msecs_to_jiffies(APPLE_RTKIT_WAIT_MS));
+ 	if (t < 0)
+ 		return t;
+ 	else if (t == 0)
