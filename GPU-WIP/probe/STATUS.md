@@ -306,6 +306,80 @@ Read-outs, in order of what they would settle:
 | GPU does not hang off a DART | verified — `sgx` has no `iommu-parent` |
 | GFX IOP node / addresses | taken from the ADT: `gfx-kf` = `[0x04D20000 0x20000]`, `[0x04D00000 0x20000]`, IRQs `[260,259,262,261]` |
 
+## Phase 2.2 — boot #8 executed: the PMP runs, the GPU block is still dark (2026-11-11)
+
+Payload `b9151d1a…` (kernel `00b70cc7…`): the PMP firmware installed, the PMP
+bring-up deferred to 14 s with staged prints, and the GFX work moved to 20 s.
+The log came off the phone again (17 713 bytes) and then the phone reset.
+
+**The PMP access works.**  Every stage printed, and RTKit came up on the
+mailbox:
+
+```
+[   14.815633] pmp-t8015-v1 232300000.pmp: PMP-DIAG 0/4: firmware copy to SRAM
+[   15.843159] pmp-t8015-v1 232300000.pmp: PMP-DIAG 1/4: AKF remap (SRAM at 0x0)
+[   16.863660] pmp-t8015-v1 232300000.pmp: PMP-DIAG 2/4: start (control = 1)
+[   17.887668] pmp-t8015-v1 232300000.pmp: PMP-DIAG 3/4: RTKit init
+[   18.911961] pmp-t8015-v1 232300000.pmp: PMP-DIAG 4/4: RTKit wake (waiting for HELLO)
+[   18.911989] pmp-t8015-v1 232300000.pmp: RTKit: Initializing (protocol version 12)
+[   20.959635] pmp-t8015-v1 232300000.pmp: error -ETIME: Failed to wake PMP
+```
+
+So the SRAM copy, the AKF remap, the `control = 1` start and the mailbox
+writes all complete — the PMP block is **not** dark, unlike the GPU.  What
+fails is the handshake: no HELLO within the wake timeout.  (It also means the
+PMP firmware's own code has not yet executed anything we can see, or it runs
+but never answers the AP's first message.)
+
+**The GPU block is dark as a whole, not just the IOP.**  Stage 1/8 read the
+RGX core id at `0x4000000+0x18` — the log ends there and the phone reset, so
+the RGX core hangs exactly like the mailbox did.  Same conclusion as boot #7,
+now for the entire GPU address space.
+
+**The PMGR `0x80300` bank, measured for the first time** (after `ps_gfx`
+was powered):
+
+```
+@0x80300 = 0x0f000300  auto 0, was clk 1, was pwr 1, actual 0x0, target 0x0
+@0x80308 = 0x1f0f00ff  auto 1,                 actual 0xf, target 0xf   ps_pmp
+@0x80310 = 0x1f0003ff  auto 1, was clk 1, was pwr 1, actual 0xf, target 0xf   ps_pms_sram
+@0x80318 = 0x1400024f  auto 1, was clk 1,       actual 0x4, target 0xf   (clock-gated, target active)
+@0x80320 = 0x000000ff  auto 0,                 actual 0xf, target 0xf
+@0x80328 = 0x1000030f  auto 1, was clk 1, was pwr 1, actual 0x0, target 0xf   (stuck off)
+@0x80330 = 0x1400024f  auto 1, was clk 1,       actual 0x4, target 0xf
+@0x80338 = 0x1f0003ff  auto 1, was clk 1, was pwr 1, actual 0xf, target 0xf   ps_gfx
+@0x80350 = 0x00000300  auto 0, was clk 1, was pwr 1, actual 0x0, target 0x0
+@0x80388 = 0x0f000300 … 0x80398 = 0x0f000300 … 0x803a8 = 0x0f000300   (all off)
+```
+
+`ps_gfx` is genuinely ACTIVE (target 0xf, actual 0xf) — and the `WAS_PWRGATED`
+/ `WAS_CLKGATED` bits say it came out of both gates to get there.  Yet its
+registers hang.  Two candidate explanations remain, and they need different
+fixes:
+
+1. **the gate is not the PS register.**  The ADT calls the device gates PMP
+   services (`30:clkG()` / `30:pwrG()`), and the PMP's gate requests go over
+   the "dock FIFO" / RTKit management messages, not over PMGR writes.  The
+   PMP is now running, but our driver never sends a gate request — and it is
+   not even at HELLO yet.
+2. **the block's clock source is not configured.**  The ADT gives `sgx`
+   `clock-ids = [265]` and the PMGR clock table has a `GFX` entry
+   (`perf_idx 44`); nothing in Linux configures an A11 PMGR clock source for
+   the GPU (the only such driver, `clk-apple-t8010-touch.c`, is touch-only
+   and its register comes from the DT).
+
+Both are testable offline before the next boot: (1) by reading
+`AppleT8015PMPFirmware`'s own gate-request code out of the kernelcache — the
+kext is the AP side of the protocol and is present (`pmp-clock-gating`,
+`pmp-power-gating`, `pmp-dart`, `dock`-era PMGR properties in the ADT);
+(2) by finding the GFX clock source register in the ADT's PMGR block and
+comparing it with the touch clock's register layout.
+
+The `-ETIME` HELLO also wants an answer first: m1n1's RTKit boot
+(`src/rtkit.c`) is the only reference implementation we can read that
+actually starts an A11-era IOP; compare its boot message/`AP power` handling
+with `apple_rtkit_wake()`.
+
 ## Resolved (no longer a GUESS)
 
 | item | value | how it was resolved |

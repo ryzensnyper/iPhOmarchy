@@ -342,3 +342,30 @@ What each outcome means:
 | `PMP is up`, then mailbox read hangs | PMP runs but does not gate the GPU unprompted → the AP must send the gate request; RE the AppleT8015PMPFirmware ↔ AppleA7IOP protocol |
 | `PMP is up`, RGX id printed, mailbox hangs | GPU domain alive, IOP sub-block gated on its own |
 | `PMP is up`, mailbox answers | the PMP is the gate owner → continue with RTKit HELLO |
+
+## Boot #8 result (2026-11-11 — executed: PMP runs, GPU still dark)
+
+Payload `b9151d1a…` streamed 17 713 bytes before the reset.
+
+* **PMP: every stage completed.** `PMP-DIAG 0/4 … 4/4`, `RTKit: Initializing
+  (protocol version 12)`, then `error -ETIME: Failed to wake PMP`.  So the
+  PMP's SRAM window, AKF remap, `control = 1` start and mailbox are all
+  reachable — that block is *not* dark.  Only the HELLO handshake is missing.
+* **GPU: the RGX core itself hangs.** The log ends at
+  `GFX-STAGE 1/8: RGX core id read (0x4000000+0x18)`, so it is not just the
+  IOP sub-block: the whole GPU address space is unreachable.
+* **`ps_gfx` is genuinely active**: `@0x80338 = 0x1f0003ff` — target 0xf,
+  actual 0xf, `WAS_PWRGATED` and `WAS_CLKGATED` both set (it came out of both
+  gates). Full bank snapshot is in `STATUS.md`.
+
+Next, offline (no boot needed):
+
+1. RE the `AppleT8015PMPFirmware` kext's gate request — the AP-side protocol
+   for `30:clkG()` / `30:pwrG()`; the ADT's `pmgr-dock-fifo-agent` says the
+   PMP has a dock FIFO, and the AGX kext strings include `pmp-dart`,
+   `pmp-sw-interrupt`, `pmp-clock-gating`.
+2. Find the GFX clock-source register in the ADT's PMGR block (the `GFX`
+   clock entry, `perf_idx 44`; `clock-ids = [265]` on `sgx`) and compare with
+   `clk-apple-t8010-touch.c`'s register layout.
+3. Diagnose the `-ETIME`: compare `apple_rtkit_wake()` with m1n1's `rtkit.c`
+   (the only reference that starts an A11-era IOP).
