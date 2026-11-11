@@ -584,6 +584,64 @@ Everything else is boot #9's build, whose PMP half is proven: bring-up at
 `apple_t8015_pmp_up` before it touches the block (PMP reported up at 36.6 s,
 the wait cost 11.5 s and returned immediately).
 
+## Phase 2.2 — boot #10 executed: the block is still dark with the PMP up (2026-11-12)
+
+Payload `cf9a5dd7…`.  The log came off the phone (75 lines for this boot, no
+oops, no panic) and the phone went back to iOS by itself: the boot died on
+**stage `4/11`, the mailbox read at `IOP+0x4008`** — a bus hang and a watchdog
+reset, exactly as in boots #7/#8.
+
+Everything that could be satisfied before that read was satisfied:
+
+```
+[   36.271641] pmp-t8015-v1 …: PMP is up (AP power state ON, RTKit peer running)
+[   36.647638] apple-t8015-gfx …: GFX-DIAG: PMP is up after 11500 ms
+[   38.687717] apple-t8015-gfx …: ps_gfx: PS @0x80338 = 0x1f0003ff (auto 1, was clkgated 1, was pwrgated 1, actual 0xf, target 0xf)
+[   42.911731] apple-t8015-gfx …: retoggle: before = 0x1f0003ff
+[   42.945608] apple-t8015-gfx …: retoggle: after  = 0x0f0003ff (auto 0, clk 1, pwr 1, actual 0xf, target 0xf, 10 ms)
+[   42.949177] apple-t8015-gfx …: GFX-STAGE 4/11: mailbox register read (IOP+0x4008)
+```
+
+Three conclusions, all of them new:
+
+1. **The PMP being a running RTKit peer with AP power ON changes nothing.**
+   The PMGR does not open the GPU's gates on its own initiative when the PMP
+   arrives.
+2. **A PS transition does not open them either.**  The `ps_gfx` off→on went
+   through completely (power-gate then re-power, `actual` back to `0xf` in
+   10 ms, `AUTO` cleared) and the PMGR still lets Linux move that domain —
+   so the "dock fifo agent" hand-off is not what makes the block dark.  The
+   AP has to *ask*, explicitly.
+3. **The DVFS "low" window is not the perf block.**  `PMGR+0x100+idx*0x10`
+   reads `0` for *every* entry we sampled, including `MCC`/`DCS01` — DRAM
+   domains that must be configured on a live system.  So the perf registers
+   are the `+0xb4xxx` window (never reached: it is read last now), and
+   `dump_pmgr.py`'s `base + 0x100 + idx*0x10` formula is wrong for this SoC.
+
+The one read we lost to the reordering is the `+0xb4xxx` window; it stays last
+on purpose, but it is no longer interesting next to the gate question.
+
+## Next: the gate request itself (offline, no boot)
+
+The mailbox read is the *first* access to the block, so it is now a clean test
+of any future gate mechanism: if a gate request works, that read returns.  The
+open item is therefore how iOS asks for those three virtual gates
+(`GFX-SGX` 148 / `GFX-BUSY` 123 / `GFX-KF` 149, all `no_ps`, parent `GFX`).
+
+Known anchors to attack it with:
+
+* the PMP firmware **services** the request, so its dock/FIFO handler carries
+  the register base and the message format; its tunable table (file `0x17c68`)
+  has `DOCK` and `CLKG` enabled by default, and it is Thumb-2 linked at
+  `0x01000000`;
+* the AP side is `ApplePMPFirmware` (+ `AppleT8015PMPFirmware`) in the kernel
+  cache, with the feature switches `pmp-clock-gating`, `pmp-power-gating`,
+  `pmp-dock-fifo`, `pmp-test`, `pmp-dart`, `light-em-up`;
+* the PMP's "control" region (`0x232400000`, 64 KiB) is mapped by the driver
+  as `control` and is **never touched** — the prime suspect for a doorbell;
+* the first application endpoint the PMP advertises is **endpoint 32**
+  (EPMAP `0x1` with base 1), i.e. there is an app-level service to send to.
+
 ## Resolved (no longer a GUESS)
 
 | item | value | how it was resolved |
