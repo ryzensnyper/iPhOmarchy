@@ -75,8 +75,26 @@ the mailbox still dark.  So the gate id is not it either.  The **only
 field never varied is the message's low word** — the RTKit *payload* —
 which the PMP's helper immediately does `& 31` on and compares against 31
 and 16.  Every request so far carried a payload of **zero**.  **Boot #57
-sweeps the payload**; the observable is the mailbox coming alive, since
-the reply has been constant from the start.
+swept the payload — and showed the reply was never a status at all: it
+is `0x40000000000000 | payload`, an echo.**  Nothing changed.
+
+**The gate request is now fully decoded.**  The PMP's handler ends in
+
+```
+*(device << 12 + 0x202) = (old & ~0x8960) | (msg == 1 ? 0x2000 : 0)
+```
+
+— it **clears bit 6**, the "gated" bit, of a per-device gate register in
+the PMP's own address space (which is why the AP sees no change: we
+probed pmgr0 and pmgr1 at 0x93000..0x97000, which covers 0x95202, and it
+stayed zero).
+
+**But bit 6 is what the AP's own gate bank carries**: the ADT's
+`pmgr/ps-regs[0]` = `{reg 1, offset 0x80000, mask 0x00200c53}` — writable
+bits 6 and 13 included — and three of its entries read **0x244**.  **Boot
+#58 walks that bank from the AP, clears bit 6 in one entry at a time and
+watches the mailbox.**  If one of them is the GFX-KF's gate, the
+Kingfisher powers up and we learn which entry it was.
 
 ## 2. The hardware map (measured, all AP addresses)
 
@@ -310,10 +328,11 @@ cd /home/doug/orchard
 ```
 
 * The kernel tree is a git repo on branch **`gpu/phase2.2`**; the driver work
-  is committed as **`ccc3361fcb6a`** (boot #57: sweep the message payload).
+  is committed as **`d63057aea2f9`** (boot #58: ungate the Kingfisher from
+  the AP).
 * The last built payload:
-  **`ae0162a049ff564b51386307810bb4b3e265325d592fe91d5d012e7bdc3c1002`**
-  (boot #57).
+  **`00696796dbc95d90f4ecbb4266175da83c4bf242cb6cb2580204bd1900af8ead`**
+  (boot #58).
 
 **The PMGR's two windows are 32 MiB apart, not 1 MiB:**
 
