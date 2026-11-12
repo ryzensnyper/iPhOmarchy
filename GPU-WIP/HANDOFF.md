@@ -310,7 +310,7 @@ cd /home/doug/orchard
 ```
 
 * The kernel tree is a git repo on branch **`gpu/phase2.2`**; the driver work
-  is committed as **`e64df42`** (boot #57: sweep the message payload).
+  is committed as **`ccc3361fcb6a`** (boot #57: sweep the message payload).
 * The last built payload:
   **`ae0162a049ff564b51386307810bb4b3e265325d592fe91d5d012e7bdc3c1002`**
   (boot #57).
