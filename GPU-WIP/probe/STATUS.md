@@ -2823,3 +2823,35 @@ is probably at `pmgr0 + 0x70000` ✓ (the A12's offsets are swapped ✗).
 
 **Boot #49** (payload `7c8722dd…`, built) dumps that bank wide (0x600 bytes ✓)
 plus `pmgr0 + 0x70000` ✓, so the three GPU entries can be read directly.
+
+## Phase 2.2 — boot #49: two more PMGR candidates ruled out (2026-11-12)
+
+Payload `7c8722dd…`.  Clean boot, phone alive as `05ac:4144`.
+
+* **`pmgr1 + 0x80000`** (the bank the three `no_ps` GPU devices point at):
+  33 non-zero entries, but only up to `+0x140` — **nothing at the
+  device-id offsets** (GFX-BUSY 123 → +0x3b8, GFX-SGX 148 → +0x4a0,
+  GFX-KF 149 → +0x4a8).  So that bank is *not* indexed by device id, and
+  the GPU's gates are somewhere else.
+* **`pmgr0 + 0x70000`**: the **DVFS/voltage table** (0x00014605 = 17925 µV,
+  0x3d094605, ten idle entries of 0x00014605) — not a rail register.  So
+  on the A11 the A12's two offsets are swapped: `0x70000` is the A12's
+  "GPU DVFS table" and `0xa0000` is the A12's "rail register" position.
+  Both are DVFS tables here.
+
+What the ps bank says about the GPU (our decode ✓):
+
+```
+ps_gfx @0x80338 = 0x1f0003ff  (auto 1, clk 1, pwr 1, actual 0xf, target 0xf)
+ps @0x80308    = 0x1f0f00ff  (auto 1, clk 0, pwr 0)
+ps @0x80318    = 0x1400024f  (auto 1, clk 1, pwr 0)
+```
+
+The GFX is clocked and powered, and the GPU core answers (CORE_ID ✓), so
+the dead domain is the **GFX-KF** — the Kingfisher, which owns the mailbox
+IRQs (259-262) and the Fender/IOP windows.  It is a `no_ps` device, so its
+gate is a plain gate register, and we have not found it yet.
+
+Also: the driver now reads the device-info page's `+0x80` as writable (the
+enable sweep changed it from 0x28 to 0x29), so that page is not entirely
+read-only after all.
