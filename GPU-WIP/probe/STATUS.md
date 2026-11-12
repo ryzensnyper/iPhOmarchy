@@ -2481,3 +2481,35 @@ enable sequences:
 
 If the page takes writes, the mailbox is there (and the problem is that the
 firmware does not run); if it does not, the address is wrong.
+
+## Phase 2.2 — boot #40: the kext's address is a dead page (2026-11-12)
+
+Payload `01f55868…`.  Clean boot, phone alive as `05ac:4144`.  The driver
+now pokes the address the DT points at and prints both layouts' registers
+before and after both enable sequences:
+
+```
+mbox 0x204d24000 before:  +0x00 = 0 … +0x80 = 0      (all fifteen words zero)
+mbox 0x204d24000 after:   +0x00 = 0 … +0x80 = 0      (unchanged)
+```
+
+So `0x204d24000` is **not a dormant mailbox**: it reads zero and ignores
+every write, exactly like the device-info page at `0x204d04000` ignores
+writes.  The kext's "IOP + 0x4000" rule does not carry over to the A11 —
+which makes sense now that we know the A11 uses the **V4** class, whose
+layout has no SET/CLR pair at all.
+
+### Where the mailbox can still be
+
+| place | status |
+|---|---|
+| Fender window 0x4d00000…0x4d10000 | swept (boot #37): only the device-info page at +0x4000 |
+| Fender window 0x4d10000…0x4d1ffff | **never read** — boot #37 hung the SoC on `fender+0x10044` (an offset-specific trap) |
+| IOP window 0x4d20000…0x4d3ffff | swept (boot #38): window registers, the DART, nothing else |
+| IOP + 0x4000 (0x4d24000) | boot #40: reads zero, ignores writes |
+| the A7IOP shim 0x2ee00000 | **never read** — the ADT gives /arm-io/sio its own four mailbox interrupts (308-311) and a 0x20000 aperture, and the AppleA7IOP kext addresses its mailboxes as "IOP + 0x4000" |
+
+Boot #41 (payload `1e3b499f…`, built) does both of the remaining two:
+the Fender window's upper half (upper half first, so a trap there cannot
+cost us the sweep) and then the A7IOP shim at 0x2ee00000 / +0x4000 /
++0x8000.
