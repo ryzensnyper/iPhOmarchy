@@ -1473,3 +1473,44 @@ clock, which is exactly what has to be opened.
 4. Full dump of the **DART** block (IOP `+0x8000..0x8200`) for Phase 2.3.
 5. Full dump of the remaining live IOP window regions (`+0x40..0x100`,
    `+0x800..0x820`).
+
+## Phase 2.2 — boot #21 executed: PMP gate ignored, **DART block captured** (2026-11-12)
+
+Payload `ed3735be…`.  All 12 stages, **no reset**.
+
+```
+PMP try clkg gfx-kf 269: msg 0x19510d     -> mailbox +0x1000..0x101c: all zero
+PMP try clkg gfx-sgx 265: msg 0x194109    -> all zero
+PMP try clkg gfx 269: msg 0x17c10d        -> all zero
+PMP try clkg gfx-kf 0: msg 0x195000       -> all zero
+PMP try clkg gfx-kf all: msg 0x195fff     -> all zero
+PMP try cmd0 gfx-kf 0: msg 0x95000        -> all zero
+```
+
+* The messages went out (the format is the one the firmware's dispatcher
+  decodes) but the PMP **did not reply at all** — not even the
+  `Received unexpected message to EP32` that the earlier `STARTEP` produced.
+  So ep32 either does not carry the gate service, or the gate service is
+  reached on another endpoint and the firmware stays silent for unknown ones.
+* The mailbox page stayed dead after every attempt.
+* **The DART block is now mapped** — IOP `+0x8000..+0x8200`, page-group masks
+  with per-group config words, `dart_vm_size = 0x4f`, base config
+  `+0x8108 = 0x00020001`, `+0x810c = 0x00100101`.  Full dump and analysis in
+  `phase2.2/G10P-REGISTERS.md`.
+
+### Where we stand
+
+| piece | state |
+|---|---|
+| RGX identity | `CORE_ID = 0x7E1` (`n=7`, `c=0xE1`) — reproducible across boots |
+| firmware window + IOP release | working (window reads back, run bit sticks) |
+| Fender power request | accepted (`state 0x1`; the ack bit is not the A10's bit 4) |
+| device information block | mapped (`0x204d04000`), the A11's own bus width etc. |
+| DART / IOMMU | mapped (`0x204d28000`) — enough to build GPU page tables |
+| **mailbox** | **still dark**: IOP `+0x1000` reads zero and ignores writes |
+
+The mailbox is the last piece that blocks the IOP firmware handshake, and
+therefore the GPU itself.  The PMP route is not it (no reply, no effect), so
+the next lead is the **PMGR clock gate** for `gfx-kf`/`clock-id 269` — the
+AP-side `ApplePMGR` kext writes those, and our `ps_gfx` write only ever
+touched the *power* state register at PMGR `+0x80338`.
