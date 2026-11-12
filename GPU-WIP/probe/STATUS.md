@@ -3365,3 +3365,34 @@ EP32: 6000000000000    <- ack to cmd 5 (cmd+1 = 6), sent 48.31
 value); cmd 5 the likely *write*; cmd 1 maybe a state set.  With
 `arg = (dev << 12) | 0x202` — the very address the firmware's clg
 handler writes — cmd 3 should return the device's gate register.
+
+### Boot #60: cmd 3 reads, cmd 5 writes, the ack echoes the device (payload `7ed55d4f…`)
+
+Tree `889c94d0d597`.  Clean boot.
+
+* **quiet 3 s baseline: zero bank changes** — boot #59's bank[6]/bank[20]
+  toggles were message-driven after all, not periodic housekeeping.
+* **cmd 3 (the read) acked 12/12**: the first 8 (dev at 16..23) returned
+  `0x40000ffffffff`; the bits-32..39 form returned
+  `0x40095ffffffff / 0x4007c… / 0x40094… / 0x4007b…` — **the ack echoes
+  the device at [39:32]**, exactly where ApplePMP's
+  `pm_msg_get_device()` check reads it.  Payload always `0xffffffff`.
+* **cmd 5 (the write) acked 20/20** (`0x6…`), flushes (cmd 0) silent —
+  and changed nothing: no bank moves, ps_gfx unchanged, mailbox dark.
+* cmd 1, sent last after 40 messages, got nothing.
+* the full 41-entry bank was dumped: bank[0] `0x1f0000ff`, the twelve
+  `0x244` entries at 13/18/19/22/24/25/26/28/29/30/34/37.
+* **queue lesson**: boot #59's 100 ms cadence outran the PMP's ~255 ms
+  ack pace; at ~200 ms/message everything acks.  Drive ep 32 slowly.
+
+**Offline (same session)**: the firmware's private gate interface is a
+hardware block whose command register sits at `+0x40` with the layout
+`{cmd[19:16], device[15:8], enable[0]}` (read at 0x0100cb4a, written at
+0x0100cb82); a message builder at 0x0100cba0 packs
+`(arg3 << 20) | (arg2 >> 12)`.
+
+**Interpretation**: `0xffffffff` for every PMGR id smells like "no such
+device" — the PMP's device indices are its own, not the PMGR's.
+**Boot #61** (tree `29afcad77de1`) sweeps the cmd-3 read across all 64
+one-byte device indices at bits 32..39; any non-`0xffffffff` payload is
+a real device, and its index is what the write must carry.

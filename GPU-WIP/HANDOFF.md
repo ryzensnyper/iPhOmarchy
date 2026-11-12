@@ -23,8 +23,17 @@ AP cannot write directly (boot #58).
 So the next session's job is: **get the PMP to ungate the GFX-KF**, or find
 another way to wake the IOP.
 
-**Boot #59 (built, awaiting the go) sends the first messages ever to
-endpoint 32.**  The v2 message shape is now decoded from ApplePMP.kext's
+**Boot #59/#60 opened the PMP v2 channel.**  Endpoint 32 is ALIVE:
+commands 1/3/5 ack with (cmd+1) at bits 48..51, cmd 3 returns a 32-bit
+value (0xffffffff so far), cmd 5 acks 20/20 and changes nothing, and the
+ack echoes the device at bits 32..39 (where ApplePMP's
+`pm_msg_get_device()` reads it).  Drive slowly (~200 ms/message) —
+boot #59's 100 ms cadence outran the PMP's ack pace and messages were
+dropped.  **Boot #61 (tree `29afcad77de1`) sweeps the cmd-3 read across
+all 64 device indices** to map the PMP's own device space; see
+`probe/STATUS.md` boots #59/#60 for the full data.
+
+(The older plan below is superseded by that; it remains for background.)  The v2 message shape is now decoded from ApplePMP.kext's
 own send path (`ApplePMP::_sendPMCommand`'s construction at
 0xfffffff00610b868), which is better evidence than the kext vtables:
 
