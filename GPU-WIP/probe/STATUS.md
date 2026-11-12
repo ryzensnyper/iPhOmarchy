@@ -1951,3 +1951,67 @@ step that turns a live-but-bare RGX into a GPU that accepts commands.
 4. **The AGX driver path**: the A11 is not a PowerVR part, so the DRM side has
    to be an AGX driver — Mesa's asahi driver is the reference for the register
    layout and the command ring, minus the G10P specifics.
+
+## Phase 2.2 — boot #27 (2026-11-12): **the mailbox address in the DT was wrong**
+
+No boot needed to find this one: the project's own knowledge base says where
+the GFX mailbox is.
+
+`Known Good State/firmware/GPU/A11-GPU-FINDINGS.md` §9f ("Mailbox & init
+registers on G10P") documents the G10P mailbox block, taken from the
+`AppleA7IOP` kext:
+
+```
+| mask setup: +0x4000 = 0x1111, +0xc00 = 0x1111   | MAILBOX_SET pair, mask all four IRQs: bits 0/4/8/12
+| +0x4004 = 1 / +0xc04 = 1                        | MAILBOX_CLR pair
+| +0x4020 |= 1                                    | OUTBOX enable
+| inbox/outbox empty poll: bit 17 of 0x4008/0x4020| INBOX_CTRL / OUTBOX_CTRL
+| +0x4040                                         | IDLE_STATUS
+| +0x4044 bit 4                                   | GFX-specific
+| read 256 regs from +0x8130                       | the GFX config register block
+```
+
+and its "Mapping to the Linux side" says the mailbox base is **the window at
+`0x04D00000` + `0x4000`**, and that the in-tree `apple_mbox_a7iop_hw` map
+already implements it: mask SET `+0x00` / CLEAR `+0x04`, `A2I_CONTROL +0x08`
+(enable BIT(0)), `A2I_SEND +0x10`, `I2A_CONTROL +0x20`, `I2A_RECV +0x38`,
+interrupt bits 0/4/8/12.
+
+### The hardware agrees, and it agrees with our own measurements
+
+The block the probes found live at **`0x204d04000`** is exactly that layout:
+
+| offset | value | KB's name |
+|---|---|---|
+| `+0x00` | `0x01001000` | `MAILBOX_SET` (bits 12/20/24 already set) |
+| `+0x04` | `0x0` | `MAILBOX_CLR` |
+| `+0x08` | `0x00010704` | `INBOX_CTRL` — status bit 16 set ("not empty"), count field `0x07` |
+| `+0x40` | `0x0` | `IDLE_STATUS` |
+| `+0x44` | `0x0000000f` | the GFX-specific register, bit 4 clear (as the kext leaves it) |
+
+and **`0x204d24000`** — the address our DT used — reads back all zero and
+ignores writes: it is a hole.
+
+**So the DT's `gpu_mbox` node was pointing into the wrong window.**  It said
+`0x204d24000` (the `0x4d20000` window + `0x4000`); it must be
+**`0x204d04000`** (the `0x4d00000` window + `0x4000`).
+
+### What that explains — everything in boots #14…#26
+
+| symptom | cause |
+|---|---|
+| the mailbox page reads zero and ignores writes | we were reading a hole, not the mailbox |
+| the RTKit init livelocked in `apple_mbox_poll_locked()` | the "empty" bit of a *dead* page never sets, so the handler drained phantom `0x0` words forever |
+| the PMP gate message drew no reply and no effect | the gate was never the problem: the *mailbox block itself* was never addressed |
+| the AGX kext's mailbox offsets never appeared in the code | they did — at `+0x4000` of the **other** window, which our driver never read |
+
+The in-tree `apple_mbox_a7iop_hw` driver was **correct all along**; only the DT
+address was wrong.
+
+### Boot #27
+
+1. `t8015.dtsi`: `gpu_mbox` -> `mbox@204d04000`, `reg = <0x2 0x04d04000 0 0x1000>`.
+2. The GFX driver now does a real RTKit init on that mailbox and waits 15 s
+   for the firmware's HELLO (the firmware starts the conversation, as the PMP
+   does), logging every message that arrives.
+3. Then the mailbox registers and the RGX identity.

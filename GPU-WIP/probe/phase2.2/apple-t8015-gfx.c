@@ -54,6 +54,7 @@
 #include <linux/workqueue.h>
 #include <linux/sizes.h>
 #include <linux/soc/apple/rtkit.h>
+#include "rtkit-internal.h"
 
 #define GFX_WINDOW_SIZE		SZ_1M
 #define GFX_FW_RUNTIME		0x8f000	/* image + firmware runtime data */
@@ -725,6 +726,7 @@ static void apple_t8015_gfx_watch_firmware(struct apple_t8015_gfx *gfx,
 		 when, iop0, iop8, iop38, mbox0, mbox8, fen0, fen48);
 }
 
+
 static void apple_t8015_gfx_boot_work(struct work_struct *work)
 {
 	struct apple_t8015_gfx *gfx =
@@ -786,14 +788,28 @@ static void apple_t8015_gfx_boot_work(struct work_struct *work)
 
 	apple_t8015_gfx_stage(gfx, "9/12: Fender power request (state 1)");
 	apple_t8015_gfx_fender_power(gfx);
-	apple_t8015_gfx_watch_firmware(gfx, "after-pwr");
 
-	apple_t8015_gfx_stage(gfx, "10/12: RGX identity + CORE_ID/PBVNC");
-	apple_t8015_gfx_probe_rgx(gfx);
+	apple_t8015_gfx_stage(gfx, "10/12: RTKit init on the GFX mailbox");
+	gfx->rtk = devm_apple_rtkit_init(dev, gfx, NULL, 0,
+					 &apple_t8015_gfx_rtkit_ops);
+	if (IS_ERR(gfx->rtk)) {
+		dev_err(dev, "RTKit init failed: %ld\n", PTR_ERR(gfx->rtk));
+		gfx->rtk = NULL;
+	} else {
+		dev_info(dev, "GFX-DIAG: RTKit up; waiting for the firmware HELLO\n");
+		for (i = 0; i < 15; i++) {
+			msleep(1000);
+			if (gfx->rtk->version)
+				break;
+		}
+		dev_info(dev, "GFX-DIAG: RTKit version %d after %d s\n",
+			 gfx->rtk->version, i);
+	}
 
-	apple_t8015_gfx_stage(gfx, "11/12: the IOP window head and the mailbox");
+	apple_t8015_gfx_stage(gfx, "11/12: mailbox and RGX state");
 	apple_t8015_gfx_dump_range(gfx, gfx->iop, "iop", 0x00, 0x40);
 	apple_t8015_gfx_dump_range(gfx, gfx->iop, "iop", 0x1000, 0x1040);
+	apple_t8015_gfx_probe_rgx(gfx);
 
 	apple_t8015_gfx_stage(gfx, "12/12: done");
 }
