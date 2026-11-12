@@ -538,102 +538,95 @@ static void apple_t8015_gfx_fender_power(struct apple_t8015_gfx *gfx)
  * access that faults resets the phone and takes the display with it.
  */
 /*
- * Phase 2.2 boot #17: sweep the two gfx-kf windows for live registers.
+ * Phase 2.2 boot #18: targeted probes of the GFX IOP mailbox candidates.
  *
- * The ADT gives the gfx-kf node two 128 KiB windows (0x4d20000 = the IOP
- * block, 0x4d00000 = the Fender block) and the mailbox interrupts.  Apple's
- * own AppleA7IOP kext (D21 kernelcache) puts the mailbox registers at
- * base+0x1000: MAILBOX_SET 0x1000, MAILBOX_CLR 0x1004, INBOX_CTRL 0x1008,
- * TX data 0x1010, OUTBOX_CTRL 0x1020, RX data 0x1038 -- i.e. all inside one
- * 64-byte block -- and enables the mailbox by writing 0x1111 to MAILBOX_SET.
+ * Boot #17 swept the Fender window and found live registers up to +0x408c
+ * before a hole at +0x40c0 stalled the read:
  *
- * Boot #16 showed 0x204d24000+0x00..0x3c reads back zero and ignores
- * writes, so either that is the wrong address or the block needs its enable
- * write first.  This sweep answers it without guessing: read every 64-byte
- * chunk of both windows, log the ones that are not zero, and then try the
- * 0x1111 enable on every page that looks alive.
+ *   +0x1000  00000001 00000000 00000000 00000000   (Fender power state = 1)
+ *   +0x2000  00000000 00000000 00000000 0e100000   (window base at +0x200c)
+ *   +0x2040  00000000 00000000 00000001 00000000   (run bit at +0x2048)
+ *   +0x4000  01001000 00000000 00010704 00000000   <- a live block
+ *   +0x4040  00000000 00000000 0000000f 0000002f
+ *   +0x4080  00000028 00000040 00000028 00000028
+ *
+ * The +0x4000 block sits where Apple's MAILBOX_SET (0x01001000), MAILBOX_CLR
+ * (0) and INBOX_CTRL (0x00010704) would be, but it is in the *Fender* window
+ * and the IOP window was never reached.  So: probe the candidates one by one
+ * instead of sweeping, and only write the 0x1111 enable where the layout
+ * already looks like Apple's.
  */
-#define GFX_SWEEP_CHUNK		0x40
-#define GFX_SWEEP_MAXWIN	0x20000UL
-#define GFX_SWEEP_CHUNKS	(GFX_SWEEP_MAXWIN / GFX_SWEEP_CHUNK)
-#define GFX_SWEEP_PAGE		0x1000UL
+#define GFX_PROBE_LEN	0x40
 
-struct gfx_sweep {
-	void __iomem *win;
-	const char *tag;
-	unsigned char alive[GFX_SWEEP_CHUNKS / 8];
+struct gfx_probe {
+	const char *name;
+	phys_addr_t addr;
 };
 
-static bool gfx_sweep_alive(const struct gfx_sweep *sw, unsigned int chunk)
-{
-	return (sw->alive[chunk / 8] >> (chunk % 8)) & 1;
-}
+static const struct gfx_probe gfx_probes[] = {
+	{ "apple-mbox+1000",	0x204d21000UL },	/* IOP window base + 0x1000 */
+	{ "dt-mbox+1000",	0x204d25000UL },	/* DT mailbox base + 0x1000 */
+	{ "iop-head",		0x204d20000UL },
+	{ "dt-mbox",		0x204d24000UL },
+	{ "fender+3000",	0x204d03000UL },
+	{ "fender+4000",	0x204d04000UL },
+	{ "fender+4040",	0x204d04040UL },
+	{ "fender+4080",	0x204d04080UL },
+	{ "fender+2000",	0x204d02000UL },
+	{ "fender+1000",	0x204d01000UL },
+};
 
-static void gfx_sweep_mark(struct gfx_sweep *sw, unsigned int chunk)
+static void apple_t8015_gfx_probe_dump(struct apple_t8015_gfx *gfx,
+				       const struct gfx_probe *p)
 {
-	sw->alive[chunk / 8] |= 1 << (chunk % 8);
-}
+	void __iomem *win;
+	u32 v[16];
+	unsigned int i;
 
-static void apple_t8015_gfx_sweep_scan(struct apple_t8015_gfx *gfx,
-				       struct gfx_sweep *sw)
-{
-	unsigned int off, chunk;
-	u32 v[4];
-	unsigned int shown = 0;
-
-	for (off = 0; off < GFX_SWEEP_MAXWIN; off += GFX_SWEEP_CHUNK) {
-		chunk = off / GFX_SWEEP_CHUNK;
-		v[0] = readl(sw->win + off + 0x0);
-		v[1] = readl(sw->win + off + 0x4);
-		v[2] = readl(sw->win + off + 0x8);
-		v[3] = readl(sw->win + off + 0xc);
-		if (!(v[0] | v[1] | v[2] | v[3]))
-			continue;
-		gfx_sweep_mark(sw, chunk);
-		if (shown++ < 60)
-			dev_info(gfx->dev, "%s sweep +%#06x: %08x %08x %08x %08x\n",
-				 sw->tag, off, v[0], v[1], v[2], v[3]);
+	win = devm_ioremap(gfx->dev, p->addr, GFX_PROBE_LEN);
+	if (!win) {
+		dev_info(gfx->dev, "probe %s @%#lx: cannot map\n",
+			 p->name, (unsigned long)p->addr);
+		return;
 	}
-	dev_info(gfx->dev, "%s sweep: %u non-zero chunks of %u in %#x bytes\n",
-		 sw->tag, shown, (unsigned int)GFX_SWEEP_CHUNKS,
-		 (unsigned int)GFX_SWEEP_MAXWIN);
+	for (i = 0; i < GFX_PROBE_LEN; i += 4)
+		v[i / 4] = readl(win + i);
+	dev_info(gfx->dev, "probe %s @%#lx:\n", p->name, (unsigned long)p->addr);
+	for (i = 0; i < GFX_PROBE_LEN; i += 0x10)
+		dev_info(gfx->dev, "    +%#04x: %08x %08x %08x %08x\n", i,
+			 v[i / 4 + 0], v[i / 4 + 1], v[i / 4 + 2], v[i / 4 + 3]);
+	/* A live INBOX_CTRL has its status in bits 16..18. */
+	if (v[2] & 0x70000)
+		dev_info(gfx->dev, "probe %s: +0x08 has INBOX_CTRL-like status bits (%#x)\n",
+			 p->name, v[2]);
 }
 
-static void apple_t8015_gfx_sweep_enable(struct apple_t8015_gfx *gfx,
-					 struct gfx_sweep *sw)
+static void apple_t8015_gfx_probe_enable(struct apple_t8015_gfx *gfx,
+					 const struct gfx_probe *p)
 {
-	unsigned int chunk, off, tries = 0;
+	void __iomem *win;
 	u32 before, after;
 
-	/*
-	 * The mailbox register block sits at page+0x1000, so a live page P
-	 * whose page P+0x1000 is also live is a candidate: the word at
-	 * P+0x1000 is then MAILBOX_SET.
-	 */
-	for (chunk = 0; chunk + GFX_SWEEP_PAGE / GFX_SWEEP_CHUNK <= GFX_SWEEP_CHUNKS;
-	     chunk++) {
-		if (!gfx_sweep_alive(sw, chunk))
-			continue;
-		if (!gfx_sweep_alive(sw, chunk + GFX_SWEEP_PAGE / GFX_SWEEP_CHUNK))
-			continue;
-		off = chunk * GFX_SWEEP_CHUNK + GFX_SWEEP_PAGE;
-		before = readl(sw->win + off);
-		writel(0x1111, sw->win + off);
-		after = readl(sw->win + off);
-		dev_info(gfx->dev, "%s: MAILBOX_SET candidate +%#06x: before %#x, wrote 0x1111, now %#x\n",
-			 sw->tag, off, before, after);
-		dev_info(gfx->dev, "%s: +%#06x block: %08x %08x %08x %08x %08x %08x %08x %08x\n",
-			 sw->tag, off,
-			 readl(sw->win + off + 0x00), readl(sw->win + off + 0x04),
-			 readl(sw->win + off + 0x08), readl(sw->win + off + 0x0c),
-			 readl(sw->win + off + 0x10), readl(sw->win + off + 0x14),
-			 readl(sw->win + off + 0x18), readl(sw->win + off + 0x1c));
-		if (++tries >= 4)
-			break;
+	win = devm_ioremap(gfx->dev, p->addr, GFX_PROBE_LEN);
+	if (!win)
+		return;
+	before = readl(win + 0x00);
+	writel(0x1111, win + 0x00);
+	after = readl(win + 0x00);
+	dev_info(gfx->dev, "probe %s: wrote 0x1111 to +0x00: %#x -> %#x\n",
+		 p->name, before, after);
+	if (before != after) {
+		dev_info(gfx->dev, "probe %s: block after enable: %08x %08x %08x %08x %08x %08x %08x %08x\n",
+			 p->name,
+			 readl(win + 0x00), readl(win + 0x04), readl(win + 0x08),
+			 readl(win + 0x0c), readl(win + 0x10), readl(win + 0x14),
+			 readl(win + 0x18), readl(win + 0x1c));
+		dev_info(gfx->dev, "probe %s: +0x20..: %08x %08x %08x %08x %08x %08x %08x %08x\n",
+			 p->name,
+			 readl(win + 0x20), readl(win + 0x24), readl(win + 0x28),
+			 readl(win + 0x2c), readl(win + 0x30), readl(win + 0x34),
+			 readl(win + 0x38), readl(win + 0x3c));
 	}
-	if (!tries)
-		dev_info(gfx->dev, "%s: no live page pair found; no enable write\n",
-			 sw->tag);
 }
 
 static void apple_t8015_gfx_boot_work(struct work_struct *work)
@@ -641,19 +634,14 @@ static void apple_t8015_gfx_boot_work(struct work_struct *work)
 	struct apple_t8015_gfx *gfx =
 		container_of(to_delayed_work(work), struct apple_t8015_gfx, work);
 	struct device *dev = gfx->dev;
-	struct gfx_sweep fen, iop;
-	int i;
+	unsigned int i;
+	int j;
 
 	/*
-	 * Boot #17.  The GPU path is proven (boot #15/#16: window copy reads
-	 * back, the IOP is released, the power request is accepted and the RGX
-	 * answers with CORE_ID 0x7e1), so it runs unchanged.  The new work is a
-	 * sweep of the two gfx-kf windows: Apple's AppleA7IOP kext puts the
-	 * mailbox registers at base+0x1000 inside a 64-byte block and enables
-	 * them by writing 0x1111 to MAILBOX_SET, while boot #16 read
-	 * 0x204d24000+0x00..0x3c as zero and ignored writes.  Either that
-	 * address is wrong or the block wants its enable write first; the
-	 * sweep tells us which.
+	 * Boot #18.  The GPU path is proven and runs unchanged; the new work is
+	 * a set of targeted probes of the mailbox candidates, because boot
+	 * #17's blind sweep died on a hole at Fender+0x40c0 before it ever
+	 * reached the IOP window.
 	 */
 	apple_t8015_gfx_stage(gfx, "0/12: wait for the PMP to come up");
 	for (i = 0; i < GFX_PMP_READY_WAIT_MS / 500; i++) {
@@ -686,21 +674,32 @@ static void apple_t8015_gfx_boot_work(struct work_struct *work)
 	apple_t8015_gfx_stage(gfx, "7/12: RGX identity + CORE_ID/PBVNC");
 	apple_t8015_gfx_probe_rgx(gfx);
 
-	memset(&fen, 0, sizeof(fen));
-	fen.win = gfx->fender;
-	fen.tag = "fender";
-	apple_t8015_gfx_stage(gfx, "8/12: sweep the Fender window (0x204d00000)");
-	apple_t8015_gfx_sweep_scan(gfx, &fen);
+	apple_t8015_gfx_stage(gfx, "8/12: probe the mailbox candidates");
+	for (i = 0; i < ARRAY_SIZE(gfx_probes); i++)
+		apple_t8015_gfx_probe_dump(gfx, &gfx_probes[i]);
 
-	memset(&iop, 0, sizeof(iop));
-	iop.win = gfx->iop;
-	iop.tag = "iop";
-	apple_t8015_gfx_stage(gfx, "9/12: sweep the IOP window (0x204d20000)");
-	apple_t8015_gfx_sweep_scan(gfx, &iop);
+	apple_t8015_gfx_stage(gfx, "9/12: mailbox enable write (0x1111)");
+	for (i = 0; i < ARRAY_SIZE(gfx_probes); i++) {
+		void __iomem *win;
+		u32 v;
 
-	apple_t8015_gfx_stage(gfx, "10/12: mailbox enable attempt (write 0x1111)");
-	apple_t8015_gfx_sweep_enable(gfx, &fen);
-	apple_t8015_gfx_sweep_enable(gfx, &iop);
+		win = devm_ioremap(gfx->dev, gfx_probes[i].addr, GFX_PROBE_LEN);
+		if (!win)
+			continue;
+		v = readl(win + 0x08);
+		if (v & 0x70000) {
+			dev_info(dev, "probe %s: +0x08 = %#x looks like INBOX_CTRL; enabling\n",
+				 gfx_probes[i].name, v);
+			apple_t8015_gfx_probe_enable(gfx, &gfx_probes[i]);
+		}
+	}
+
+	apple_t8015_gfx_stage(gfx, "10/12: re-probe the candidates");
+	for (j = 0; j < 2; j++) {
+		for (i = 0; i < ARRAY_SIZE(gfx_probes); i++)
+			apple_t8015_gfx_probe_dump(gfx, &gfx_probes[i]);
+		msleep(1000);
+	}
 
 	apple_t8015_gfx_stage(gfx, "11/12: done");
 }

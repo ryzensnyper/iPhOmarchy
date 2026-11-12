@@ -1178,3 +1178,64 @@ Boot #17 therefore sweeps both `gfx-kf` windows 64 bytes at a time, logs every
 non-zero chunk, and tries the `0x1111` enable write on every live page.  Full
 write-up: `phase2.2/A7IOP-MAILBOX.md`; extraction tool:
 `GPU-WIP/tools/a7iop-mailbox-re.py`.
+
+## Phase 2.2 — boot #17 executed: the Fender window map, and a hole (2026-11-12)
+
+Payload `96ab42f3…`.  The sweep found the live registers in the **Fender**
+window and then died on a hole, which reset the phone:
+
+```
+fender sweep +0x1000: 00000001 00000000 00000000 00000000
+fender sweep +0x2000: 00000000 00000000 00000000 0e100000
+fender sweep +0x2040: 00000000 00000000 00000001 00000000
+fender sweep +0x4000: 01001000 00000000 00010704 00000000
+fender sweep +0x4040: 00000000 00000000 0000000f 0000002f
+fender sweep +0x4080: 00000028 00000040 00000028 00000028
+```
+
+| offset | value | what it is |
+|---|---|---|
+| `+0x1000` | `0x1` | the Fender power state we requested (state 1) |
+| `+0x1004` | `0x0` | the power *ack* never sets on the A11 |
+| `+0x200c` | `0x0e100000` | the firmware window base we wrote |
+| `+0x2048` | `0x1` | the run bit we set |
+| `+0x4000` | `0x01001000` | **live, unknown** — looks like Apple's `MAILBOX_SET` (bits 12, 20, 24) |
+| `+0x4004` | `0x0` | looks like `MAILBOX_CLR` |
+| `+0x4008` | `0x00010704` | looks like `INBOX_CTRL`: status bit 16 set, count field `0x07` |
+| `+0x4048` | `0x0000000f` | unknown (`0xf`) |
+| `+0x404c` | `0x0000002f` | unknown (`0x2f`) |
+| `+0x4080` | `0x00000028` | unknown — `40` is the A10's `phys_bus_width` |
+| `+0x4084` | `0x00000040` | unknown (`64`) |
+| `+0x4088`, `+0x408c` | `0x28`, `0x28` | unknown |
+| `+0x40c0` | — | **hole: the read stalled and the phone reset** |
+
+Two things follow.
+
+1. The `+0x4000` block matches Apple's mailbox layout (SET / CLR / INBOX_CTRL
+   in the first three words) **but it is in the Fender window**, not the IOP
+   window — and the IOP window was never reached because the sweep died first.
+   `INBOX_CTRL = 0x00010704` says "not empty" (bit 16 set) with a count of 7,
+   which would mean the IOP posted messages we never read.
+2. The `0x7e1` CORE_ID and `0x10704` both carry `0x07` in bits 15:8 — the same
+   "number of scalable units" field under the Rogue encoding, so the A11 core
+   plausibly has 7 clusters (the A10 had 6).  Worth confirming against the
+   G10P kext before it is used.
+
+## Boot #18 (built, NOT booted — needs a go)
+
+No blind sweeps any more: targeted 64-byte probes of the mailbox candidates,
+in this order.
+
+| # | address | why |
+|---|---|---|
+| 1 | `0x204d21000` | Apple's map: IOP window base + `0x1000` |
+| 2 | `0x204d25000` | our DT mailbox base + `0x1000` |
+| 3 | `0x204d20000` | IOP window head (the window registers we already know) |
+| 4 | `0x204d24000` | our DT mailbox base (read back zero in boot #16) |
+| 5 | `0x204d03000` | `Fender+0x3000`, i.e. the base of the `+0x4000` block |
+| 6–8 | `0x204d04000/4040/4080` | the live block, re-read |
+| 9–10 | `0x204d02000/01000` | the Fender window head |
+
+The `0x1111` enable write is applied **only** where the probe at `+0x08`
+already shows Apple's INBOX_CTRL status bits (16..18) — no blind writes — and
+every candidate is re-probed afterwards.

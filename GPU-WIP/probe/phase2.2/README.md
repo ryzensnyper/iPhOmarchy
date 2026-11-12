@@ -644,3 +644,19 @@ writing the FIFO enable bits**, so the block is unclocked — that, not a bad
 address, is why boot #14's RTKit livelocked.  The A10 tree confirms the offset
 (GPU base + `0xD24000`), so the next step is the `AppleA7IOP`
 `_acquireMailboxPower` / `AP_MAILBOX_SET` path in the D21 kernelcache.
+
+### Boot #17 verdict (executed 2026-11-12)
+
+Payload `96ab42f3…`.  The Fender window sweep produced the live map (power
+state `0x1` at `+0x1000`, window base at `+0x200c`, run bit at `+0x2048`) and
+then **stalled on a hole at `+0x40c0`**, resetting the phone before it reached
+the IOP window.
+
+The interesting part is `+0x4000`: `0x01001000 / 0x0 / 0x00010704` — the exact
+shape of Apple's `MAILBOX_SET` / `MAILBOX_CLR` / `INBOX_CTRL`, in the *Fender*
+window, with `INBOX_CTRL` saying "not empty, count 7".
+
+Boot #18 replaces the sweep with ten targeted 64-byte probes of the mailbox
+candidates (`0x204d21000`, `0x204d25000`, `0x204d24000`, `0x204d03000`,
+`0x204d04000…`), applies the `0x1111` enable only where `+0x08` already looks
+like Apple's `INBOX_CTRL`, and re-probes everything.
