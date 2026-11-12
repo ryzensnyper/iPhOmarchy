@@ -2236,3 +2236,54 @@ running).
 **interrupt controller** instead of at the mailbox, because the mailbox's own
 mask register does not accept writes on this block; unmask it again as soon
 as the state becomes valid, so the firmware's first message is not lost.
+
+## Phase 2.2 — boot #33 executed: clean run, and the blocker is exactly "the firmware never speaks" (2026-11-12)
+
+Payload `1a2bebcf…`.  **The whole boot completed** — the interrupt storm is gone
+(the receive interrupt is now masked at the interrupt controller while the
+mailbox state is invalid, and unmasked again once it becomes valid), so the log
+is clean and every stage runs.
+
+```
+GFX-DIAG: RTKit up on the GFX mailbox
+GFX-STAGE 5/12: RTKit boot (waiting for the firmware HELLO)
+GFX-DIAG: apple_rtkit_boot -> -62              <- -ETIME: no EPMAP in 15 s
+GFX-DIAG: start_ep(0x20) -> -22                <- endpoint unknown (no EPMAP)
+GFX-DIAG: start_ep(0x21) -> -22
+mailbox: SET 0x1001000 CLR 0x0 INBOX_CTRL 0x10704 OUTBOX_CTRL 0x0
+GFX-STAGE 9/12: send the AGX init message
+init page at window+0x98000, ready flag at heap+0x14188
+sending the init message 0x8100080c198000 on ep 0x20
+init message -> -22                            <- cannot even be sent
+firmware ready flag at heap+0x14188 = 0 after 3000 ms
+GFX-DIAG: RTKit version 0
+```
+
+### What this proves
+
+* The init data **is** now built (the tree's `pvr_apple_layout_build()` — the
+  init page at `window+0x98000`, the descriptor page at `+0x9c000`, the heap
+  contexts) and the message we build is `0x81 << 48 | (win_dma + 0x98000)` —
+  byte for byte what the G10P firmware's init handler decodes.
+* But the message **cannot be sent**: `-22` (EINVAL) because the endpoint is
+  not known — the endpoint map comes from the firmware's EPMAP, which never
+  arrives because `apple_rtkit_boot()` times out (`-62` = -ETIME) waiting for
+  it.
+* So everything is downstream of one thing: **the RTBuddy firmware does not
+  send its HELLO**, i.e. it does not start.
+
+The mailbox state is unchanged and stale (`INBOX_CTRL = 0x10704`, both status
+bits clear), which is what a mailbox nobody has initialised looks like.
+
+### Boot #34 candidates
+
+1. **The AGX config RAM** (`AGXFender::writeConfigRAMCommand32`): the A11 does
+   not start the GPU with a window plus a run bit -- iOS writes commands into
+   the Fender's config RAM.  The offsets are in the `AGXG10P__TEXT_EXEC` blob
+   in the knowledge base (offline work).
+2. **The 256 config registers at `+0x8130`** that the KB calls the "GFX config
+   restore": the AGX kext reads them, compares, zeroes a 64-byte scratch and
+   sets a flag before the firmware runs.
+3. A read-only sweep of the whole IOP window before and after the run bit, to
+   see whether the firmware touches *anything* (the DART/config block at
+   `+0x8000` would be the first sign of life).

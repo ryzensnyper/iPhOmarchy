@@ -750,6 +750,82 @@ static void apple_t8015_gfx_mbox_state(struct apple_t8015_gfx *gfx)
 	}
 }
 
+/*
+ * Phase 2.2 boot #33: send the AGX init message.
+ *
+ * The tree's pvr_apple_fw_start() is the reference for this step:
+ *
+ *     u32 init = pvr_apple_layout_init_offset();   (0x98000)
+ *     memset(apple->win + init, 0, PVR_APPLE_WINDOW_SIZE - init);
+ *     memset(apple->heap, 0, PVR_APPLE_HEAP_SIZE);
+ *     pvr_apple_layout_build(apple->win, apple->win_dma, apple->heap,
+ *                            apple->heap_dma, apple->vm_root);
+ *     pvr_apple_layout_build_ta(apple->heap);
+ *     pvr_apple_layout_build_3d(apple->heap);
+ *     wmb();
+ *     apple_rtkit_send_message(apple->rtk, APPLE_EP_AGX_INIT,
+ *                              APPLE_MSG_INIT | (apple->win_dma + init), NULL, false);
+ *     read_poll_timeout(heap_read32, ready, ready == 1, ...);
+ *
+ * APPLE_MSG_INIT is 0x81 << 48, which is exactly the message type the G10P
+ * firmware's init handler decodes (the high word's bits 23:16 must be 0x81),
+ * and the low word carries the physical address of the init page.
+ */
+#define APPLE_MSG_INIT	(0x81ull << 48)
+#define GFX_HEAP_SIZE	0x400000UL	/* PVR_APPLE_HEAP_SIZE */
+
+void pvr_apple_layout_build(u8 *win, u64 win_pa, u8 *heap, u64 heap_pa,
+			    u64 gpu_root);
+void pvr_apple_layout_build_ta(u8 *heap);
+void pvr_apple_layout_build_3d(u8 *heap);
+u32 pvr_apple_layout_init_offset(void);
+u32 pvr_apple_layout_ready_offset(void);
+
+static void apple_t8015_gfx_send_init(struct apple_t8015_gfx *gfx)
+{
+	void *heap = NULL;
+	dma_addr_t heap_dma = 0;
+	u32 init, ready_off, ready;
+	u64 msg;
+	unsigned int i;
+	int ret;
+
+	heap = dmam_alloc_coherent(gfx->dev, GFX_HEAP_SIZE, &heap_dma,
+				   GFP_KERNEL);
+	if (!heap) {
+		dev_err(gfx->dev, "cannot allocate the %u-byte heap\n",
+			(unsigned int)GFX_HEAP_SIZE);
+		return;
+	}
+
+	init = pvr_apple_layout_init_offset();
+	ready_off = pvr_apple_layout_ready_offset();
+	dev_info(gfx->dev, "init page at window+0x%x, ready flag at heap+0x%x\n",
+		 init, ready_off);
+
+	memset(gfx->win + init, 0, GFX_WINDOW_SIZE - init);
+	memset(heap, 0, GFX_HEAP_SIZE);
+	pvr_apple_layout_build(gfx->win, gfx->win_dma, heap, heap_dma, 0);
+	pvr_apple_layout_build_ta(heap);
+	pvr_apple_layout_build_3d(heap);
+	wmb();
+
+	msg = APPLE_MSG_INIT | (gfx->win_dma + init);
+	dev_info(gfx->dev, "sending the init message %#llx on ep 0x20\n", msg);
+	ret = apple_rtkit_send_message(gfx->rtk, APPLE_EP_AGX_INIT, msg, NULL,
+					false);
+	dev_info(gfx->dev, "init message -> %d\n", ret);
+
+	for (i = 0; i < 30; i++) {
+		ready = readl(heap + ready_off);
+		if (ready)
+			break;
+		msleep(100);
+	}
+	dev_info(gfx->dev, "firmware ready flag at heap+0x%x = %u after %u ms\n",
+		 ready_off, ready, i * 100);
+}
+
 static void apple_t8015_gfx_boot_work(struct work_struct *work)
 {
 	struct apple_t8015_gfx *gfx =
@@ -821,18 +897,22 @@ static void apple_t8015_gfx_boot_work(struct work_struct *work)
 	apple_t8015_gfx_stage(gfx, "8/12: Fender power request (state 1)");
 	apple_t8015_gfx_fender_power(gfx);
 
-	apple_t8015_gfx_stage(gfx, "9/12: the mailbox registers");
+	apple_t8015_gfx_stage(gfx, "9/12: send the AGX init message");
+	if (gfx->rtk)
+		apple_t8015_gfx_send_init(gfx);
+
+	apple_t8015_gfx_stage(gfx, "10/12: the mailbox registers");
 	apple_t8015_gfx_dump_range(gfx, gfx->iop, "iop", 0x00, 0x40);
 	apple_t8015_gfx_dump_range(gfx, gfx->iop, "iop", 0x1000, 0x1040);
 
-	apple_t8015_gfx_stage(gfx, "10/12: RGX identity + CORE_ID/PBVNC");
+	apple_t8015_gfx_stage(gfx, "11/12: RGX identity + CORE_ID/PBVNC");
 	apple_t8015_gfx_probe_rgx(gfx);
 
-	apple_t8015_gfx_stage(gfx, "11/12: the RTKit state");
+	apple_t8015_gfx_stage(gfx, "12/12: the RTKit state");
 	if (gfx->rtk)
 		dev_info(dev, "GFX-DIAG: RTKit version %d\n", gfx->rtk->version);
 
-	apple_t8015_gfx_stage(gfx, "12/12: done");
+	apple_t8015_gfx_stage(gfx, "done");
 }
 
 static int apple_t8015_gfx_probe(struct platform_device *pdev)
