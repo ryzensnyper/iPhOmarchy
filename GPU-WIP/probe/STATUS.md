@@ -3035,3 +3035,64 @@ covered those, so the remaining suspects are the *gate id* and the *0x202*
 register selector, and the fact that the PMP's reply is a management message
 that our driver logs as **"unknown management message: 0x0 (type: 0x00)"**
 and throws away.
+
+### Boot #52: the AGX block's pages 0 and 1 (payload `0afc7c76…`)
+
+Clean boot, phone alive as `05ac:4144`.  Stage **9a/12** dumped the AGX
+register block (the Fender window) word by word:
+
+```
+agx+0x0054 = 0x00000006
+agx+0x1000 = 0x00000001
+agx+0x1014 = 0x00000002
+```
+
+**Three live registers in the whole 8 KiB.**  `+0x0054 = 6` was known;
+`+0x1014 = 2` is new; `+0x1000 = 1` is our own power request.
+
+The `ps-reg-offset` hypothesis is **wrong**: `+0x1008` and `+0x1020` are
+both zero and ignore writes (we wrote 0x11 to each).  So the mailbox's own
+power-state register is somewhere else, or the mailbox is gated from a
+different block entirely.
+
+The rest of the boot was unchanged: the mailbox at `+0x110`/`+0x114` still
+reads zero and the enable write still does not stick.
+
+## The PMP's clock-gate handler, decoded properly (2026-11-12)
+
+The earlier addresses were 12 bytes out: llvm-mc prints one line per
+*instruction*, so the addresses have to be accumulated from the encoding
+lengths, not from the byte offset (`GPU-WIP/tools/pmpdis.py` does it
+correctly now).  With that fixed:
+
+* the management dispatch is at **0x0100ddc2** and takes the type from the
+  message's **bits 52..55** — four bits, sixteen types — via a `tbb` jump
+  table at **0x0100dde8**;
+* **type 3 → 0x0100e92c**, which is the clock-gate handler (the "!clg: %08x"
+  string is in its literal pool at 0x0100e9bc);
+* type 11 (0xb) → 0x010131ee, the SET_AP_PWR_STATE handler (the one that
+  works).
+
+The handler decodes the message's **high** word as
+
+| bits | meaning |
+|---|---|
+| 0..11 | the gate id (`sbfx`, signed) |
+| 12..19 | the PMGR device (`ubfx`) |
+| 20..31 | the command |
+
+with bits 22..23 of the high word (message bits 54..55) rejecting the
+message, and the value it writes chosen by the command:
+
+| command | value written |
+|---|---|
+| bit 31 set | `device << 20` |
+| bit 30 set | `device << 12` |
+| command bits 20..21 != 0 | `device << 21` |
+| otherwise | `device << 12` |
+
+**And the bug in boot #47: all 324 of its gate messages went out on the
+GFX's own RTKit channel — the one on the dead mailbox — so none of them
+ever reached the PMP.**  They have to go out on the **PMP's** management
+endpoint, which works (the PMP answers our SET_AP_PWR_STATE on it).
+Boot #53 sends them there.

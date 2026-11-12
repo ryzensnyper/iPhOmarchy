@@ -45,12 +45,17 @@ boots**, so "the mailbox is dead" was never established.
 
 So the mailbox is in the right place and the block is powered; what is
 missing is that the *mailbox's own* power/clock state was never raised.
-Apple's kext reads **+0x1008 and +0x1020** from the AGX block and never
-uses +0x1000 — and `AppleA7IOPV1` gets its mailbox power-state register
-offset from the device-tree property **`ps-reg-offset`**.  Our driver has
-been writing **+0x1000**, which merely echoes the value back.  **Boot #52
-dumps the AGX block's pages 0 and 1 word by word and then tries +0x1008 and
-+0x1020.**
+Boot #52 dumped the AGX block's pages 0 and 1 word by word: **only three
+registers are live in the whole 8 KiB** — `+0x54 = 6`, `+0x1014 = 2`, and
+`+0x1000 = 1` (our own power request).  The `ps-reg-offset` hypothesis is
+wrong: `+0x1008` and `+0x1020` are zero and ignore writes.
+
+**The blocker is now understood: the PMP is what gates the Kingfisher, and
+boot #47's 324 gate messages never reached it** — they went out on the
+*GFX's* RTKit channel (the one on the dead mailbox) instead of the PMP's
+management endpoint.  The PMP's clock-gate request is **management type 3**
+with the message's high word = {gate id 0..11, device 12..19, command
+20..31}.  **Boot #53 sends it to the PMP.**
 
 ## 2. The hardware map (measured, all AP addresses)
 
@@ -247,17 +252,17 @@ the A11 is probably the same story — we have not found its register yet.
 4. **The GFX-KF's gate register** (§6).  The A12 writes its GPU's rails
    directly; find the A11's equivalent (the `no_ps` devices' gates) and
    write it.  The ADT's gfx-kf node uses the gate of device 149.
-   The PMP is what writes it: its firmware's clock-gate handler is at
-   **0x0100e92c** and parses the message's high word as
-   {gate id bits 0..11, device bits 12..19, command bits 20..31}, writing
-   `device << 12` (or `<< 20`, `<< 21`) — so the request is
-   `(cmd << 52) | (device << 44) | (gate << 32)` with the **type in the low
-   four bits of `cmd`** (the message's bits 52..55) and bits 54..55 clear.
-   The PMP's management dispatch (0x0100ddc2) has **16 types**; boot #47
-   swept 324 shapes and the PMP never even answered (its six periodic
-   messages are the only replies we ever see), so the gate request is
-   probably **not** a management message, or the gate id / the 0x202
-   register selector is still wrong.
+   The PMP is what writes it: its firmware's clock-gate handler is
+   **management type 3** at **0x0100e92c**, and it parses the message's high
+   word as {gate id bits 0..11, device bits 12..19, command bits 20..31},
+   writing `device << 12` (or `<< 20`, `<< 21`) depending on the command's
+   bits.  The request is `(cmd << 52) | (device << 44) | (gate << 32)` with
+   the **type in the low four bits of `cmd`** (the message's bits 52..55).
+   **Boot #47 sent all of that to the wrong RTKit channel** (the GFX's, on
+   the dead mailbox) — boot #53 sends it to the PMP's management endpoint.
+   The PMP's six periodic messages are the only replies we have ever seen;
+   a dispatched request gets a status reply, so boot #53's replies are the
+   signal that the format is right.
 5. **The PMP's gate service endpoint** (§5).  It is reached through a
    computed dispatch (no function-pointer table entry), and the RTKit layer
    refuses to send on an endpoint that has not been started — so an endpoint
@@ -284,11 +289,11 @@ cd /home/doug/orchard
 ```
 
 * The kernel tree is a git repo on branch **`gpu/phase2.2`**; the driver work
-  is committed as **`a0ac7ce34bde`** (boot #52: the AGX block's pages 0 and 1
-  and the kext's own power-state registers).
+  is committed as **`64ca8206e4ef`** (boot #53: the clock-gate request goes
+  to the PMP).
 * The last built payload:
-  **`0afc7c766a36d012298edd7807db217c046404e980a69754b049d43d6181b516`**
-  (boot #52).
+  **`18132120b436069ca29374da91d6a42dc93af357c6f059b96f069f0dc478d71d`**
+  (boot #53).
 * The kernel log is streamed to `/tmp/opencode/phone-kmsg.log` by
   `GPU-WIP/tools/kmsg-host.py` (pid 412793; do **not** kill it).  Boot #N
   starts at the `GFX-STAGE 0/12` line.
