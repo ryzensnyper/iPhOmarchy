@@ -2664,3 +2664,30 @@ with a command of at least 4 (or with bit 30/31 set).
 Boot #46 (payload `83763b65…`, built) sweeps 12 commands × the PMGR device
 ids (GFX-KF 149, its list index 121, GFX 124) × 5 gate ids, starting the
 endpoint 32 first, and watches for the PMP's reply.
+
+### Boot #46: the gate message never left (payload `83763b65…`)
+
+The message format was right, the *endpoint* was wrong: the RTKit layer
+refused every send with "Endpoint 0x20 is not running" — 0x20 is the AGX
+init endpoint, and the PMP never acknowledged a STARTEP for it.
+
+But the format itself now makes the endpoint obvious.  The PMP's handler
+parses the message's high 32 bits as
+
+| high-word bits | payload bits | field |
+|---|---|---|
+| 0..11 | 32..43 | the gate id |
+| 12..19 | 44..51 | the device |
+| 20.. | 52..63 | the command |
+
+and rejects the message when bits 22..23 are set (payload bits 54..55 =
+the *type's* bits 2..3).  That is exactly the layout of an RTKit
+**management** message — type in bits 59:52, payload below — so the gate
+request is a management message on **endpoint 0**, not an app endpoint.
+
+Boot #47 (payload `065690af…`, built) sends 27 command values (all well
+clear of the management types the tree knows — HELLO 1, STARTEP 5,
+SET_IOP_PWR_STATE 6, EPMAP 8, SET_AP_PWR_STATE 0xb — because sending one of
+those by accident would confuse the PMP) × the PMGR device ids (GFX-KF 149,
+its list index 121, GFX 124) × 4 gate ids, on endpoint 0, and watches for
+the PMP's reply (our receive callback prints every message it gets).
