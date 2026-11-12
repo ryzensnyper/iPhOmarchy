@@ -2731,3 +2731,57 @@ PMP's node.
    endpoint 0x20.
 3. **The enable values.**  Only the kext knows what `M3Wrap_CTRL` and
    `IntOutIRQEn` must be set to.
+
+## The PMGR picture (offline, 2026-11-12)
+
+The A11's ADT gives the PMGR's device table and the register banks behind it:
+
+| device | id | flags | its register |
+|---|---|---|---|
+| GFX | 124 | perf | PMGR window 0 + 0x80338 (= our `ps_gfx`) |
+| GFX-SGX | 148 | no_ps | window 1 + 0x80000 (nominal) |
+| GFX-KF | 149 | no_ps | window 1 + 0x80000 (nominal) |
+| GFX-BUSY | 123 | no_ps | window 1 + 0x80000 (nominal) |
+| PMP | 54 | perf, **critical, on** | window 0 + 0x80308 |
+
+**The GFX has no "on" flag; the PMP does.**  The ADT that the bootloader
+hands over therefore says: the PMP is running, the GPU is not powered.  That
+is expected under PongoOS — nothing ever ran the GPU's power-up sequence —
+and it fits every symptom: the mailbox answers reads but ignores writes,
+the coprocessor never sends its HELLO, and the AGX's own registers are all
+reset values.
+
+The GPU's power state is requested through the PMGR's ps bank (window 0 +
+0x80300 + psidx*8, 8-byte stride ✓ — the GFX is psidx 7 → 0x80338 ✓, and
+`ps_regs[4].mask = 0x002a04ff` says which bits may be written ✓), but the
+*PMP* is the one that has to act on the request.
+
+### The A12 does it without the PMP
+
+BadApple's A12 guide (`kieroid/badapple`, `docs/gpu.md`) says:
+
+> iBSS leaves GPU rails 2 (SRAM) and 4 (core) at 0, so any RGX access wedges
+> the coprocessor. Clear bits 10 and 12 of `0x23b0a0000` and the rails
+> follow the GPU DVFS table at `0x23b070000`.
+
+So on the A12 the GPU's rails are a **plain PMGR register** that Linux
+writes directly (the A12's PMGR + 0xa0000), and the BadApple/Cascadia A12
+driver never asks the PMP.  The A11's GPU is very likely the same story —
+the AGX's fender/core apertures are at the *same addresses* on both chips
+(`Fender 0x204d00000, RGX 0x204000000` in the A12's hwdata B, and the
+A11's `gfx-kf`/`sgx` nodes ✓) — but the A11's PMGR layout differs (its ps
+banks are at window 0 + 0x80000…0x88000 ✓, not at 0xa0000 ✓).
+
+The A11's ADT has no `pwrgate-regs` table (the A12's does), so on the A11 the
+GFX's rails are the PMP's job — which is exactly the gate message we have
+been trying to get right.
+
+### The AGX hwdata (the A11's own version)
+
+The kernelcache's hwdata table (53 entries of {firmware address, mask,
+buffer offset}) has offsets 0x20/0x24, 0x48/0x4c, 0x140/0x148,
+0x188…0x19c, 0x404…0x414, 0x500, 0x800…0x80c, 0x900…0x91c, 0xc10/0xc14,
+0xc30/0xc34, 0xe00 — including the timebase pair at 0x808/0x80c and the
+A10-pair at 0xc30/0xc34, the very offsets our driver writes ✓.  The A12's
+hwdata B is at +0x640 (the IO maps) / +0x958 (power mode) / +0xa70 (perf
+tables) / +0x16d0 (unit masks) — a newer ABI, but the same idea.
