@@ -31,7 +31,26 @@ which is the **Fender window at 0x204d00000** — so
 **0x204d00110 (control), 0x204d00114 (status), 0x204d00800 (TX),
 0x204d00830 (RX)**.  Boots #34/#35 and #43/#44 used the *M3Wrap base
 class's* offsets (+0x08/+0x48/...), and **+0x110 was never read once in 19
-boots**, so "the mailbox is dead" was never established.  Boot #50 reads it.
+boots**, so "the mailbox is dead" was never established.
+
+**Boots #50 and #51 settled the location and then the cause:**
+
+* boot #50: `+0x4008` reads `0x00010704`, the device-information page's
+  third 32-bit field (the page is 8-byte stride) — so the **AGX register
+  block is the Fender window** beyond doubt; the mailbox itself read zero.
+* boot #51: the same read *after* the Fender power request, plus Apple's own
+  enable sequence (a read-modify-write of **bit 0 of +0x114**) — still zero,
+  and **the write did not stick**.  A register that ignores writes is a
+  register whose domain is dark.
+
+So the mailbox is in the right place and the block is powered; what is
+missing is that the *mailbox's own* power/clock state was never raised.
+Apple's kext reads **+0x1008 and +0x1020** from the AGX block and never
+uses +0x1000 — and `AppleA7IOPV1` gets its mailbox power-state register
+offset from the device-tree property **`ps-reg-offset`**.  Our driver has
+been writing **+0x1000**, which merely echoes the value back.  **Boot #52
+dumps the AGX block's pages 0 and 1 word by word and then tries +0x1008 and
++0x1020.**
 
 ## 2. The hardware map (measured, all AP addresses)
 
@@ -222,17 +241,31 @@ the A11 is probably the same story — we have not found its register yet.
 2. **Boot #50's result** — does CPU_CTRL at 0x204d00110 read anything?  If
    it is non-zero the mailbox is live and we can talk RTKit; if it is zero the
    Kingfisher is still dark and lead 2 (the gate register) is next.
-3. **The GFX-KF's gate register** (§6).  The A12 writes its GPU's rails
+3. **The AGX block's own power/clock registers** (+0x1008 / +0x1020) — boot
+   #52 tries them.  This is Apple's `ps-reg-offset` register, and the
+   kext's offsets are the only evidence for where it is.
+4. **The GFX-KF's gate register** (§6).  The A12 writes its GPU's rails
    directly; find the A11's equivalent (the `no_ps` devices' gates) and
    write it.  The ADT's gfx-kf node uses the gate of device 149.
-4. **The PMP's gate service endpoint** (§5).  It is reached through a
+   The PMP is what writes it: its firmware's clock-gate handler is at
+   **0x0100e92c** and parses the message's high word as
+   {gate id bits 0..11, device bits 12..19, command bits 20..31}, writing
+   `device << 12` (or `<< 20`, `<< 21`) — so the request is
+   `(cmd << 52) | (device << 44) | (gate << 32)` with the **type in the low
+   four bits of `cmd`** (the message's bits 52..55) and bits 54..55 clear.
+   The PMP's management dispatch (0x0100ddc2) has **16 types**; boot #47
+   swept 324 shapes and the PMP never even answered (its six periodic
+   messages are the only replies we ever see), so the gate request is
+   probably **not** a management message, or the gate id / the 0x202
+   register selector is still wrong.
+5. **The PMP's gate service endpoint** (§5).  It is reached through a
    computed dispatch (no function-pointer table entry), and the RTKit layer
    refuses to send on an endpoint that has not been started — so an endpoint
    sweep needs the STARTEP acknowledged, which 0x20 was not.
-5. **The enable values.**  Only the kext knows what M3Wrap_CTRL and
+6. **The enable values.**  Only the kext knows what M3Wrap_CTRL and
    IntOutIRQEn must be; our guesses (1 and 0x1111) may enable nothing, and
    a write-protected block looks exactly like a dead page.
-6. **The core window** (0x04000000): the firmware can reach it, so the
+7. **The core window** (0x04000000): the firmware can reach it, so the
    mailbox may be there — but the RGX's registers trap, so it has to be
    probed one offset at a time.
 
@@ -251,11 +284,11 @@ cd /home/doug/orchard
 ```
 
 * The kernel tree is a git repo on branch **`gpu/phase2.2`**; the driver work
-  is committed as **`c6ee27e772b1`** (boot #50: the mailbox at Apple's V4 GFX
-  offsets).
+  is committed as **`a0ac7ce34bde`** (boot #52: the AGX block's pages 0 and 1
+  and the kext's own power-state registers).
 * The last built payload:
-  **`09c1f3080c80be96b9ded93c80e29bd95823d8351adcf932ec6721564ed13844`**
-  (boot #50, read-only).
+  **`0afc7c766a36d012298edd7807db217c046404e980a69754b049d43d6181b516`**
+  (boot #52).
 * The kernel log is streamed to `/tmp/opencode/phone-kmsg.log` by
   `GPU-WIP/tools/kmsg-host.py` (pid 412793; do **not** kill it).  Boot #N
   starts at the `GFX-STAGE 0/12` line.
@@ -290,6 +323,7 @@ built-in driver).
 | the mailbox map, and the V4 class | `GPU-WIP/probe/phase2.2/A7IOP-MAILBOX.md` |
 | the A12 (BadApple/Cascadia) AGX driver as a reference | `GPU-WIP/probe/phase2.2/A12-REFERENCE.md` |
 | the offline RE helpers (now in the repo) | `GPU-WIP/tools/` — see `tools/README.md` |
+| the PMP firmware's clock-gate handler | `GPU-WIP/probe/STATUS.md` (boot #51 section) |
 | **the V4 GFX register map (solved)** | `GPU-WIP/probe/phase2.2/A7IOP-MAILBOX.md`, reproduced by `GPU-WIP/tools/a7iop-v4-gfx.py` |
 | the project's own earlier RE (huge) | `Known Good State/firmware/GPU/` — `A11-GPU-FINDINGS.md`, `A11-GPU-G10P-LAYOUT.md`, `A11-GPU-G10P-BOOTCHAIN.md`, `A11-GPU-G10P-STAGE2.md`, the extracted `AGXG10P__*.bin` segments, `agxg10p.asm` |
 
