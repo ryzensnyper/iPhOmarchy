@@ -2582,3 +2582,46 @@ firmware: 0x20/0x24, 0x48/0x4c, 0x140/0x148, 0x188…0x19c, 0x404…0x414,
 includes the timebase pair at 0x808/0x80c and the A10-pair at 0xc30/0xc34
 — the very offsets our driver writes ✓ — so it is the hwdata layout, the
 same mechanism the A12 driver builds (`agx_fw.c`'s `agx_build()`).
+
+## Phase 2.2 — boots #43…#45: the enable sweep, and what it rules out (2026-11-12)
+
+Payloads `70f55003…` (IOP sweep), `2f898500…` (Fender sweep), `214d320f…`
+(the two candidate pages in full).  All three booted cleanly.
+
+The enable sweep writes both classes' sequences to every page of an
+aperture and prints the pages that take the write.  The results:
+
+| page | takes | what it is |
+|---|---|---|
+| `iop+0x0000` | +0x04, +0x20 | the firmware window registers |
+| `iop+0x8000` | +0x00 | the DART (`dart_vm_size`) |
+| `iop+0xc000` | +0x04, +0x08 | **empty apart from our writes** |
+| `iop+0x10000` | **+0x00, +0x04, +0x08, +0x20, +0x48** | the only page that takes *both* V4 writes — but it is a device-info/ID block, not a mailbox (boot #45) |
+| `fender+0x0000` | +0x54 | (a lone register) |
+| `fender+0x1000` | — | the power state |
+| `fender+0x2000` | — | the window registers |
+| `fender+0x4000` | +0x80 (0x28 → 0x29) | the device-info page — *not* fully read-only after all |
+
+Boot #45 dumped `iop+0x10000` in full: `+0x10/+0x14` are a 64-bit serial
+that counts down between boots, `+0x30` and `+0x40` likewise, `+0x08/+0x0c`
+are 0xffffffff — a chip-ID block, not a mailbox.  `iop+0xc000` is empty
+apart from our own writes.
+
+**So neither aperture contains a mailbox that accepts the enable
+sequence.**  Three things are still open, in order:
+
+1. **The mailbox may need a different enable value.**  The V4 class's
+   `M3Wrap_CTRL` (+0x08) and `IntOutIRQEn` (+0x48) are the registers we
+   wrote, but only the *A7IOPV4GFX* code knows their values; our guesses
+   (1 and 0x1111) may simply not enable anything, and a write-protected
+   block would look exactly like a dead page.
+2. **The clock gate.**  The ADT gives `/arm-io/gfx-kf` `power-gates = 149`
+   and `clock-gates = 149` — we have only ever touched the *perf state*
+   (`ps_gfx` at PMGR 0x80338), never a gate.  If the GFX's clock is off,
+   the mailbox's registers would read zero *and* ignore writes, which is
+   exactly what every candidate does.  The PMP gate message we tried in
+   earlier boots may have been the wrong lever (or the wrong format).
+3. **The core window.**  The firmware's IO map lists `0x04000000` at size
+   0x200000, so the firmware can reach it — and the mailbox may live
+   there.  Reading it blind is dangerous: `0x20400000 + 0x00` traps the
+   SoC (boot #42), so it has to be probed one offset at a time.
