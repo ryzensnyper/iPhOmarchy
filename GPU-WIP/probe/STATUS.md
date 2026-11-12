@@ -642,6 +642,38 @@ Known anchors to attack it with:
 * the first application endpoint the PMP advertises is **endpoint 32**
   (EPMAP `0x1` with base 1), i.e. there is an app-level service to send to.
 
+## Offline (2026-11-12, after boot #10): the gate request is a PMP *function call*
+
+The mechanism behind the three registerless GPU gates is identified; the
+write-up with every address is in **`phase2.2/PMP-FUNCTION-CALL.md`**.  The
+short version:
+
+* The ADT's `function-*` properties (`function-clock_gate = 30:clkG()`,
+  `function-power_gate = 30:pwrG()`, `function-pmp_control = 63:PMPC()`,
+  `function-mcc_ctrl = 37:Mem$()`, `function-clock_enable = 30:TCLK(...)`)
+  mean a device calls a **named function**, not a register.
+* On iOS those calls go to the PMP: `ApplePMGR` has
+  `ApplePMGRFunctionPMPInterrupt::_callFunctionPMPv2()` and `_provider->_pmpV2()`,
+  and the client kext is **`com.apple.driver.ApplePMP`**
+  (`ApplePMPv2`/`ApplePMPThermal`) matching RTBuddy endpoint services
+  **`PMPEndpoint1`**/**`PMPEndpoint2`**; there is a private entitlement
+  `com.apple.private.pmp.performance-spi`.
+* `PMPEndpoint1` is the PMP's **endpoint 32** — exactly the first application
+  endpoint our EPMAP already showed in boots #9/#10.
+* The firmware side is a **clock-gate command handler at VA 0x0100e920**
+  (firmware linked at 0x01000000, Thumb-2) reached through a function-pointer
+  table at `~0x010119c4`; it decodes one 32-bit word with an **8-bit device
+  index in bits 12..19** (the ADT device ids fit), a 12-bit value, a 2-bit
+  mode and a direction bit, and prints `!clg: %08x` on error.
+* The PMP's own PMGR descriptor is `base 0x32000000, size 0xd8000`, which
+  contains the perf block at `+0xb4000` (so the D21 DT's `0x8c000` PMGR
+  mapping is simply too small — that was boot #10's fault).
+
+Boot #11 therefore has something concrete to send to endpoint 32, and the
+firmware's `!clg:`/`Not implemented` syslog prints should show up in the Linux
+log as `RTKit: syslog message: ...`, so one boot can both ask and read the
+answer — with the IOP mailbox read kept for last.
+
 ## Resolved (no longer a GUESS)
 
 | item | value | how it was resolved |
