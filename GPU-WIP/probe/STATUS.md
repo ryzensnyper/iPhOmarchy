@@ -3163,3 +3163,45 @@ Boot #49 had it right (`pmgr1+0x80000` = 0x235280000 ✓).
 `pmgr0+0x7b000`, `pmgr0+0x93000`, `pmgr1+0x93000` — before and after the
 gate sweep, printing each chunk's header first so that if one of them is
 a hole, the SError names it.
+
+### Boot #55: the candidate gate registers, before and after (payload `e0fe8296…`)
+
+Clean boot, **no crash** (the window bases are fixed), phone alive as
+`05ac:4144`.  The candidate registers, dumped before and after the 84
+gate messages:
+
+```
+gate reg before: pmgr0+0x7b000
+  +0x7c000 = 0x3000f2ab
+  +0x7c004 = 0xffe10c0e
+  +0x7c008 = 0xffffffff
+  +0x7c00c = 0xffffff97
+  +0x7c010 = 0xffffffff
+  +0x7c014 = 0x80109600
+  +0x7c800 = 0x00000005
+gate reg before: pmgr0+0x93000      (all zero)
+gate reg before: pmgr1+0x93000      (all zero)
+```
+
+**and the "after" dump is byte-for-byte identical — the PMP wrote nothing
+here.**
+
+Two things follow:
+
+1. **`device << 12` does land on something real for the GFX** (124 << 12 =
+   0x7c000 ✓ — a live block), but that block holds *data*
+   (0xffe10c0e, 0xffffffff, 0x80109600 — voltage/rail-looking), not a gate
+   register, and it did not change.
+2. The **GFX-SGX (0x94000) and GFX-KF (0x95000) offsets are empty** in
+   both PMGR windows.  So the Kingfisher's gate register, if it exists, is
+   not at `device << 12` — the offset must come from the *gate id* or from
+   the 0x202 selector instead.
+
+Combined with the reply being `0x40000000000000` for every one of the 84
+requests, the likeliest reading is that **the request is being rejected
+before any write** — the gate id is wrong.
+
+Boot #56 therefore sweeps the **gate id** (the message's high word bits
+0..11, the one field never varied) across 0..255 for each GPU device, and
+watches for a reply status that differs from 0x40000000000000.  It touches
+no PMGR register, so it cannot take an SError.
