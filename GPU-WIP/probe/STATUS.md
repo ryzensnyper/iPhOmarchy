@@ -3205,3 +3205,29 @@ Boot #56 therefore sweeps the **gate id** (the message's high word bits
 0..11, the one field never varied) across 0..255 for each GPU device, and
 watches for a reply status that differs from 0x40000000000000.  It touches
 no PMGR register, so it cannot take an SError.
+
+### Boot #56: the gate id, swept (payload `d9b1fe6c…`)
+
+Clean boot, phone alive as `05ac:4144`.  1024 requests (gate id 0..255 for
+each of the four GPU devices, command 0x40000003):
+
+```
+1024 x  unknown management message: 0x40000000000000 (type: 0x04)
+   6 x  unknown management message: 0x0              (type: 0x00, the periodic ones)
+```
+
+**Every reply is identical, and nothing changed**: the PS bank is the same
+as boot #49's, and the mailbox is still dark (`CPU_CTRL = 0`, the enable
+write does not stick).
+
+So the gate id (the high word's bits 0..11) is not the missing piece
+either.  The **only field never varied is the message's low word** — the
+RTKit *payload*.  The PMP's handler stores it at `obj[0]` and hands it to
+the helper, whose very first act is `and r0, r0, #31` compared against 31
+and 16 — so the payload selects something (a gate class, a value).  Every
+request so far carried a payload of **zero**.
+
+**Boot #57** (payload `ae0162a0…`) sweeps 21 payloads x 4 gate ids x 4
+devices and then reads the PS bank, the AGX block and the mailbox.  The
+observable is the mailbox coming alive, not the reply: the reply has been
+constant from the start.

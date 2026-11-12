@@ -69,9 +69,14 @@ holds rail-like *data*, not a gate register), while 0x94000 (GFX-SGX) and
 0x95000 (GFX-KF) are empty in both windows.  With the reply identical for
 all 84 requests, the request is being **rejected before any write**, and
 the one field never varied is the **gate id** (the high word's bits
-0..11).  **Boot #56 sweeps the gate id 0..255 for each GPU device** and
-watches for a reply that differs from `0x40000000000000`; it touches no
-PMGR register, so it cannot take an SError.
+0..11).  **Boot #56 swept the gate id 0..255 for each GPU device** — 1024
+requests, every reply identical (`0x40000000000000`), nothing changed,
+the mailbox still dark.  So the gate id is not it either.  The **only
+field never varied is the message's low word** — the RTKit *payload* —
+which the PMP's helper immediately does `& 31` on and compares against 31
+and 16.  Every request so far carried a payload of **zero**.  **Boot #57
+sweeps the payload**; the observable is the mailbox coming alive, since
+the reply has been constant from the start.
 
 ## 2. The hardware map (measured, all AP addresses)
 
@@ -305,10 +310,10 @@ cd /home/doug/orchard
 ```
 
 * The kernel tree is a git repo on branch **`gpu/phase2.2`**; the driver work
-  is committed as **`0e28f5e`** (boot #56: sweep the gate id).
+  is committed as **`e64df42`** (boot #57: sweep the message payload).
 * The last built payload:
-  **`d9b1fe6cc683a73f748de80a57fdae9175cb80e9f805688524c50c54836a0dd2`**
-  (boot #56).
+  **`ae0162a049ff564b51386307810bb4b3e265325d592fe91d5d012e7bdc3c1002`**
+  (boot #57).
 
 **The PMGR's two windows are 32 MiB apart, not 1 MiB:**
 
