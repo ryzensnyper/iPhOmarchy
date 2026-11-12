@@ -635,3 +635,12 @@ rgx +0x10: 00000000 00000000 000007e1 00000000
    bounded poll loop.
 3. `9/10`: 64-bit `0x0020` PBVNC + `CORE_REVISION` for the identity record.
 4. `10/10`: done — no bridge scan.
+
+### Boot #16 verdict (executed 2026-11-12)
+
+Payload `d099ad9f…`, 10 stages, phone survived.  RGX identity reproduced:
+`CORE_ID = 0x7E1`, `0x0020 = 0`.  The mailbox dump is **zero before and after
+writing the FIFO enable bits**, so the block is unclocked — that, not a bad
+address, is why boot #14's RTKit livelocked.  The A10 tree confirms the offset
+(GPU base + `0xD24000`), so the next step is the `AppleA7IOP`
+`_acquireMailboxPower` / `AP_MAILBOX_SET` path in the D21 kernelcache.

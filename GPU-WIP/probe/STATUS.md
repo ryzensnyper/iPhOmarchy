@@ -1084,3 +1084,65 @@ against the G10P kext before it is trusted.
    find.
 3. `9/10`: 64-bit `0x0020` (PBVNC) + `CORE_REVISION` read for the identity.
 4. `10/10`: done.  **No bridge scan this time.**
+
+## Phase 2.2 — boot #16 executed: identity reproduced, mailbox is **unclocked** (2026-11-12)
+
+Payload `d099ad9f…`, 10 stages, **phone stayed alive** (`05ac:4144`, net up,
+`9/10: done` printed).  No bridge scan this time.
+
+```
+rgx core_id 0x000007e1 (id 0x0000 config 0x07e1 n 0x07 c 0xe1)
+rgx pbvnc/core_revision @0x20 = 0000000000000000
+mbox control: A2I 00000000, I2A 00000000, I2A recv 00000000
+```
+
+| stage | result |
+|---|---|
+| `3/10`/`4/10` windows | identical read-back to boot #15 (`0e100000` + `00100000`, IOP enable `1`) |
+| `6/10` power request | accepted (state `0x1`) — path is reproducible |
+| `7/10` RGX identity | `CORE_ID = 0x7E1` again; `0x0020` (PBVNC/CORE_REVISION) is `0` |
+| `8/10` mailbox | **all `0x00..0x3c` zero before *and* after writing the FIFO enable bits** — the writes do not stick |
+
+### Verdict on the mailbox
+
+Two dumps around an explicit `ENABLE` write to `0x204D24008`/`0x204D2420`
+prove the block is **not powered/clocked** (a real, enabled `a7iop` mailbox
+returns a non-zero control value, and `+0x10`/`+0x38` would not stay zero).
+That is the true cause of boot #14's wedge: `apple_mbox_poll_locked()` treats a
+cleared `EMPTY` bit as "message waiting", and an unclocked block reads `0`
+forever.
+
+The address itself still looks right: the A10 tree places its GPU mailbox at
+`0x201D24000` with `reg = <0x2 0x01d24000 0 0x1000>` and `gpu@201000000`, i.e.
+**GPU base + `0xD24000`** — exactly our `0x204D24000` relative to
+`0x204000000`.
+
+### New RE lead (from the D21 kernelcache)
+
+The prelink info contains `AppleA7IOP` with mailbox-specific strings:
+
+```
+a7iop_enable_timeout
+_acquireMailboxPower(false) == kIOReturnSuccess
+_acquireMailboxPower(true) == kIOReturnSuccess
+AKF_AP_MAILBOX_SET  = 0x%08x
+AP->IOP Mailbox Log:
+```
+
+So the A7IOP mailbox has its **own power acquire path** (and an
+`AP_MAILBOX_SET` register) — the missing step is a gate we never touch, not a
+wrong base address.  That is the next offline target: disassemble
+`AppleA7IOP`'s mailbox init / `_acquireMailboxPower` and get the offsets and
+the enable sequence.
+
+## Boot #17 candidates (not built)
+
+1. **Offline-first**: `AppleA7IOP` mailbox init + `_acquireMailboxPower` from the
+   D21 kernelcache → learn the enable register and what power it asks for.
+2. Then a boot that (a) takes the proven GPU path, (b) applies that enable,
+   (c) re-dumps the mailbox, and (d) — only if the block wakes — starts RTKit
+   with a **bounded** poll loop (max 8 messages per IRQ) so a stale `EMPTY`
+   bit can never livelock the machine again.
+3. Also worth reading while there: `IOP+0x00..0x3c` (the gfx-kf window answered
+   in boot #15/#16, so it is safe), to see whether the IOP reports a running
+   state after the run bit.

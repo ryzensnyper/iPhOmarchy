@@ -80,6 +80,16 @@
 #define IOP_WINDOW		0x0008
 #define IOP_WINDOW_ENABLE	0x0038
 
+/*
+ * Boot #16 mailbox experiment.  These mirror drivers/soc/apple/mailbox.c's
+ * apple_mbox_a7iop_hw map; the whole window read 0x0 in boot #15, so the
+ * question is whether it wakes up once the FIFOs are enabled.
+ */
+#define MBOX_A2I_CONTROL	0x08
+#define MBOX_I2A_CONTROL	0x20
+#define MBOX_I2A_RECV		0x38
+#define MBOX_CONTROL_ENABLE	BIT(0)
+
 #define GFX_EP_AGX_INIT		0x20
 #define GFX_EP_AGX_DOORBELL	0x21
 
@@ -196,11 +206,11 @@ static void apple_t8015_gfx_set_window(struct apple_t8015_gfx *gfx)
 	};
 	unsigned int i;
 
-	apple_t8015_gfx_stage(gfx, "6/12: Fender window copy");
+	apple_t8015_gfx_stage(gfx, "3/10: Fender window copy");
 	for (i = 0; i < ARRAY_SIZE(fields); i++)
 		writel(fields[i], gfx->fender + FENDER_WINDOW + 4 * i);
 
-	apple_t8015_gfx_stage(gfx, "7/12: IOP window copy + enable");
+	apple_t8015_gfx_stage(gfx, "4/10: IOP window copy + enable");
 	for (i = 0; i < ARRAY_SIZE(fields); i++)
 		writel(fields[i], gfx->iop + IOP_WINDOW + 8 * i);
 
@@ -377,73 +387,8 @@ extern int apple_t8015_pmp_start_ep(u8 ep);
 #define DISP0_BRIDGE_ADDR	0x219000000UL
 #define DISP0_BRIDGE_SIZE	0x9000UL
 
-static void apple_t8015_gfx_dump_bridge(struct apple_t8015_gfx *gfx,
-					const char *tag, phys_addr_t addr,
-					size_t size)
-{
-	void __iomem *win;
-	unsigned int i, nz = 0;
 
-	win = devm_ioremap(gfx->dev, addr, size);
-	if (!win) {
-		dev_info(gfx->dev, "bridge %s: cannot map %pa\n", tag, &addr);
-		return;
-	}
 
-	/* First 0x80 bytes verbatim: that is where a target/actual or
-	 * enable/divider pair normally sits. */
-	for (i = 0; i < 0x20; i += 4)
-		dev_info(gfx->dev, "bridge %s @%pa+%#04x = %#010x\n",
-			 tag, &addr, i, readl(win + i));
-
-	for (i = 0x20; i < size; i += 4) {
-		u32 val = readl(win + i);
-
-		if (!val)
-			continue;
-		nz++;
-		if (nz <= 40)
-			dev_info(gfx->dev, "bridge %s nz @%#06x = %#010x\n",
-				 tag, i, val);
-	}
-	dev_info(gfx->dev, "bridge %s: %u non-zero words in %#zx bytes\n",
-		 tag, nz, size);
-}
-
-static void apple_t8015_gfx_probe_bridges(struct apple_t8015_gfx *gfx)
-{
-	apple_t8015_gfx_dump_bridge(gfx, "disp0(7)", DISP0_BRIDGE_ADDR,
-				    DISP0_BRIDGE_SIZE);
-	apple_t8015_gfx_dump_bridge(gfx, "gfx(8)", GFX_BRIDGE_ADDR,
-				    GFX_BRIDGE_SIZE);
-}
-
-static void apple_t8015_gfx_try_pmp_calls(struct apple_t8015_gfx *gfx)
-{
-	static const struct { const char *what; u64 msg; } cand[] = {
-		{ "clg-word GFX-SGX(148)", 0x0fULL | (148ULL << 12) },
-		{ "clg-word GFX-BUSY(123)", 0x0fULL | (123ULL << 12) },
-		{ "clg-word GFX-KF(149)", 0x0fULL | (149ULL << 12) },
-		{ "clg-word GFX(124)", 0x0fULL | (124ULL << 12) },
-		{ "fn30 arg=148", (30ULL << 32) | 148 },
-		{ "fn30 arg=124", (30ULL << 32) | 124 },
-	};
-	unsigned int i;
-	int ret;
-
-	/* Boot #12: start the endpoint first -- boot #11 sent to ep 32 while
-	 * it was still stopped. */
-	ret = apple_t8015_pmp_start_ep(32);
-	dev_info(gfx->dev, "pmp-call STARTEP(32) -> %d\n", ret);
-	msleep(1500);
-
-	for (i = 0; i < ARRAY_SIZE(cand); i++) {
-		dev_info(gfx->dev, "pmp-call %-22s msg=%#llx -> %d\n",
-			 cand[i].what, cand[i].msg,
-			 apple_t8015_pmp_send(32, cand[i].msg));
-		msleep(1500);
-	}
-}
 
 /*
  * Diagnostic (Phase 2.2 boot #9): the pmgr node declares itself a "dock fifo
@@ -511,6 +456,7 @@ static void apple_t8015_gfx_probe_rgx(struct apple_t8015_gfx *gfx)
 {
 	unsigned int i;
 	u32 v[4];
+	u32 core_id, config, lo, hi;
 
 	for (i = 0; i < 0x100; i += 16) {
 		v[0] = readl(gfx->rgx + i + 0x0);
@@ -520,26 +466,58 @@ static void apple_t8015_gfx_probe_rgx(struct apple_t8015_gfx *gfx)
 		dev_info(gfx->dev, "rgx +%#04x: %08x %08x %08x %08x\n",
 			 i, v[0], v[1], v[2], v[3]);
 	}
+
+	/*
+	 * ROGUE_CR_CORE_ID is {ID[31:16], CONFIG[15:0]}.  Newer cores put a
+	 * full BVNC in the 64-bit register at 0x0020, which is the same address
+	 * the older ones use for CORE_REVISION, so read both halves either way
+	 * and let the identity record show which one this core implements.
+	 */
+	core_id = readl(gfx->rgx + 0x18);
+	config = core_id & 0xffff;
+	lo = readl(gfx->rgx + 0x20);
+	hi = readl(gfx->rgx + 0x24);
+	dev_info(gfx->dev, "rgx core_id %#010x (id %#06x config %#06x n %#04x c %#04x)\n",
+		 core_id, core_id >> 16, config, (config >> 8) & 0xff,
+		 config & 0xff);
+	dev_info(gfx->dev, "rgx pbvnc/core_revision @0x20 = %08x%08x\n", hi, lo);
 }
 
 
 
 /*
- * Diagnostic (Phase 2.2 boot #15): read-only mailbox register dump.  Boot #14
- * showed the IOP mailbox answers (A2I control @+0x08 read 0x0, no hang) and
- * then livelocked in apple_mbox_poll_locked(): the I2A "empty" bit never read
- * as set, so the recv IRQ handler kept draining phantom 0x0 words in IRQ
- * context.  Before touching the RTKit library again this dump tells us what
- * the block actually looks like: control/enable/FIFO pointers at 0x00..0x3c.
+ * Diagnostic (Phase 2.2 boot #16): dump the GFX IOP mailbox window, then write
+ * the FIFO enable bit to both control registers and dump it again.
+ *
+ * Boot #15 read 0x204D24000+0x00..0x3c as all zero.  A block that is not
+ * enabled reads zero, and apple_mbox_poll_locked() treats a cleared "empty"
+ * bit as "there is a message", so boot #14's RTKit init drained phantom 0x0
+ * words in IRQ context until the machine wedged.  Enabling the FIFOs and
+ * comparing the two dumps separates "wrong layout" from "not clocked".
  */
-static void apple_t8015_gfx_dump_mbox_regs(struct apple_t8015_gfx *gfx)
+static void apple_t8015_gfx_mbox_dump(struct device *dev, void __iomem *mbox,
+				      const char *tag)
+{
+	unsigned int i;
+	u32 v[4];
+
+	dev_info(dev, "  mbox %s:\n", tag);
+	for (i = 0; i < 0x40; i += 16) {
+		v[0] = readl(mbox + i + 0x0);
+		v[1] = readl(mbox + i + 0x4);
+		v[2] = readl(mbox + i + 0x8);
+		v[3] = readl(mbox + i + 0xc);
+		dev_info(dev, "    +%#04x: %08x %08x %08x %08x\n",
+			 i, v[0], v[1], v[2], v[3]);
+	}
+}
+
+static void apple_t8015_gfx_mbox_probe(struct apple_t8015_gfx *gfx)
 {
 	struct device_node *mbox_node;
 	void __iomem *mbox;
 	struct resource res;
 	u32 phandle = 0;
-	unsigned int i;
-	u32 v[4];
 
 	if (of_property_read_u32(gfx->dev->of_node, "mboxes", &phandle))
 		return;
@@ -555,24 +533,18 @@ static void apple_t8015_gfx_dump_mbox_regs(struct apple_t8015_gfx *gfx)
 	if (!mbox)
 		return;
 
-	dev_info(gfx->dev, "mbox regs @%pa (read-only):\n", &res.start);
-	for (i = 0; i < 0x40; i += 16) {
-		v[0] = readl(mbox + i + 0x0);
-		v[1] = readl(mbox + i + 0x4);
-		v[2] = readl(mbox + i + 0x8);
-		v[3] = readl(mbox + i + 0xc);
-		dev_info(gfx->dev, "  mbox +%#04x: %08x %08x %08x %08x\n",
-			 i, v[0], v[1], v[2], v[3]);
-	}
+	dev_info(gfx->dev, "mbox @%pa:\n", &res.start);
+	apple_t8015_gfx_mbox_dump(gfx->dev, mbox, "before enable");
+	writel(MBOX_CONTROL_ENABLE, mbox + MBOX_A2I_CONTROL);
+	writel(MBOX_CONTROL_ENABLE, mbox + MBOX_I2A_CONTROL);
+	msleep(20);
+	apple_t8015_gfx_mbox_dump(gfx->dev, mbox, "after enable");
+	dev_info(gfx->dev, "mbox control: A2I %08x, I2A %08x, I2A recv %08x\n",
+		 readl(mbox + MBOX_A2I_CONTROL),
+		 readl(mbox + MBOX_I2A_CONTROL),
+		 readl(mbox + MBOX_I2A_RECV));
 }
 
-/* Read-only Fender power state / status (the block that boot #14 proved alive). */
-static void apple_t8015_gfx_fender_state(struct apple_t8015_gfx *gfx)
-{
-	dev_info(gfx->dev, "fender state @%#x = %#x, status @%#x = %#x\n",
-		 FENDER_POWER_STATE, readl(gfx->fender + FENDER_POWER_STATE),
-		 FENDER_STATUS, readl(gfx->fender + FENDER_STATUS));
-}
 
 /*
  * Phase 2.2 boot #14: the missing step.  The A10 kext asks Fender for a power
@@ -631,19 +603,13 @@ static void apple_t8015_gfx_boot_work(struct work_struct *work)
 	int i;
 
 	/*
-	 * Boot #15.  Boot #14 proved the two things this effort was blocked on
-	 * for a week: Fender answers at the AP alias (0x24D00000) and the GFX
-	 * IOP mailbox answers too (0x24D24000, no bus hang).  It then died in
-	 * the mailbox IRQ path before the GPU verdict, because the I2A "empty"
-	 * bit never read as set and apple_mbox_poll_locked() livelocked in IRQ
-	 * context on phantom 0x0 words.
-	 *
-	 * So this boot takes the GPU verdict first: program the firmware window,
-	 * release the IOP, ask Fender for power state 1, then read the RGX.  The
-	 * mailbox is only *dumped* (read-only, no RTKit, no IRQ) so the next boot
-	 * can fix it with the real register layout in hand.
+	 * Boot #16.  Boot #15 proved the GPU path end to end: the Fender window
+	 * copy reads back, the run bit releases the IOP, the power request
+	 * latches state 1 and the RGX answers with CORE_ID = 0x7e1.  That path
+	 * is kept verbatim; the mailbox is the only new experiment and the
+	 * bridge scan that reset the phone is gone.
 	 */
-	apple_t8015_gfx_stage(gfx, "0/12: wait for the PMP to come up");
+	apple_t8015_gfx_stage(gfx, "0/10: wait for the PMP to come up");
 	for (i = 0; i < GFX_PMP_READY_WAIT_MS / 500; i++) {
 		if (apple_t8015_pmp_up)
 			break;
@@ -652,43 +618,32 @@ static void apple_t8015_gfx_boot_work(struct work_struct *work)
 	dev_info(dev, "GFX-DIAG: PMP %s after %d ms\n",
 		 apple_t8015_pmp_up ? "is up" : "never came up", i * 500);
 
-	apple_t8015_gfx_stage(gfx, "1/12: ps_gfx power state (PMGR read)");
+	apple_t8015_gfx_stage(gfx, "1/10: ps_gfx power state (PMGR read)");
 	apple_t8015_gfx_dump_ps(gfx);
 
-	apple_t8015_gfx_stage(gfx, "2/12: Fender state (read-only, 0x24d00000)");
-	apple_t8015_gfx_fender_state(gfx);
-
-	apple_t8015_gfx_stage(gfx, "3/12: mailbox register dump (read-only, 0x24d24000)");
-	apple_t8015_gfx_dump_mbox_regs(gfx);
-
-	apple_t8015_gfx_stage(gfx, "4/12: PMP endpoint 32 STARTEP + candidates");
-	apple_t8015_gfx_try_pmp_calls(gfx);
-
-	apple_t8015_gfx_stage(gfx, "5/12: ps_gfx off->on (re-send the gate request)");
+	apple_t8015_gfx_stage(gfx, "2/10: ps_gfx off->on (re-send the gate request)");
 	if (!apple_t8015_gfx_retoggle_ps(gfx))
 		dev_warn(dev, "ps_gfx retoggle failed; continuing anyway\n");
 
 	/* The firmware image was loaded into the window by ->probe(). */
 	apple_t8015_gfx_set_window(gfx);
 
-	apple_t8015_gfx_stage(gfx, "8/12: release the IOP (run bit)");
+	apple_t8015_gfx_stage(gfx, "5/10: release the IOP (run bit)");
 	writel(readl(gfx->fender + FENDER_RUN) | FENDER_RUN_ENABLE,
 	       gfx->fender + FENDER_RUN);
 	dev_info(dev, "GFX IOP released; letting the firmware start\n");
 	msleep(1000);
 
-	/* The step boots #2..#13 were missing. */
-	apple_t8015_gfx_stage(gfx, "9/12: Fender power request (state 1)");
+	apple_t8015_gfx_stage(gfx, "6/10: Fender power request (state 1)");
 	apple_t8015_gfx_fender_power(gfx);
 
-	apple_t8015_gfx_stage(gfx, "10/12: RGX identity (0x204000000+0x00..0xff)");
+	apple_t8015_gfx_stage(gfx, "7/10: RGX identity + CORE_ID/PBVNC");
 	apple_t8015_gfx_probe_rgx(gfx);
 
-	/* Bonus, last: a hang here costs nothing already learned. */
-	apple_t8015_gfx_stage(gfx, "11/12: PMGR bridges (0x219000000 / 0x205000000)");
-	apple_t8015_gfx_probe_bridges(gfx);
+	apple_t8015_gfx_stage(gfx, "8/10: mailbox dump + FIFO enable + re-dump");
+	apple_t8015_gfx_mbox_probe(gfx);
 
-	apple_t8015_gfx_stage(gfx, "12/12: done (RTKit not started: next boot)");
+	apple_t8015_gfx_stage(gfx, "9/10: done");
 }
 
 static int apple_t8015_gfx_probe(struct platform_device *pdev)
