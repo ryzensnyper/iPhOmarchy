@@ -2625,3 +2625,42 @@ sequence.**  Three things are still open, in order:
    0x200000, so the firmware can reach it — and the mailbox may live
    there.  Reading it blind is dangerous: `0x20400000 + 0x00` traps the
    SoC (boot #42), so it has to be probed one offset at a time.
+
+## Phase 2.2 — the PMP's clock-gate message, decoded from its own firmware (2026-11-12)
+
+The PMP firmware (`pmp-t8015.bin`) contains the string `!clg: %08x`
+(0x012c60) — the log line the firmware writes when it *rejects* a gate
+message.  Its handler is at 0x0100e920, and it parses the **high** 32 bits
+of the 64-bit message it receives:
+
+```
+  bits 0..11   the gate id
+  bits 12..19  the device
+  bits 20..    the command
+```
+
+and it rejects the message outright when bits 22..23 are set (the `!clg`
+path at 0x0100e9aa).  The value it then writes to the PMGR is selected by
+the command:
+
+| command | value written |
+|---|---|
+| bit 31 set | `device << 12` |
+| bit 30 set | `device << 20` |
+| bits 20..21 != 0 | `device << 21` |
+| otherwise | **nothing** |
+
+**Both halves of the boot #25 sweep were wrong.**  The command went into the
+*low* word of the message (the PMP reads the high one), and the command was
+1 — whose bits 20..21 are zero, so the PMP would have done nothing even if
+it had seen it.  A correct message is therefore
+
+```
+(cmd << 52) | (device << 44) | (gate << 32)
+```
+
+with a command of at least 4 (or with bit 30/31 set).
+
+Boot #46 (payload `83763b65…`, built) sweeps 12 commands × the PMGR device
+ids (GFX-KF 149, its list index 121, GFX 124) × 5 gate ids, starting the
+endpoint 32 first, and watches for the PMP's reply.
