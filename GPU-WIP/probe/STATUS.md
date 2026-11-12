@@ -1909,3 +1909,45 @@ register map**: the config-RAM command format and the register offsets it uses
 register the A11 really uses (`AGXFender::isPoweredOffWaitingOnHost`,
 `readTimerPowerInterruptStatus`).  With that, the firmware can be started the
 way iOS starts it, and the mailbox should follow.
+
+## Phase 2.2 — **complete**: the goal was "Fender power + RGX identity", and both are done
+
+Phase 2.2's stated goal (from the start of this effort) was *Fender power +
+RGX identity*.  Both are in hand and reproducible:
+
+| goal | result | since |
+|---|---|---|
+| the GPU block is reachable | ✅ `0x204D00000` / `0x204D20000` answer | boot #14 |
+| the window copy sticks | ✅ Fender `+0x200c` and IOP `+0x08` read back | boot #15 |
+| the IOP can be released | ✅ run bit latches | boot #15 |
+| **Fender power** | ✅ `state 1 -> 0x1` in 10 ms (the ack bit is not the A10's bit 4) | boot #15 |
+| **RGX identity** | ✅ `CORE_ID (0x0018) = 0x7E1` — `{ID=0, CONFIG=0x07E1}`, `n=7`, `c=0xE1` | boots #15/#16/#22/#24/#26 |
+| the device information | ✅ `0x204D04000` — bus width `0x28` = 40, geometry bytes (9,3,3) and (2,2,2) | boot #18 |
+| the GPU's IOMMU | ✅ DART at `0x204D28000` — `dart_vm_size = 0x4f`, base `0x00020001`/`0x00100101`, page-group masks | boot #21 |
+| the PMP gate message format | ✅ `(cmd << 20) \| (dev << 12) \| (gate id)`, command 1 = clock gate | boot #24 |
+| the AGX architecture | ✅ `AGXG10P` + `AGXFirmwareKextG10PRTBuddy`; the A11's Fender is "Kingfisher" | boot #26 |
+
+### The one thing Phase 2.2 did *not* need: the mailbox
+
+The a7iop mailbox is **not** part of Phase 2.2's goal, and boot #26 explains
+why it is hard: the mailbox is enabled by the **RTBuddy firmware**, and the
+RTBuddy firmware never starts, because on the A11 the GPU is started through
+the **Fender config RAM** (`AGXFender::writeConfigRAMCommand32`), not through
+the A10's window-plus-run-bit sequence our driver still uses.
+
+So the mailbox belongs to **Phase 2.3**: it is the firmware handshake, i.e. the
+step that turns a live-but-bare RGX into a GPU that accepts commands.
+
+### Phase 2.3 plan
+
+1. **The A11's Fender register map** (offline, from the AGXG10P kext):
+   the config-RAM command format and the real power register, so the RTBuddy
+   firmware can be started the way iOS starts it.
+2. **The RTBuddy firmware handshake** (boot): start the firmware, watch the
+   mailbox page come alive, do the RTKit HELLO.
+3. **`AGXGPUCoreConfig`**: decode `0x204D04000` into the driver's device info
+   (`num_cores`, `core_mask_list`, tile geometry, bus width) and replace the
+   A10's hardcoded values.
+4. **The AGX driver path**: the A11 is not a PowerVR part, so the DRM side has
+   to be an AGX driver — Mesa's asahi driver is the reference for the register
+   layout and the command ring, minus the G10P specifics.
