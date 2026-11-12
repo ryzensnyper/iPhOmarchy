@@ -1355,3 +1355,57 @@ cluster is the discriminator.
 4. Sweep `+0x0080..+0x0100` and `+0x0b80..+0x0b90` of both windows.
 5. Sweep `+0x4000..+0x4040` of the IOP window (the one kext block not yet
    read there).
+
+## Phase 2.2 — boot #20 executed: the kext's base is the **IOP window** (2026-11-12)
+
+Payload `2398b846…`.  All 12 stages, **no reset**.
+
+```
+iop+8000 sweep +0x8000: 0000004f 00000000 00000000 00000000
+iop+8000 sweep +0x8100: 00000000 00000000 00020001 00100101
+iop+8000 sweep +0x8140: fdff7f7b fdf7fd67 bedfffe1 00020000
+iop+8000 sweep +0x8180: 7efffecd fffeeff5 0addffff 00020000
+iop+8000 sweep +0x81c0: 9fff66df f7ffdfff fdffff5f 00100100
+iop+8000 sweep 0x8000..0x8200: 5 non-zero chunks
+fender+8000 sweep 0x8000..0x8200: 0 non-zero chunks
+iop+4000 sweep 0x4000..0x4040: 0 non-zero chunks
+iop+0080 / fender+0080 / iop+0b80 / fender+0b80: 0 non-zero chunks
+```
+
+### Verdict
+
+The kext's base is the **IOP window (`0x204d20000`)**: the `+0x8000`,
+`+0x8110`, `+0x8114` cluster it reads eight times between them is live there
+and **dead in the Fender window**.  The `+0x48`/`+0x80c` reads also match the
+IOP window.  The `+0x4000` cluster that matched the Fender window's live
+block therefore belongs to the kext's *second* device instance (gfx-kf's
+`reg[1] = 0x4d00000`).
+
+So the mailbox register block is at **IOP window + `0x1000` = `0x204d21000`** —
+and that page is dead: it reads zero and ignores Apple's enable sequence,
+while everything around it in the same window is alive (including `+0x00`,
+`+0x40`, `+0x48`, `+0x800`, `+0x8000`…).  **That is the signature of an
+unclocked block**, not of a wrong address.
+
+### Bonus: two Phase 2.3 blocks found
+
+* **DART** (the GPU's address-translation unit) at IOP `+0x8000`: `+0x8000 =
+  0x4f`, `+0x8108 = 0x00020001`, `+0x810c = 0x00100101`, and a run of bitmask
+  registers at `+0x8140`… (`0xfdff7f7b`, `0xfdf7fd67`, `0xbedfffe1`, …).  The
+  kext's code around these reads is the one that also references the string
+  `base + dart_vm_size`, so this is the DART block.
+* **Device information** in the other instance: `0x204d04000` = `0x01001000`,
+  `0x204d04008` = `0x00010704`, `0x204d04010` = `0x00090303`,
+  `0x204d04014` = `0x00020202`, `0x204d04048` = `0x0f`,
+  `0x204d0404c` = `0x2f`, `0x204d04060` = `2`, `0x204d04080..` =
+  `0x28 0x40 0x28 0x28`.  `0x28` = 40 = the A10's `phys_bus_width`.
+
+### The remaining blocker
+
+The mailbox page needs a **clock** (`gfx-kf` has `clock-ids = 269`; `ps_gfx`
+only covers *power*).  The PMP firmware owns clock gates (its tag table has
+`CLKG` next to `PWRG`), so the AP has to ask the PMP — our `STARTEP(32)`
+attempt was rejected with `Received unexpected message to EP32: 0`, i.e. the
+*message format*, not the endpoint, is wrong.  That is the next offline target:
+the PMP command word (`bits 0..11` value, `bits 12..19` device index,
+`bits 20..21` command) in `pmp-t8015.bin`.
