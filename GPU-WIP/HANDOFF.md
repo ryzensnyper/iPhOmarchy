@@ -296,11 +296,24 @@ cd /home/doug/orchard
 ```
 
 * The kernel tree is a git repo on branch **`gpu/phase2.2`**; the driver work
-  is committed as **`1e951d168689`** (boot #54: diff the PMP's gate
-  registers before and after the sweep).
+  is committed as **`f20c35516b59`** (boot #55: the PMGR windows are not
+  adjacent).
 * The last built payload:
-  **`164a91a31227cd116cd8022ceea131bb799eb74f43ac9d7493c66966c5c67c6c`**
-  (boot #54).
+  **`e0fe8296d3960a98050b0045b503c48fe9f2bb209a807c1de5a6df017853b402`**
+  (boot #55).
+
+**The PMGR's two windows are 32 MiB apart, not 1 MiB:**
+
+| window | AP address | ADT address |
+|---|---|---|
+| 0 | **0x232000000** | 0x32000000 |
+| 1 | **0x235200000** | 0x35200000 |
+
+Boot #54 assumed `window 1 = window 0 + 0x100000`, read the hole just past
+window 0 and took an **SError** (the phone rebooted; harmless, but it cost
+a boot).  Boot #49 had it right.  **Anything that reads the PMGR must use
+these two bases.**
+
 * The kernel log is streamed to `/tmp/opencode/phone-kmsg.log` by
   `GPU-WIP/tools/kmsg-host.py` (pid 412793; do **not** kill it).  Boot #N
   starts at the `GFX-STAGE 0/12` line.
