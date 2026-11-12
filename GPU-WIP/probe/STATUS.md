@@ -2015,3 +2015,41 @@ address was wrong.
    for the firmware's HELLO (the firmware starts the conversation, as the PMP
    does), logging every message that arrives.
 3. Then the mailbox registers and the RGX identity.
+
+## Phase 2.2 — boot #27 executed: the DT fix landed, and the mailbox driver claimed the page (2026-11-12)
+
+Payload `b5e52c10…`.  The kernel booted, but **the GFX driver never probed**:
+
+```
+apple-t8015-gfx 204000000.gpu: GFX power domain is up
+apple-t8015-gfx 204000000.gpu: error -EBUSY: can't request region for resource [mem 0x204d00000-0x204d1ffff]
+apple-t8015-gfx 204000000.gpu: probe with driver apple-t8015-gfx failed with error -16
+```
+
+The mailbox driver now probes at the *right* address (`0x204d04000`) and
+claims that 4 KiB page with `request_mem_region()` — but that page is **inside
+the GPU node's own 128 KiB Fender window** (`0x204d00000..0x204d1ffff`), so the
+GPU driver's `devm_platform_ioremap_resource_byname(pdev, "fender")` now fails
+with `-EBUSY` and the probe dies.  The phone stayed alive; the GPU simply did
+nothing this boot.
+
+This is the flip side of the mailbox living inside the gfx-kf window: on iOS
+the kexts are not competing for kernel memory regions, in Linux they are.
+
+**Fix (boot #28):** map the Fender window with a plain `devm_ioremap()` —
+without claiming it — exactly as the "iop" window already does below it for
+the same reason.  The RGX window (0x204000000) is claimed normally, since
+nothing else lives in it.
+
+### The chain so far, in one list
+
+1. The GFX mailbox is at **`0x204d04000`** (the `0x4d00000` window + `0x4000`),
+   not `0x204d24000` — per the KB's §9f and confirmed by the live register
+   pattern (`MAILBOX_SET` / `MAILBOX_CLR` / `INBOX_CTRL`).
+2. The in-tree `apple_mbox_a7iop_mailbox` driver already implements that block
+   exactly (mask SET/CLR `+0x00/+0x04`, `A2I_CONTROL +0x08`, `A2I_SEND +0x10`,
+   `I2A_CONTROL +0x20`, `I2A_RECV +0x38`, IRQ bits 0/4/8/12).
+3. The mailbox driver claims a page inside the GPU's own window, so the GPU
+   driver must not claim that window.
+4. With both fixed, the GFX driver can do a real RTKit init and wait for the
+   firmware's HELLO.

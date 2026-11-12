@@ -172,7 +172,7 @@ static void apple_t8015_gfx_recv_message(void *cookie, u8 endpoint, u64 message)
 {
 	struct apple_t8015_gfx *gfx = cookie;
 
-	dev_dbg(gfx->dev, "GFX firmware ep %#x: %#016llx\n", endpoint, message);
+	dev_info(gfx->dev, "GFX firmware ep %#x: %#016llx\n", endpoint, message);
 }
 
 static const struct apple_rtkit_ops apple_t8015_gfx_rtkit_ops = {
@@ -839,9 +839,19 @@ static int apple_t8015_gfx_probe(struct platform_device *pdev)
 	gfx->rgx = devm_platform_ioremap_resource_byname(pdev, "rgx");
 	if (IS_ERR(gfx->rgx))
 		return PTR_ERR(gfx->rgx);
-	gfx->fender = devm_platform_ioremap_resource_byname(pdev, "fender");
-	if (IS_ERR(gfx->fender))
-		return PTR_ERR(gfx->fender);
+	/*
+	 * The GFX mailbox lives *inside* the Fender window (0x204d04000 is
+	 * 0x4d00000 + 0x4000), and the mailbox driver claims that page with
+	 * request_mem_region().  Asking for the whole 128 KiB window the
+	 * normal way therefore fails with -EBUSY and the probe dies, so map it
+	 * without claiming it -- the same trick the "iop" window uses below.
+	 */
+	res = platform_get_resource_byname(pdev, IORESOURCE_MEM, "fender");
+	if (!res || resource_size(res) < SZ_4K)
+		return -EINVAL;
+	gfx->fender = devm_ioremap(dev, res->start, resource_size(res));
+	if (!gfx->fender)
+		return -ENOMEM;
 	/*
 	 * The IOP window contains the mailbox page at +0x4000, which the
 	 * mailbox device has already claimed; request_mem_region() on the
