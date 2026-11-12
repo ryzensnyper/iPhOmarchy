@@ -3096,3 +3096,47 @@ GFX's own RTKit channel — the one on the dead mailbox — so none of them
 ever reached the PMP.**  They have to go out on the **PMP's** management
 endpoint, which works (the PMP answers our SET_AP_PWR_STATE on it).
 Boot #53 sends them there.
+
+### Boot #53: the PMP answers (payload `18132120…`)
+
+Clean boot, phone alive as `05ac:4144`.  The gate messages went out on the
+**PMP's** management endpoint this time, and the PMP replied to **every
+single one**:
+
+```
+gate: cmd 0x3 dev 149 gate 0 -> msg 0x0039500000000000 (ret 0)
+RTKit: unknown management message: 0x40000000000000 (type: 0x04)
+...
+gate sweep: 84 management messages sent to the PMP
+```
+
+90 replies in all: **84 of type 0x04** (one per request) and the 6 periodic
+ones of type 0x00.  So:
+
+* the message format is right — the PMP dispatches it,
+* **the reply type is the request type + 1** (HELLO 1/REPLY 2,
+  SET_IOP_PWR_STATE 6/ACK 7, **gate 3/REPLY 4**),
+* the reply payload is `0x40000000000000` — **identical for all 84
+  requests**, so the status does not depend on the device, the gate id or
+  the command we chose.  The request is accepted but nothing is gated.
+
+**The mailbox is still dark**: `CPU_CTRL (+0x110) = 0`, the enable write
+does not stick, and the PMGR gate bank (`pmgr1+0x80000`) is unchanged.
+
+### What the PMP writes, and where (offline)
+
+The handler writes `device << 12` (or `<< 20`, `<< 21`) and passes the
+constant **0x202** to the helper that does the write.  The `<< 20` and
+`<< 21` forms land far outside any 1 MiB PMGR window, so the `<< 12` form
+names a **register**: PMGR window + (device << 12).
+
+| device | id | register offset |
+|---|---|---|
+| GFX-BUSY | 123 | 0x7b000 |
+| GFX | 124 | 0x7c000 |
+| GFX-SGX | 148 | 0x94000 |
+| **GFX-KF** | **149** | **0x95000** |
+
+None of those offsets has ever been read.  Boot #54 dumps them (in PMGR
+windows 0 and 1) **before and after** the gate sweep: whatever the PMP
+changes is the register it wrote — no need to guess the encoding.

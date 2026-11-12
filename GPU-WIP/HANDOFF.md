@@ -55,7 +55,14 @@ boot #47's 324 gate messages never reached it** — they went out on the
 *GFX's* RTKit channel (the one on the dead mailbox) instead of the PMP's
 management endpoint.  The PMP's clock-gate request is **management type 3**
 with the message's high word = {gate id 0..11, device 12..19, command
-20..31}.  **Boot #53 sends it to the PMP.**
+20..31}.  **Boot #53 sends it to the PMP — and the PMP answers every one of the 84
+requests** (reply type = request type + 1, payload `0x40000000000000` for
+all of them, i.e. accepted but nothing gated).  The format is right; the
+values are not.  The handler writes `device << 12` (or `<< 20`, `<< 21`) and
+the `<< 12` form is the only one that lands inside a PMGR window, so it
+names a **register**: PMGR window + (device << 12) — GFX-BUSY 0x7b000,
+GFX 0x7c000, GFX-SGX 0x94000, **GFX-KF 0x95000**.  None of those has ever
+been read.  **Boot #54 dumps them before and after the sweep and diffs.**
 
 ## 2. The hardware map (measured, all AP addresses)
 
@@ -289,11 +296,11 @@ cd /home/doug/orchard
 ```
 
 * The kernel tree is a git repo on branch **`gpu/phase2.2`**; the driver work
-  is committed as **`64ca8206e4ef`** (boot #53: the clock-gate request goes
-  to the PMP).
+  is committed as **`1e951d168689`** (boot #54: diff the PMP's gate
+  registers before and after the sweep).
 * The last built payload:
-  **`18132120b436069ca29374da91d6a42dc93af357c6f059b96f069f0dc478d71d`**
-  (boot #53).
+  **`164a91a31227cd116cd8022ceea131bb799eb74f43ac9d7493c66966c5c67c6c`**
+  (boot #54).
 * The kernel log is streamed to `/tmp/opencode/phone-kmsg.log` by
   `GPU-WIP/tools/kmsg-host.py` (pid 412793; do **not** kill it).  Boot #N
   starts at the `GFX-STAGE 0/12` line.
