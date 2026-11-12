@@ -2136,3 +2136,51 @@ Boot #29 therefore:
 | `10/12` | RGX identity |
 | `11/12` | the RTKit version the handshake ended on |
 | `12/12` | done |
+
+## Phase 2.2 — boot #29 executed: the live mailbox puts the kernel into an IRQ storm (2026-11-12)
+
+Payload `a270dd4c…`.  The phone **rebooted** right after:
+
+```
+GFX-STAGE 1/12: RTKit init on the GFX mailbox
+```
+
+— i.e. inside `devm_apple_rtkit_init()`, which calls `apple_mbox_start()` →
+`enable_irq()` → the mailbox's "recv-not-empty" IRQ fires → the poll loop.
+
+### Why
+
+The A11's GFX mailbox reports its status with **two bits** (16 = not empty,
+17 = empty) in the control registers.  `INBOX_CTRL = 0x00010704` and
+`OUTBOX_CTRL = 0x60000003` have **both bits clear**, which is the *invalid*
+state — and Apple's own `AppleA7IOP` kext asserts on exactly that
+(`tst w0, #0xc0000` → error path) and clears it by writing `0x1000` to
+`MAILBOX_CLR`.
+
+The kernel's poll loop is
+
+```c
+while (!(mbox_ctrl & mbox->hw->control_empty)) {   /* bit 17 */
+        ... read a message ...
+        mbox->rx(mbox, msg, mbox->cookie);
+        mbox_ctrl = readl_relaxed(mbox->regs + mbox->hw->i2a_control);
+}
+```
+
+so with bit 17 never set it **never terminates** — the handler spins in IRQ
+context forever, the kernel is starved, the kmsg bridge stops and the
+watchdog reboots the phone.  That is the same livelock that boot #14 hit (on
+the *wrong* address); now it is the *right* address and the same mechanism.
+
+### Fixes (boot #30)
+
+1. **`drivers/soc/apple/mailbox.c`**: bound the poll loop — stop after
+   `APPLE_MBOX_MAX_POLL` (64) messages, and break out when the control
+   register stops changing (the invalid state).  A mailbox driver must never
+   be able to livelock the kernel.
+2. **The GFX driver**: after the bring-up, log `MAILBOX_SET` / `MAILBOX_CLR` /
+   `INBOX_CTRL` / `OUTBOX_CTRL`, and when both status bits are clear, write
+   `0x1000` to `MAILBOX_CLR` — what Apple's kext does — and log the result.
+3. The bring-up order of boot #29 is kept, with the RTKit init moved *after*
+   the `ps_gfx` retoggle (the domain must be on before the mailbox is
+   touched).

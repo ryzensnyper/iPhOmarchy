@@ -721,6 +721,35 @@ struct gfx_gate_try {
 #define APPLE_EP_AGX_INIT	0x20
 #define APPLE_EP_AGX_DOORBELL	0x21
 
+/*
+ * Apple's own AppleA7IOP kext treats a mailbox control register with *both*
+ * status bits clear as an error and clears it by writing 0x1000 to
+ * MAILBOX_CLR (the mailbox base + 0x04).  The A11's GFX mailbox reports
+ * exactly that state when nothing has initialised it, and the kernel's poll
+ * loop would then never end (boot #29: IRQ storm, phone rebooted).
+ */
+#define GFX_MBOX_CLR	0x04	/* MAILBOX_CLR, mailbox base + 0x04 */
+#define GFX_MBOX_SET	0x00	/* MAILBOX_SET */
+
+static void apple_t8015_gfx_mbox_state(struct apple_t8015_gfx *gfx)
+{
+	void __iomem *mbox;
+	u32 in, out;
+
+	mbox = devm_ioremap(gfx->dev, 0x204d04000, SZ_4K);
+	if (!mbox)
+		return;
+	in = readl(mbox + 0x08);	/* INBOX_CTRL  */
+	out = readl(mbox + 0x20);	/* OUTBOX_CTRL */
+	dev_info(gfx->dev, "mailbox: SET %#x CLR %#x INBOX_CTRL %#x OUTBOX_CTRL %#x\n",
+		 readl(mbox + GFX_MBOX_SET), readl(mbox + GFX_MBOX_CLR), in, out);
+	if ((in & 0x30000) == 0 && (out & 0x30000) == 0) {
+		writel(0x1000, mbox + GFX_MBOX_CLR);
+		dev_info(gfx->dev, "mailbox: both status bits clear -> wrote 0x1000 to MAILBOX_CLR; INBOX_CTRL now %#x OUTBOX_CTRL now %#x\n",
+			 readl(mbox + 0x08), readl(mbox + 0x20));
+	}
+}
+
 static void apple_t8015_gfx_boot_work(struct work_struct *work)
 {
 	struct apple_t8015_gfx *gfx =
@@ -742,7 +771,14 @@ static void apple_t8015_gfx_boot_work(struct work_struct *work)
 	dev_info(dev, "GFX-DIAG: PMP %s after %d ms\n",
 		 apple_t8015_pmp_up ? "is up" : "never came up", i * 500);
 
-	apple_t8015_gfx_stage(gfx, "1/12: RTKit init on the GFX mailbox");
+	apple_t8015_gfx_stage(gfx, "1/12: ps_gfx power state (PMGR read)");
+	apple_t8015_gfx_dump_ps(gfx);
+
+	apple_t8015_gfx_stage(gfx, "2/12: ps_gfx off->on (re-send the gate request)");
+	if (!apple_t8015_gfx_retoggle_ps(gfx))
+		dev_warn(dev, "ps_gfx retoggle failed; continuing anyway\n");
+
+	apple_t8015_gfx_stage(gfx, "3/12: RTKit init on the GFX mailbox");
 	gfx->rtk = devm_apple_rtkit_init(dev, gfx, NULL, 0,
 					 &apple_t8015_gfx_rtkit_ops);
 	if (IS_ERR(gfx->rtk)) {
@@ -751,13 +787,6 @@ static void apple_t8015_gfx_boot_work(struct work_struct *work)
 	} else {
 		dev_info(dev, "GFX-DIAG: RTKit up on the GFX mailbox\n");
 	}
-
-	apple_t8015_gfx_stage(gfx, "2/12: ps_gfx power state (PMGR read)");
-	apple_t8015_gfx_dump_ps(gfx);
-
-	apple_t8015_gfx_stage(gfx, "3/12: ps_gfx off->on (re-send the gate request)");
-	if (!apple_t8015_gfx_retoggle_ps(gfx))
-		dev_warn(dev, "ps_gfx retoggle failed; continuing anyway\n");
 
 	apple_t8015_gfx_stage(gfx, "4/12: window copy + release the IOP");
 	apple_t8015_gfx_set_window(gfx);
@@ -783,6 +812,7 @@ static void apple_t8015_gfx_boot_work(struct work_struct *work)
 
 	apple_t8015_gfx_stage(gfx, "7/12: wait for the firmware to settle");
 	msleep(5000);
+	apple_t8015_gfx_mbox_state(gfx);
 
 	apple_t8015_gfx_stage(gfx, "8/12: Fender power request (state 1)");
 	apple_t8015_gfx_fender_power(gfx);
