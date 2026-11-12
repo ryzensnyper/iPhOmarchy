@@ -339,3 +339,31 @@ So:
 * Whether the GFX class also needs an IRQ-enable register of its own (the
   M3Wrap base had +0x48/+0x4c; the GFX overrides `getMailboxBulk` but no
   +0x118/+0x11c access was seen).
+
+## Where this leaves the bring-up (2026-11-12, after boot #58)
+
+The mailbox is **located and the layout is known**, but it is **dark**:
+
+* boots #50 and #51 read `+0x110` / `+0x114` / `+0x800` / `+0x830` in the
+  Fender window (and in the IOP window) and got **zero everywhere**;
+* boot #51 also performed Apple's own enable sequence — the read-modify-write
+  of **bit 0 of +0x114** — and **the write did not stick**;
+* a register that reads zero and ignores writes is a register whose domain
+  is dark: **the Kingfisher is not powered.**
+
+The gate is the **PMP's** to raise, and it does it from its own address
+space:
+
+```
+*(device << 12 + 0x202) = (old & ~0x8960) | (msg == 1 ? 0x2000 : 0)
+```
+
+— it clears **bit 6**, the "gated" bit, of a per-device gate register.  The
+AP cannot do this itself: boot #58 walked the AP's gate bank
+(`pmgr1 + 0x80000`), cleared bit 6 in each entry that had it, and **every
+write read back unchanged** — the mask in the ADT describes what the *PMP*
+may write there, not the AP.
+
+So the mailbox work is done; the **power** is the blocker.  See
+`GPU-WIP/HANDOFF.md` §8 for the ranked leads (the ADT's `meta-sw-interrupt`
+and the PMP's `SET_IOP_PWR_STATE` have never been tried).

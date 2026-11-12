@@ -178,6 +178,10 @@ at 0x204d04000) and the power state at +0x1008/+0x1020 (we measured it at
 never actually established.  See `A7IOP-MAILBOX.md` for the full derivation
 and `GPU-WIP/tools/a7iop-v4-gfx.py` to reproduce it.
 
+Boots #50–#58 then read it properly: **it is zero, and Apple's enable write
+(a read-modify-write of bit 0 of +0x114) does not stick** — the Kingfisher
+is dark, and only the PMP can ungate it.
+
 ## The AGX apertures, restated
 
 | window | AP address | size | contents |

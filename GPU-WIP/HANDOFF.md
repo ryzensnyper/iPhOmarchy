@@ -1,120 +1,78 @@
 # Session handoff — A11 (G10P) GPU bring-up
 
-*Rewritten 2026-11-12 after boot #49, immediately before a session compaction.
+*Rewritten 2026-11-12 after boot #58, immediately before a session compaction.
 Everything below is committed and pushed; nothing important lives only in the
 conversation.  The kernel tree is committed too.*
 
-## 1. Where we are
+---
 
-Phase 2.2's stated goal — **Fender power + RGX identity** — is **met**:
+## 0. How to resume (read this first)
+
+The goal is to boot the GFX IOP's firmware (the AGX/RTBuddy) on the iPhone 8
+Plus so the GPU can be driven.  Phase 2.2's stated goal — **Fender power +
+RGX identity** — was met long ago (boot #15).  What is still missing is the
+**mailbox**: without it the IOP firmware never sends its RTKit HELLO, so
+`apple_rtkit_boot()` times out (-62) and no AGX endpoint can be started.
+
+**The mailbox has been located** (boot #50/#51, from Apple's own kext) and it
+is **dark** — its registers read zero and ignore writes, because the
+Kingfisher (the IOP) is not powered.  **The blocker is the power gate**, and
+the gate is written by the **PMP**, in the PMP's own address space, which the
+AP cannot write directly (boot #58).
+
+So the next session's job is: **get the PMP to ungate the GFX-KF**, or find
+another way to wake the IOP.  The three ranked leads are in §8; the first
+one (the PMP's `meta-sw-interrupt` / `SET_IOP_PWR_STATE`) has never been
+tried.
+
+---
+
+## 1. Where we are
 
 | item | value | since |
 |---|---|---|
-| RGX identity | `CORE_ID (0x0018) = 0x7E1` → `{ID=0x0000, CONFIG=0x07E1}`, `n=0x07`, `c=0xE1` | boot #15, reproduced ever since |
+| RGX identity | `CORE_ID (0x0018) = 0x7E1` → `{ID=0x0000, CONFIG=0x07E1}`, `n=0x07`, `c=0xE1` | boot #15, every boot since |
 | Fender power | the state register answers; the ack never sets | boot #15 |
 | window copy | Fender `+0x200c` and IOP `+0x08` read back | boot #15 |
 | IOP release | the run bit latches (`+0x2048`) | boot #15 |
-| device information | `0x204d04000` — read-only; `+0x80 = 40` is the A10's `phys_bus_width` | boot #18, boot #40 |
-| DART / IOMMU | `0x204d28000` — `dart_vm_size = 0x4f`, base `0x00020001`/`0x00100101`, page-group masks at `+0x8130` | boot #21 |
+| device information | `0x204d04000` — read-only, 8-byte stride; `+0x80 = 40` is the A10's `phys_bus_width` | boot #18/#40, corrected boot #55 |
+| DART / IOMMU | `0x204d28000` — `dart_vm_size = 0x4f`, base `0x00020001`/`0x00100101` | boot #21 |
 | firmware image | 381728 bytes = 0x5d320 (the KB's `gfx-t8015-const.bin[9:9+0x5d320]`) | boot #28 |
-| PMP gate message | `(cmd << 20) \| (device << 12) \| (gate id)` — **both halves were wrong**, see §5 | boot #25, boot #46/47 |
 | architecture | **AGX** (`AGXG10P`, `AGXFirmwareKextG10PRTBuddy`) | boot #26 |
+| **the G10P mailbox** | **0x204d00110** (control), **+0x114** (status), **+0x800** (TX), **+0x830** (RX) | boot #50/#51 |
+| **the AGX register block** | **the Fender window, 0x204d00000** | boot #50 (proved by `+0x4008 = 0x00010704`) |
+| **the PMP's gate write** | `*(device<<12 + 0x202) = (old & ~0x8960) \| (msg==1 ? 0x2000 : 0)` — it clears **bit 6** | boot #57 (offline) |
+| the PMP answers us | reply = `0x40000000000000 \| payload` (an **echo**, not a status) | boot #53/#57 |
 
-**The one thing still missing: the RTBuddy (GFX IOP) firmware never starts.**
-It never sends its RTKit HELLO, so `apple_rtkit_boot()` times out (-62), the
-AGX endpoints cannot be started (-22), and the init message cannot be sent
-(-22).  The channel that should carry the HELLO is the **GFX mailbox**.
+**What still fails:** the RTBuddy firmware never starts.  It never sends its
+RTKit HELLO → `apple_rtkit_boot()` = -62 → `start_ep(0x20/0x21)` = -22 → the
+AGX init message cannot be sent.
 
-**Since boot #49 that channel has been located** (offline, from Apple's own
-kext — see §3): the G10P mailbox is at **+0x110** of the AGX register block,
-which is the **Fender window at 0x204d00000** — so
-**0x204d00110 (control), 0x204d00114 (status), 0x204d00800 (TX),
-0x204d00830 (RX)**.  Boots #34/#35 and #43/#44 used the *M3Wrap base
-class's* offsets (+0x08/+0x48/...), and **+0x110 was never read once in 19
-boots**, so "the mailbox is dead" was never established.
+---
 
-**Boots #50 and #51 settled the location and then the cause:**
-
-* boot #50: `+0x4008` reads `0x00010704`, the device-information page's
-  third 32-bit field (the page is 8-byte stride) — so the **AGX register
-  block is the Fender window** beyond doubt; the mailbox itself read zero.
-* boot #51: the same read *after* the Fender power request, plus Apple's own
-  enable sequence (a read-modify-write of **bit 0 of +0x114**) — still zero,
-  and **the write did not stick**.  A register that ignores writes is a
-  register whose domain is dark.
-
-So the mailbox is in the right place and the block is powered; what is
-missing is that the *mailbox's own* power/clock state was never raised.
-Boot #52 dumped the AGX block's pages 0 and 1 word by word: **only three
-registers are live in the whole 8 KiB** — `+0x54 = 6`, `+0x1014 = 2`, and
-`+0x1000 = 1` (our own power request).  The `ps-reg-offset` hypothesis is
-wrong: `+0x1008` and `+0x1020` are zero and ignore writes.
-
-**The blocker is now understood: the PMP is what gates the Kingfisher, and
-boot #47's 324 gate messages never reached it** — they went out on the
-*GFX's* RTKit channel (the one on the dead mailbox) instead of the PMP's
-management endpoint.  The PMP's clock-gate request is **management type 3**
-with the message's high word = {gate id 0..11, device 12..19, command
-20..31}.  **Boot #53 sends it to the PMP — and the PMP answers every one of the 84
-requests** (reply type = request type + 1, payload `0x40000000000000` for
-all of them, i.e. accepted but nothing gated).  The format is right; the
-values are not.  The handler writes `device << 12` (or `<< 20`, `<< 21`) and
-the `<< 12` form is the only one that lands inside a PMGR window, so it
-names a **register**: PMGR window + (device << 12) — GFX-BUSY 0x7b000,
-GFX 0x7c000, GFX-SGX 0x94000, **GFX-KF 0x95000**.  None of those has ever
-been read.  **Boot #54 dumped them before and after the sweep and diffs — and the
-diff was empty**: the PMP wrote nothing at `device << 12`.  It does land on
-something real for the GFX (124 << 12 = 0x7c000 is a live block, but it
-holds rail-like *data*, not a gate register), while 0x94000 (GFX-SGX) and
-0x95000 (GFX-KF) are empty in both windows.  With the reply identical for
-all 84 requests, the request is being **rejected before any write**, and
-the one field never varied is the **gate id** (the high word's bits
-0..11).  **Boot #56 swept the gate id 0..255 for each GPU device** — 1024
-requests, every reply identical (`0x40000000000000`), nothing changed,
-the mailbox still dark.  So the gate id is not it either.  The **only
-field never varied is the message's low word** — the RTKit *payload* —
-which the PMP's helper immediately does `& 31` on and compares against 31
-and 16.  Every request so far carried a payload of **zero**.  **Boot #57
-swept the payload — and showed the reply was never a status at all: it
-is `0x40000000000000 | payload`, an echo.**  Nothing changed.
-
-**The gate request is now fully decoded.**  The PMP's handler ends in
-
-```
-*(device << 12 + 0x202) = (old & ~0x8960) | (msg == 1 ? 0x2000 : 0)
-```
-
-— it **clears bit 6**, the "gated" bit, of a per-device gate register in
-the PMP's own address space (which is why the AP sees no change: we
-probed pmgr0 and pmgr1 at 0x93000..0x97000, which covers 0x95202, and it
-stayed zero).
-
-**But bit 6 is what the AP's own gate bank carries**: the ADT's
-`pmgr/ps-regs[0]` = `{reg 1, offset 0x80000, mask 0x00200c53}` — writable
-bits 6 and 13 included — and three of its entries read **0x244**.  **Boot
-#58 walks that bank from the AP, clears bit 6 in one entry at a time and
-watches the mailbox.**  If one of them is the GFX-KF's gate, the
-Kingfisher powers up and we learn which entry it was.
-
-## 2. The hardware map (measured, all AP addresses)
+## 2. The hardware map (measured; all AP addresses)
 
 | what | address | notes |
 |---|---|---|
-| RGX core window | `0x204000000` (1 MiB) | the ADT's `sgx` node calls it 0x4000000; **CORE_ID is the only live word in the first 4 KiB** |
-| gfx-kf region A ("IOP") | `0x204d20000` (128 KiB) | firmware window registers, DART at `+0x8000`, timebase at `+0x80c`, config at `+0x8130` |
-| gfx-kf region B ("Fender") | `0x204d00000` (128 KiB) | power state `+0x1000`, window regs `+0x200c`, run bit `+0x2048`, device info `+0x4000` |
+| RGX core window | `0x204000000` (1 MiB) | **CORE_ID is the only live word in the first 4 KiB** |
+| gfx-kf region A ("IOP") | `0x204d20000` (128 KiB) | the IOP's own registers: window regs, DART at `+0x8000`, timebase at `+0x80c`, config at `+0x8130` |
+| gfx-kf region B ("Fender") | `0x204d00000` (128 KiB) | **the AGX register block**: the mailbox at `+0x110`, the device-info page at `+0x4000`, the power state at `+0x1000` |
 | the ADT's gfx-kf node | `reg = <0x4d20000 0x20000>, <0x4d00000 0x20000>` | the mailbox IRQs 259-262 belong here; `power-gates = 149`, `clock-gates = 149`, `force-timebase-sync` |
-| the ADT's sgx node | `reg = <0x4000000 0x100000>, <0x4d00000 0x20000>` | `power-gates = 148, 123`; `has-kf = 1`; `meta-sw-interrupt = 0x32104020 <- 2, 0x321040a0 <- 2` |
+| the ADT's sgx node | `reg = <0x4000000 0x100000>, 0x4d00000 0x20000>` | `power-gates = 148, 123`; `has-kf = 1`; `meta-sw-interrupt` = `0x32104020 <- 2`, `0x321040a0 <- 2`, `0x8` |
 
 **Traps — reading these hangs or resets the SoC (no panic, straight to DFU):**
 
 * `0x204d040c0` and beyond (the hole past the device-info page),
-* `0x204d10044` (in the Fender window's upper half),
-* `0x204000000 + 0x00` (the RGX's first core register — only `+0x18` and `+0x20` are safe),
-* the A7IOP shim aperture `0x2ee00000` (not reachable from the AP),
-* `0x2ee04000`, `0x2ee08000` (never got to them).
+* `0x204d10044` (the Fender window's upper half),
+* `0x204000000 + 0x00` (the RGX's first core register — only `+0x18`, `+0x20` are safe),
+* **anything past a PMGR window's end** — the PMGR's two windows are
+  `0x232000000` and `0x235200000` (32 MiB apart, *not* 1 MiB apart; boot
+  #54 took an SError by assuming otherwise),
+* the A7IOP shim aperture `0x2ee00000` (not reachable from the AP).
 
-## 3. The kext: the A11 uses a *different* class (the key find)
+---
+
+## 3. The kext: the A11 uses a *different* class
 
 The kernelcache's personality dictionary binds the GFX IOP like this:
 
@@ -123,195 +81,197 @@ The kernelcache's personality dictionary binds the GFX IOP like this:
 <key>AppleA7IOPV4-GFX</key>  IONameMatch: iop-gfx,t8015      <-- the A11
 ```
 
-So the A11 is **`AppleA7IOPV4GFX`**, derived from `AppleM3WrapV2` — not the V2
-class our original bring-up spec was copied from.  **The V4 mailbox layout
-(in the high word of the mapped registers):**
+So the A11 is **`AppleA7IOPV4GFX`** (source
+`/Library/Caches/com.apple.xbs/Sources/AppleA7IOP/AppleA7IOPV4GFX.cpp`),
+**not** the V2 class our original bring-up spec was copied from.
 
-| offset | register |
-|---|---|
-| +0x08 | M3Wrap_CTRL |
-| +0x48 | M3Wrap_IntOutIRQEn |
-| +0x4c | M3Wrap_IntOutSts |
-| +0x50 | INBOX_CTRL |
-| +0x60 | TX (16 bytes) |
-| +0x80 | OUTBOX_CTRL |
-| +0xa0 | RX (16 bytes) |
+### SOLVED: the register map
 
-There is **no SET/CLR pair**, so the `0x1111` mask, the `MAILBOX_CLR` unmask
-and `OUTBOX_CTRL |= 1` of boots #34/#35 were writes to registers that do not
-exist in this class.  (The status bits are the same as in the V2 class: bit
-16 = full, bit 17 = empty, and `0xc0000` set means the invalid state.)
+The "register map" is **not** an offset table.  The class's accessor is two
+instructions (`__PLK_TEXT_EXEC` 0xfffffff00575b100):
 
-**Where the class lives:**
+```
+ldr  x8, [x0, #256]      ; the mapped AGX register block (_agxMappedRegs)
+ldr  w0, [x8, w1, uxtw]   ; ...at the given byte offset
+ret
+```
 
-* the V4 GFX **vtable** is at `__PLK_DATA_CONST` **0xfffffff006ccc660** (found
-  via the metaclass constructor at `0x575ad10`, which stores it); the M3Wrap
-  base class's vtable extension is at `0xfffffff006ccb258`,
-* the class asserts `_agxRegisterMap && _agxMappedRegs` (V4) and the base
-  class has `_wrapRegisterMap`, `_wrapMappedRegs`, `_inboxRegisterMap`,
-  `_inboxMappedRegs` — two maps means two apertures, and gfx-kf has two.
+so the offsets the kext passes around **are** the physical offsets in the
+mapped block.  (`_agxRegisterMap`, member +0x170, is a descriptor struct,
+not a table.)  Reproduce all of this with `GPU-WIP/tools/a7iop-v4-gfx.py`.
 
-**SOLVED (2026-11-12, offline): the register map.**  Reproduce with
-`GPU-WIP/tools/a7iop-v4-gfx.py`.
+### The G10P mailbox layout
 
-* The "register map" is **not** an offset table.  The accessor is two
-  instructions — `0xfffffff00575b100`:
-  `ldr x8,[x0,#256]` (`_agxMappedRegs`) / `ldr w0,[x8,w1,uxtw]` — so the
-  offsets the kext passes around **are** the physical offsets in the mapped
-  block.  `_agxRegisterMap` (member +0x170) is a descriptor struct, not a
-  table.
-* The class hierarchy, from the kext's own REQUIRE strings:
-  `AppleIOP → AppleA7IOP → AppleA7IOPV1 → AppleA7IOPV2 → {V2GFX, V2Marconi,
-  V2PMP} → AppleA7IOPV4 → AppleA7IOPV4GFX`, plus `AppleMxWrap →
-  AppleM3WrapV2`, `AppleASCWrapV2/V4`, `AppleASCANS2`.
-* **AppleA7IOPV4GFX overrides `getMailboxBulk`** (vtable slot +97,
-  `0xfffffff00575ba0c`) and uses a *different* layout from the M3Wrap base:
+`AppleA7IOPV4GFX` **overrides** `getMailboxBulk` (vtable slot +97,
+`0xfffffff00575ba0c`) and does *not* use the M3Wrap base class's layout:
 
-  | offset | register | address on the A11 |
-  |---|---|---|
-  | **+0x110** | **CPU_CTRL** — bit 0 = enabled, 16 = TX full, 17 = RX empty | **0x204d00110** |
-  | **+0x114** | **CPU_CTRL status** (0xc0000 = invalid) | **0x204d00114** |
-  | **+0x800** | **TX data**, 16-byte words | **0x204d00800** |
-  | **+0x830** | **RX data**, 16-byte words | **0x204d00830** |
+| offset | register | address on the A11 | evidence |
+|---|---|---|---|
+| **+0x110** | **CPU_CTRL** — bit 0 = enabled, 16 = TX full, 17 = RX empty | **0x204d00110** | read at 0x575b788/0x575b974/0x575b998/0x575ba44 |
+| **+0x114** | **status / enable** — the host does a read-modify-write of **bit 0** | **0x204d00114** | 0x575b72c (slot +124) |
+| **+0x800** | **TX data**, 16-byte words | **0x204d00800** | 0x575b94c: `add x10,x10,#2048; stp x8,x9,[x10]` |
+| **+0x830** | **RX data**, 16-byte words | **0x204d00830** | 0x575b938: `add x8,x8,#2096; ldp x8,x9,[x8]` |
 
-* The AGX block is the **Fender window (0x204d00000)**: the kext reads the
-  device-information page at +0x4008 and the power state at +0x1008 — exactly
-  where we measured them.
-* CPU_CTRL bit 16 = TX full, bit 17 = RX empty, bit 0 = "enabled".
+`0xc0000` (bits 16|17) is the "invalid" state the kext asserts against.
+The message size is 16 bytes (`0x575b960: mov w0,#16`) and the control word
+is a **ring queue**: bits 8-10 = TX write pointer, bits 12-14 = RX read
+pointer, 8 entries deep (`0x575b8f4` decodes them).
 
-## 4. What the apertures actually contain (boots #36–#45)
+The **M3Wrap base class** (`AppleMxWrap`/`AppleM3WrapV2`, the class used by
+the M-series IOPs) uses a different set — 0x08 CTRL, 0x48 IntOutIRQEn, 0x4c
+IntOutSts, 0x50 INBOX_CTRL, 0x60 TX, 0x80 OUTBOX_CTRL, 0xa0 RX — and **every
+earlier boot used those instead** (boots #34/#35's `0x1111` mask, #43/#44's
+"V4 enable sequence").  **+0x110 was never read once in 19 boots.**
+
+The class hierarchy, from the kext's own REQUIRE strings:
+`AppleIOP → AppleA7IOP → AppleA7IOPV1 → AppleA7IOPV2 → {V2GFX, V2Marconi,
+V2PMP} → AppleA7IOPV4 → AppleA7IOPV4GFX`, plus `AppleMxWrap →
+AppleM3WrapV2`, `AppleASCWrapV2/V4`, `AppleASCANS2`, `AppleA7IOPNub`.
+
+### Which aperture is the AGX block?
+
+Three independent correlations say **the Fender window, 0x204d00000**: the
+kext reads the device-information page at +0x4008 and the power state at
++0x1008, which is exactly where we measured them; and boot #50 read
+`+0x4008 = 0x00010704`, the page's third 32-bit field (the page is
+**8-byte stride**, not 4).
+
+---
+
+## 4. What the apertures actually contain (boots #36–#58)
 
 | place | contents |
 |---|---|
-| `0x4d04000` | the **read-only G10P device-information page**: `0x01001000`, `0x00010704`, `0x00090303`, `0x00020202`, `+0x48 = 0x0f`, `+0x4c = 0x2f`, `+0x60 = 0x2`, `+0x80 = 40`, `+0x84 = 64`, `+0x88 = 40`.  It ignores writes (except `+0x80`!) |
+| `0x4d00000` (Fender) | **only three live registers in pages 0+1**: `+0x54 = 0x6`, `+0x1000 = 1` (our own power request), `+0x1014 = 2`.  The mailbox at `+0x110` is **0** and ignores writes. |
+| `0x4d04000` | the **read-only G10P device-information page** (8-byte stride): `+0x00 = 0x01001000`, `+0x08 = 0x00010704`, `+0x10 = 0x00090303`, `+0x18 = 0x00020202`, `+0x48 = 0x0f`, `+0x4c = 0x2f`, `+0x60 = 0x2`, `+0x80 = 40`, `+0x84 = 64` |
 | `0x4d08000` | all zero |
-| `0x4d00000 + 0x54` | the only live word in the Fender window's page 0 (`0x6`) |
 | `0x4d10000` (Fender) | traps at `+0x44` |
-| `0x4d20000` | the firmware window registers: `+0x00 = 0x101`, `+0x08` = window base, `+0x10`, `+0x24` = window size, `+0x38` = window enable, `+0x40 = 0x30000`, `+0x48 = 0x79` |
-| `0x4d24000` | **dead**: reads zero and ignores every write (boot #40) — this is where the kext's "IOP + 0x4000" points |
+| `0x4d20000` (IOP) | window registers: `+0x08` = window base (our own write), `+0x28 = 0x00100000`, `+0x48 = 0x4f`, `+0x800` = `00000060 00180018 00000000 60000003` |
+| `0x4d24000` | **dead**: reads zero and ignores every write |
 | `0x4d28000` | the DART (`+0x8000` = `dart_vm_size`, `+0x8108/+0x810c` = base config, `+0x8130`… = page-group masks), timebase at `+0x80c` |
-| `0x4d2c000` | empty apart from our own writes |
-| `0x4d30000` | a **chip-ID block**: `+0x08/+0x0c = 0xffffffff`, `+0x10/+0x14` = a 64-bit serial that counts down between boots, `+0x30`, `+0x40` likewise |
+| `0x4d30000` | a **chip-ID block**: `+0x08/+0x0c = 0xffffffff`, `+0x10/+0x14` = a 64-bit serial that counts down between boots |
 | `0x04000000` | the RGX core window; only `+0x18` (CORE_ID) and `+0x20` may be read |
 
-Both apertures were also **written** with both classes' enable sequences
-(boots #43/#44): only the known pages take the write, so there is no
-mailbox with a writable status register in either aperture.
+---
 
-## 5. The PMP's clock-gate message (decoded from its firmware)
+## 5. The PMP's protocol (decoded from `pmp-t8015.bin`)
 
-`pmp-t8015.bin`, handler at **0x0100e920** (the `!clg: %08x` rejection
-string is at 0x012c60).  It parses the **high** 32 bits of the 64-bit
-message it receives:
+> The addresses below are correct only with the *fixed* disassembler:
+> llvm-mc prints one line per **instruction**, so addresses have to be
+> accumulated from the encoding lengths, not from the byte offset.
+> `GPU-WIP/tools/pmpdis.py` does it right; the old `pmpdis2.sh` was 12 bytes
+> out, which is why earlier notes had the handler at 0x0100e920 (it is at
+> **0x0100e92c**).
+
+* the management dispatch is at **0x0100ddc2**: `ubfx r0, r3, #20, #4` — the
+  **type is the message's bits 52..55** (four bits, **16 types**) — and a
+  `tbb` jump table at 0x0100dde8.  Type **11 (0xb)** is SET_AP_PWR_STATE
+  (the one that works), type **3** is the **clock-gate handler**
+  (0x0100e92c, where the `!clg: %08x` string lives).
+* the handler decodes the message's **high** word:
+  bits 0..11 = the gate id (`sbfx`), 12..19 = the device (`ubfx`), 20..31 =
+  the command; **bits 22..23 must be clear** or it prints "!clg".
+* the value it writes is `device << 12` (or `<< 20`, `<< 21`) depending on
+  the command's bits.
+* the actual write (0x0100c142) is:
 
 ```
-  bits 0..11   the gate id       (payload bits 32..43)
-  bits 12..19  the device        (payload bits 44..51)
-  bits 20..    the command       (payload bits 52..63)
+ldr   r1, [r5, #8]        ; the base = device << 12
+ldr   r2, [r1, r0]        ; the register at base + 0x202
+bic   r2, r2, #0x8960     ; clear bits 5, 6, 11, 12
+addeq r2, r2, #0x2000     ; set bit 13 if the message == 1
+str   r2, [r1, r0]
 ```
 
-and rejects the message when bits 22..23 are set.  The value it writes to
-the PMGR is chosen by the command: **bit 31 → `device << 12`, bit 30 →
-`device << 20`, bits 20..21 != 0 → `device << 21`, otherwise nothing.**
+  **so the PMP clears bit 6 — the "gated" bit — of a per-device gate
+  register at `(device << 12) + 0x202`, in the PMP's own address space.**
+* the PMP answers a management request with **type + 1** and the payload
+  **`0x40000000000000 | <the request's payload>`** — an **echo**, not a
+  status (boot #57 proved this: 21 different payloads gave 21 different
+  echoes, all in the same shape).
 
-The boot #25 sweep was wrong twice over: the command went into the **low**
-word, and the command was 1 (whose bits 20..21 are zero → "do nothing").  A
-correct message is `(cmd << 52) | (device << 44) | (gate << 32)`.
+---
 
-Boot #46 sent it on app endpoint 0x20 (wrong — that is the AGX init
-endpoint; the RTKit layer refused).  Boot #47 sent 324 shapes as
-**management** messages on endpoint 0 (the format matches a management
-message: type in bits 59:52) and **the PMP never answered** — so either the
-service is not on the management endpoint, or the command/device/gate values
-are still wrong.
-
-## 6. The PMGR picture (from the ADT)
+## 6. The PMGR picture
 
 | device | id | flags | its register |
 |---|---|---|---|
-| GFX | 124 | perf | PMGR window 0 + 0x80338 = our `ps_gfx` (psreg 4, psidx 7) |
-| GFX-SGX | 148 | no_ps | window 1 + 0x80000 (nominal) |
-| GFX-KF | 149 | no_ps | window 1 + 0x80000 (nominal) |
-| GFX-BUSY | 123 | no_ps | window 1 + 0x80000 (nominal) |
+| GFX | 124 | perf | window 0 + 0x80338 = our `ps_gfx` (psreg 4, psidx 7) |
+| GFX-SGX | 148 | no_ps | — |
+| GFX-KF | 149 | no_ps | — (the ADT's gfx-kf node uses **its** gate) |
+| GFX-BUSY | 123 | no_ps | — |
 | PMP | 54 | perf, critical, **on** | window 0 + 0x80308 |
 
 The GFX's ps entry decodes as `clk 1, pwr 1, actual 0xf, target 0xf` and the
-GPU core answers (CORE_ID ✓) — so the **core is alive** and it is the
-**GFX-KF** (the Kingfisher: the mailbox IRQs and the Fender/IOP windows) that
-is not.  The three `no_ps` devices have no power-state register, so their
-gates are plain gate registers somewhere else.
+GPU core answers CORE_ID, so the **core is alive** and it is the
+**GFX-KF** (the Kingfisher: the mailbox IRQs 259-262, the Fender/IOP
+windows) that is dark.
 
-**Boot #49 ruled out two candidates:** the `pmgr1 + 0x80000` bank has entries
-only up to `+0x140` (nothing at the device-id offsets 0x3b8/0x4a0/0x4a8 ✓),
-and `pmgr0 + 0x70000` is the **DVFS/voltage table** (0x4605 = 17925 µV etc.,
-ten idle entries ✓), not a rail register.  (`pmgr0 + 0xa0000` is also a DVFS
-table ✓ — the A12's two offsets are swapped relative to the A11 ✓.)
+The ADT's `pmgr/ps-regs[0]` = `{reg 1, offset 0x80000, mask 0x00200c53}` —
+the **gate bank** in PMGR window 1 (`0x235280000`).  It has 41 live entries
+(8-byte stride); **twelve of them read 0x244** (bits 6, 9, 10) — the
+"gated" ones.  The mask is the *PMP's* write mask: **the AP cannot write
+this bank** (boot #58: every write read back unchanged).
 
-BadApple's A12 guide (`kieroid/badapple`, `docs/gpu.md`) says the A12's GPU
-rails are a plain PMGR register that Linux writes directly — "clear bits 10
-and 12 of `0x23b0a0000`" — because iBSS leaves GPU rails 2 (SRAM) and 4
-(core) at 0.  The AGX apertures are at the *same addresses* on both chips
-(the A12's hwdata B: "IO maps: Fender 0x204d00000, RGX 0x204000000" ✓), so
-the A11 is probably the same story — we have not found its register yet.
+**Boot #49's other findings:** `pmgr0+0x70000` and `pmgr0+0xa0000` are both
+**DVFS/voltage tables** (0x4605 = 17925 µV etc.), not rail registers;
+`pmgr1+0x80000` has entries only up to +0x140 and is **not** indexed by
+device id.
+
+---
 
 ## 7. The firmware's own view
 
 * **IO map** (A11 `g10p.img` at 0x3759c, A10 `gfx-t8010-const.bin` at
   0x35565): the A11 sees `0x04d20000` size 0x20000 and `0x04000000` size
   0x200000; the A10 sees `0x01d20000` size 0x20000 and `0x01000000` size
-  0x100000.  The A10's mailbox (0x1d24000) is *inside* its IOP window at
-  +0x4000; on the A11 that page is dead, so the A11's mailbox is in the
-  same window at a **different offset** — and it must be **dormant** (a
-  dormant mailbox reads as zero, which is why every read-only sweep was
-  empty).
+  0x100000.  The same table in the *kernelcache* is at
+  `__PRELINK_TEXT` 0xfffffff005069f44.
 * **AGX hwdata** (the host→firmware configuration), 53 entries of
-  {firmware address, mask, buffer offset} in `__PLK_DATA_CONST`
-  0xfffffff006f8ab88: offsets 0x20/0x24, 0x48/0x4c, 0x140/0x148,
-  0x188…0x19c, 0x404…0x414, 0x500, 0x800…0x80c, 0x900…0x91c, 0xc10/0xc14,
-  0xc30/0xc34, 0xe00 — including the timebase pair at 0x808/0x80c and the
-  A10-pair at 0xc30/0xc34, the very offsets our driver writes.
-* The firmware's **init handler** (the 0x81 message) is at img 0x19318; the
-  init page is 0x98 bytes with X/T at +0x18/+0x1c (KB:
-  `A11-GPU-G10P-LAYOUT.md`).
+  {firmware address, mask, buffer offset}, including the timebase pair
+  0x808/0x80c and the A10-pair 0xc30/0xc34.
+* the firmware's **init handler** (the 0x81 message) is at img 0x19318; the
+  init page is 0x98 bytes with X/T at +0x18/+0x1c.
+
+---
 
 ## 8. The open leads, ranked
 
-1. ~~**The `AppleA7IOPV4GFX` register-map data**~~ — **DONE, 2026-11-12.**
-   The offsets are +0x110/+0x114/+0x800/+0x830 in the Fender window (§3).
-   *What is left is the write side: which bits to write to CPU_CTRL to
-   enable the mailbox and unmask the RTKit interrupt, and whether the GFX
-   class has an IRQ-enable register of its own (the M3Wrap base had
-   +0x48/+0x4c; no +0x118/+0x11c access was seen).*
-2. **Boot #50's result** — does CPU_CTRL at 0x204d00110 read anything?  If
-   it is non-zero the mailbox is live and we can talk RTKit; if it is zero the
-   Kingfisher is still dark and lead 2 (the gate register) is next.
-3. **The AGX block's own power/clock registers** (+0x1008 / +0x1020) — boot
-   #52 tries them.  This is Apple's `ps-reg-offset` register, and the
-   kext's offsets are the only evidence for where it is.
-4. **The GFX-KF's gate register** (§6).  The A12 writes its GPU's rails
-   directly; find the A11's equivalent (the `no_ps` devices' gates) and
-   write it.  The ADT's gfx-kf node uses the gate of device 149.
-   The PMP is what writes it: its firmware's clock-gate handler is
-   **management type 3** at **0x0100e92c**, and it parses the message's high
-   word as {gate id bits 0..11, device bits 12..19, command bits 20..31},
-   writing `device << 12` (or `<< 20`, `<< 21`) depending on the command's
-   bits.  The request is `(cmd << 52) | (device << 44) | (gate << 32)` with
-   the **type in the low four bits of `cmd`** (the message's bits 52..55).
-   **Boot #47 sent all of that to the wrong RTKit channel** (the GFX's, on
-   the dead mailbox) — boot #53 sends it to the PMP's management endpoint.
-   The PMP's six periodic messages are the only replies we have ever seen;
-   a dispatched request gets a status reply, so boot #53's replies are the
-   signal that the format is right.
-5. **The PMP's gate service endpoint** (§5).  It is reached through a
-   computed dispatch (no function-pointer table entry), and the RTKit layer
-   refuses to send on an endpoint that has not been started — so an endpoint
-   sweep needs the STARTEP acknowledged, which 0x20 was not.
-6. **The enable values.**  Only the kext knows what M3Wrap_CTRL and
-   IntOutIRQEn must be; our guesses (1 and 0x1111) may enable nothing, and
-   a write-protected block looks exactly like a dead page.
-7. **The core window** (0x04000000): the firmware can reach it, so the
+1. **The ADT's `meta-sw-interrupt` (never tried).**  `/arm-io/sgx` has
+   `meta-sw-interrupt = 0x32104020 <- 2, 0x321040a0 <- 2, 0x8` — a software
+   interrupt to the GPU's *meta* processor, i.e. **a way to wake the
+   coprocessor that does not involve the mailbox at all**.  In the AP's
+   space that is `0x233104020` / `0x2331040a0`.  Write 2 (then 8?) and see
+   whether the IOP wakes and the mailbox comes alive.  This is cheap, safe
+   and completely untried.
+2. **The PMP's `SET_IOP_PWR_STATE` (type 6, never tried).**  The PMP's
+   dispatch has type 6 → 0x0100ddde; the driver's `apple_rtkit_set_iop_power_state()`
+   sends `(6 << 52) | state` with the state in bits 15:0, but that is for
+   the *PMP's own* channel.  Sending it with the **GFX IOP's identity** in
+   the payload may be what raises the Kingfisher.  (The PMP's type-6
+   handler at 0x0100ddde is the thing to decode offline: it will show
+   which payload field carries the IOP.)
+3. **The PMP's gate request (nearly).**  The format is decoded; what is
+   still unknown is the **device field**: the value `device << 12` is used
+   as an *address base*, so it may not be the PMGR device id at all — it
+   could be a psidx, a bank index or a small number.  We have swept the
+   device {149, 148, 123, 124}, the gate id 0..255, the command
+   {0x03, 0x23, 0x43, 0x83, 0xc3, 0x40000003, 0x80000003} and 21 payloads.
+   Note the handler's `ldrb.w r0, [r4, #56]` — **the gate id's low byte
+   must be zero** to take the normal path, and the payload's low 5 bits
+   select a "gate class" (31 and 16 are special).
+4. **The GFX-KF's gate register.**  The PMP writes it at
+   `(device << 12) + 0x202` in the PMP's space; the AP cannot see that
+   address (we probed pmgr0 and pmgr1 at 0x93000..0x97000, which covers
+   0x95202, and it stayed zero) and cannot write the gate bank either.
+   So this is really lead 2/3.
+5. **The AGX block's +0x1014 = 2.**  One live register we have never
+   explained; it may be a state or a revision.
+6. **The core window (0x04000000).**  The firmware can reach it, so the
    mailbox may be there — but the RGX's registers trap, so it has to be
    probed one offset at a time.
+
+---
 
 ## 9. How to build and boot
 
@@ -333,30 +293,21 @@ cd /home/doug/orchard
 * The last built payload:
   **`00696796dbc95d90f4ecbb4266175da83c4bf242cb6cb2580204bd1900af8ead`**
   (boot #58).
-
-**The PMGR's two windows are 32 MiB apart, not 1 MiB:**
-
-| window | AP address | ADT address |
-|---|---|---|
-| 0 | **0x232000000** | 0x32000000 |
-| 1 | **0x235200000** | 0x35200000 |
-
-Boot #54 assumed `window 1 = window 0 + 0x100000`, read the hole just past
-window 0 and took an **SError** (the phone rebooted; harmless, but it cost
-a boot).  Boot #49 had it right.  **Anything that reads the PMGR must use
-these two bases.**
-
 * The kernel log is streamed to `/tmp/opencode/phone-kmsg.log` by
   `GPU-WIP/tools/kmsg-host.py` (pid 412793; do **not** kill it).  Boot #N
-  starts at the `GFX-STAGE 0/12` line.
+  starts at the `GFX-STAGE 0/12` line.  Per-boot extracts are in
+  `/tmp/opencode/bootNN.log` (ephemeral — re-extract with the sed in §11).
 * A boot counts only when the phone re-enumerates as `05ac:4144`; `RUN_EXIT=0`
   proves nothing (the upload can fail with `LIBUSB_ERROR_OTHER` and still
   exit 0 — check `orchard devices` and the log, not the exit code).
 * One boot per explicit go; the phone must be in PongoOS first (after a boot
-  it is in iOS and has to be restarted by hand).
+  it is in Linux and has to be restarted by hand).
 * The driver is a *diagnostic* driver: it prints everything it reads, and
-  each stage is one experiment.  Read `drivers/soc/apple/apple-t8015-gfx.c`
-  before changing it — the comments record why each step is there.
+  each stage is one experiment.  Read
+  `drivers/soc/apple/apple-t8015-gfx.c` before changing it — the comments
+  record why each step is there.
+
+---
 
 ## 10. The project's own driver
 
@@ -370,6 +321,8 @@ and the init-page fields.  Our diagnostic driver
 itself (the DRM stack is a module, so its symbols are not linkable from a
 built-in driver).
 
+---
+
 ## 11. Where the knowledge is
 
 | what | where |
@@ -377,12 +330,23 @@ built-in driver).
 | the boot log of every attempt | `GPU-WIP/probe/STATUS.md` (chronological, with verdicts) |
 | the A11 register map we measured | `GPU-WIP/probe/phase2.2/G10P-REGISTERS.md` |
 | the GFX bring-up spec | `GPU-WIP/probe/phase2.2/G10P-BRINGUP.md` |
-| the mailbox map, and the V4 class | `GPU-WIP/probe/phase2.2/A7IOP-MAILBOX.md` |
+| **the mailbox map and the V4 class (solved)** | `GPU-WIP/probe/phase2.2/A7IOP-MAILBOX.md` |
 | the A12 (BadApple/Cascadia) AGX driver as a reference | `GPU-WIP/probe/phase2.2/A12-REFERENCE.md` |
 | the offline RE helpers (now in the repo) | `GPU-WIP/tools/` — see `tools/README.md` |
-| the PMP firmware's clock-gate handler | `GPU-WIP/probe/STATUS.md` (boot #51 section) |
-| **the V4 GFX register map (solved)** | `GPU-WIP/probe/phase2.2/A7IOP-MAILBOX.md`, reproduced by `GPU-WIP/tools/a7iop-v4-gfx.py` |
+| **the V4 GFX register map (reproducible)** | `GPU-WIP/tools/a7iop-v4-gfx.py` |
+| **the PMP disassembly (fixed)** | `GPU-WIP/tools/pmpdis.py` — correct addresses; `pmpdis2.sh` is 12 bytes out |
 | the project's own earlier RE (huge) | `Known Good State/firmware/GPU/` — `A11-GPU-FINDINGS.md`, `A11-GPU-G10P-LAYOUT.md`, `A11-GPU-G10P-BOOTCHAIN.md`, `A11-GPU-G10P-STAGE2.md`, the extracted `AGXG10P__*.bin` segments, `agxg10p.asm` |
+
+Re-extracting a boot's log:
+
+```sh
+cd /tmp/opencode
+L=$(grep -n "GFX-STAGE 0/12" phone-kmsg.log | tail -1 | cut -d: -f1)
+sed -n "${L},\$p" phone-kmsg.log | \
+  sed 's/^<[0-9]>\[ *\([0-9.]*\)\] /\1 /' > bootNN.log
+```
+
+---
 
 ## 12. Conventions
 
@@ -397,5 +361,7 @@ built-in driver).
 * No Apple binary blobs (PMP/GFX firmware) in the git repo — publish the
   extraction tools only.
 * Do not blind-write new PMGR windows/registers without a prior read-only
-  probe boot (boots #43/#44 did the read-only probe first ✓).
+  probe boot, and remember that the **PMGR's windows are 32 MiB apart**
+  (`0x232000000`, `0x235200000`); reading past a window's end takes an
+  SError and reboots the phone.
 * One boot per explicit "go"; each rebuild needs approval.
