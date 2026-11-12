@@ -2691,3 +2691,43 @@ SET_IOP_PWR_STATE 6, EPMAP 8, SET_AP_PWR_STATE 0xb — because sending one of
 those by accident would confuse the PMP) × the PMGR device ids (GFX-KF 149,
 its list index 121, GFX 124) × 4 gate ids, on endpoint 0, and watches for
 the PMP's reply (our receive callback prints every message it gets).
+
+### Boot #47: the PMP does not answer either (payload `065690af…`)
+
+324 management messages went out cleanly (endpoint 0 is always available, so
+none of them was refused) — and **the PMP never replied**, and the enable
+sweep that ran right after them still found no mailbox.  So none of
+
+* 27 command values (0x20…0xc4, all with the type's bits 2..3 clear and all
+  clear of the management types the tree knows),
+* 3 device ids (GFX-KF 149, its list index 121, GFX 124),
+* 4 gate ids (149, 121, 124, 0)
+
+turned the GFX's clock on.  (The only messages the RTKit layer saw were the
+spurious type-0 ones that the device-info page at 0x204d04000 produces.)
+
+### What the PMP's own strings say
+
+The AppleA7IOP kext reads **`ps-reg-offset`** and **`debug-ps-clock-gate`**
+from the device tree — the PMGR register offsets are *properties*, not
+constants, so the kext can drive a chip whose PMGR layout differs.  The
+D21's ADT has no such property on `/arm-io/gfx-kf`, so those belong to the
+PMP's node.
+
+### The remaining plan
+
+1. **Read the `AppleA7IOPV4GFX` register maps.**  The class has two maps —
+   `_agxRegisterMap` (the AGX registers: the DART, the timebase, the config
+   words, all measured in the IOP window at 0x4d20000) and
+   `_wrapRegisterMap` (the mailbox wrapper).  Two maps means two apertures,
+   and `gfx-kf` has two: 0x4d20000 and 0x4d00000.  The map's *data* would
+   give the physical offsets directly, and `initialize()` would show which
+   aperture is which.  The vtable of the class is what is missing; the
+   M3Wrap base class's vtable is at `__PLK_DATA_CONST` 0xfffffff006ccb258.
+2. **The gate service's endpoint.**  The PMP's handler is reached through a
+   computed dispatch (no function-pointer table entry), and the RTKit layer
+   refuses to send on an endpoint that has not been started — so an endpoint
+   sweep needs the STARTEP to be acknowledged first, which it was not for
+   endpoint 0x20.
+3. **The enable values.**  Only the kext knows what `M3Wrap_CTRL` and
+   `IntOutIRQEn` must be set to.
