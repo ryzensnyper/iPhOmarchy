@@ -138,9 +138,9 @@ cd /home/doug/orchard
 ```
 
 * The kernel tree is a git repo on branch **`gpu/phase2.2`**; the driver work is
-  committed as **`753f0be0768b`** (boot #47's PMP gate sweep).
-* The last built payload: **`065690af763bbc7eb25f41c67c1ff89ec322013538549b4aa2604987a139cdc1`**
-  (boot #47 — the PMP gate sweep).
+  committed as **`6950076d968b`** (boot #48's PMGR probe).
+* The last built payload: **`66963de62f826958de291cab27e7333f900a454485bdc807382133604cd2455a`**
+  (boot #48 — the PMGR bank probe).
 * The kernel log is streamed to `/tmp/opencode/phone-kmsg.log` by
   `GPU-WIP/tools/kmsg-host.py` (pid 412793; do **not** kill it).  Boot #N starts
   at the `GFX-STAGE 0/12` line.
