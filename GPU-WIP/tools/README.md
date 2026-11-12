@@ -13,6 +13,7 @@ none of them touches the phone.
 | `thumbdis.py` | disassemble a raw Thumb-2 binary (llvm-mc; 32-bit Thumb instructions need `pmpdis2.sh`) |
 | `pmpdis2.sh` | disassemble a Thumb-2 range of the PMP firmware (wraps the raw binary in an ELF so llvm-objdump accepts it) |
 | `adt-mailbox.py` | walk the D21 ADT and print every node whose registers land in an address range |
+| `a7iop-v4-gfx.py` | reverse the `AppleA7IOPV4GFX` class (the A11's GFX IOP) out of the kernelcache: the class hierarchy, the vtable, the register accessor and **every register offset the kext uses** — this is where the G10P mailbox's `+0x110` came from |
 
 The kernelcache they read is `/tmp/opencode/d21ap-kernelcache.macho` (a copy of
 `/home/doug/a11-fw/kc/20H392__iPhone10,2/kernelcache.release.iPhone10,2_5`).
