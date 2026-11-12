@@ -3396,3 +3396,29 @@ device" — the PMP's device indices are its own, not the PMGR's.
 **Boot #61** (tree `29afcad77de1`) sweeps the cmd-3 read across all 64
 one-byte device indices at bits 32..39; any non-`0xffffffff` payload is
 a real device, and its index is what the write must carry.
+
+### Boot #61: the read sweep, 0..63 — every device reads 0xffffffff (payload `aa50d37e…`)
+
+Tree `29afcad77de1`.  Clean boot.  128 cmd-3 reads (64 in 3b + 64 in 9d),
+**all acked 1:1** at the 200 ms cadence, the device correctly echoed in
+the ack (`0x40000`…`0x4003f`), the payload **always `0xffffffff`**.
+The mailbox stayed dark; ps_gfx and the bank never moved.
+
+Two readings of the constant `0xffffffff`:
+
+* (a) the read targets `(dev << 12) + 0x202` on the PMP's private bus and
+  every page reads all-ones — unmapped, **or gated** (Apple MMIO reads of
+  a gated domain return all-ones);
+* (b) the read address comes from the message's *payload*, which was
+  always 0 (reading address 0).
+
+**Boot #62** (tree `ba03eead168b`): the PMP driver now captures the
+ep-32 replies (a sequence number + `apple_t8015_pmp_reply_wait()`, so
+the sweep prints its replies inline), then
+
+* A: cmd 3 with the address in the payload — `0x95202` (the clg
+  handler's `(149 << 12) + 0x202`), `0x32080000` (the PMP's own view of
+  gate-bank entry 0, which the AP reads as `0x1f0000ff` — a matching
+  reply would be a smoking gun), and a payload-0 control;
+* B: the read sweep across **all 256** device indices; anything not
+  returning `0xffffffff` is marked LIVE.
