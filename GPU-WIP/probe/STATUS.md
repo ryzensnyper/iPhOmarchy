@@ -2952,3 +2952,86 @@ Also decoded offline from the same kext:
   bits 12-14 = the RX read pointer, bit 16 = TX full, bit 17 = RX empty
   (`0xfffffff00575b8f4` decodes them; 8 entries deep);
 * `+0x800` = TX data, `+0x830` = RX data (16 bytes each).
+
+### Boot #51: the mailbox, with the Fender powered (payload `d332ce32…`)
+
+Clean boot, phone alive as `05ac:4144`.  New stage **9b/12**, after the Fender
+power request:
+
+```
+GFX-STAGE 9/12: Fender power request (state 1)
+fender power: state @0x1000 = 0x0 (state 0, ack 0)
+fender power: state 1 -> 0x1 after 10 ms (status 0x0)
+GFX-STAGE 9b/12: the mailbox, with the Fender powered
+mailbox before: CPU_CTRL(0x0110) = 0x00000000, status(0x0114) = 0x00000000
+mailbox after:  CPU_CTRL(0x0110) = 0x00000000, status(0x0114) = 0x00000000
+TX(+0x800) = 00000000 00000000 00000000 00000000
+RX(+0x830) = 00000000 00000000 00000000 00000000
+```
+
+**The enable write did not stick either.**  AppleA7IOPV4GFX's setter is a
+read-modify-write of bit 0 of +0x114 (vtable slot +124,
+`0xfffffff00575b72c`); the driver did exactly that and the register still
+reads 0.  A register that ignores writes is a register whose domain is dark.
+
+The device-information page was also re-measured to settle the AGX block
+base — and it is **8-byte stride**, not 4:
+
+```
+fender+0x4000:  +0x00 = 0x01001000   +0x08 = 0x00010704
+                +0x10 = 0x00090303   +0x18 = 0x00000080
+```
+
+so the kext's read of **+0x4008 = 0x00010704** is an exact match for the
+page's third 32-bit field — the **AGX register block is the Fender window
+(0x204d00000)**, confirmed.
+
+## The PMP's management-message dispatch (offline, 2026-11-12)
+
+`pmp-t8015.bin`, the management-message handler at **0x0100ddc2**:
+
+```
+0x0100ddcc: ubfx r0, r3, #20, #4    ; the type = the high word's bits 20..23
+0x0100ddce: cmp r0, #15
+0x0100ddd0: bhi #70
+0x0100ddd4: tbb [pc, r0]           ; a 16-entry jump table at 0x0100ddd8
+```
+
+`r3` is the message's **high** 32 bits, so the **type is the message's bits
+52..55** — four bits, 16 types:
+
+| type | handler | | type | handler |
+|---|---|---|---|---|
+| 0 | 0x0100dedc | | 8 | 0x0100ddf6 |
+| 1 | 0x0100df38 | | 9 | 0x0100de28 |
+| 2 | 0x0100dde2 | | 10 (0xa) | 0x0100de1e |
+| 3 | 0x0100de64 | | **11 (0xb)** | **0x0100df88** ← SET_AP_PWR_STATE |
+| 4 | 0x0100df5e | | 12 (0xc) | 0x0100ddda |
+| 5 | 0x0100dfbe | | 13 (0xd) | 0x0100de20 |
+| 6 | 0x0100ddde | | 14 (0xe) | 0x0100df96 |
+| 7 | 0x0100de78 | | 15 (0xf) | 0x0100dfa8 |
+
+The **clock-gate** handler is at **0x0100e920** (not in this table — it is
+reached through a function pointer).  Decoded:
+
+```
+r2 = the message's high word
+tst r2, #0xC00000        ; bits 22..23 -> "!clg: %08x" (reject)
+r6 = r2 >> 20            ; the command  (message bits 52..63)
+r1 = sbfx(r2, 0, 12)     ; the gate id  (message bits 32..43)
+r3 = ubfx(r2, 12, 8)     ; the device   (message bits 44..51)
+value = (cmd bit31) ? device << 20
+      : (cmd bit30) ? device << 12
+      : (cmd bits 20..21) ? device << 21
+      : device << 12
+```
+
+and the helper is called with the constant **0x202** and the gate id.
+
+**So a gate request is `(cmd << 52) | (device << 44) | (gate << 32)` with the
+type in the low four bits of `cmd` (message bits 52..55) and message bits
+54..55 clear** — the type must be < 16.  Boot #47's 324 shapes should have
+covered those, so the remaining suspects are the *gate id* and the *0x202*
+register selector, and the fact that the PMP's reply is a management message
+that our driver logs as **"unknown management message: 0x0 (type: 0x00)"**
+and throws away.
