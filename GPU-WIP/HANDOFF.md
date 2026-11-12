@@ -47,19 +47,28 @@ it is or how to enable it.**
 
 ### The three open leads
 
-1. **The enable value may be wrong.**  Only the `AppleA7IOPV4GFX` code knows
-   what `M3Wrap_CTRL` and `IntOutIRQEn` want; our guesses (1 and 0x1111)
-   may enable nothing, and a write-protected block is indistinguishable
-   from a dead page.
-2. **The clock gate.**  The ADT gives `/arm-io/gfx-kf` `power-gates = 149`
-   and `clock-gates = 149`.  We have only ever touched the *perf state*
-   (`ps_gfx`, PMGR 0x80338) — never a gate.  A GFX with its clock off would
-   have a mailbox that reads zero *and* ignores writes, which is exactly
-   what every candidate does.  The PMP gate message we tried in earlier
-   boots may be the wrong lever or the wrong format.
-3. **The core window.**  The firmware's IO map lists it, so the mailbox may
-   be there; it has to be probed one offset at a time because the RGX's
-   registers trap.
+1. **Read the `AppleA7IOPV4GFX` register maps.**  The class has two maps —
+   `_agxRegisterMap` (the AGX registers: the DART, the timebase, the config
+   words, all measured in the IOP window at 0x4d20000) and
+   `_wrapRegisterMap` (the mailbox wrapper).  Two maps means two apertures,
+   and `gfx-kf` has two: 0x4d20000 and 0x4d00000.  The map's *data* would
+   give the physical offsets directly, and `initialize()` would show which
+   aperture is which.  The M3Wrap base class's vtable is at
+   `__PLK_DATA_CONST` 0xfffffff006ccb258; the V4GFX class's own vtable is
+   what is missing.
+2. **The PMP's gate service.**  Its firmware handler (0x0100e920) parses the
+   message's **high** 32 bits as {gate id: 0..11, device: 12..19, command:
+   20..} and rejects bits 22..23; the value it writes depends on the
+   command (bit 31 -> device << 12, bit 30 -> device << 20, bits 20..21 !=
+   0 -> device << 21, otherwise nothing).  Boot #46 sent it on app endpoint
+   0x20 (wrong — the RTKit layer refused); boot #47 sent 324 shapes as
+   management messages on endpoint 0 and the PMP never answered.  The
+   service may not be on the management endpoint at all, and the RTKit
+   layer will not send on an endpoint that was not started.
+3. **The enable values.**  Only the kext knows what `M3Wrap_CTRL` and
+   `IntOutIRQEn` must be set to; our guesses (1 and 0x1111) may enable
+   nothing, and a write-protected block is indistinguishable from a dead
+   page.
 
 ## The bring-up we now run (boots #34/#35)
 
@@ -129,9 +138,9 @@ cd /home/doug/orchard
 ```
 
 * The kernel tree is a git repo on branch **`gpu/phase2.2`**; the driver work is
-  committed as **`5f8f4a585fa8`** (boot #44's Fender sweep).
-* The last built payload: **`214d320fde966ecd7d3d7e2e7e295a7c822081b874629eadefe0470fc696b95a`**
-  (boot #45 — the candidate pages in full).
+  committed as **`753f0be0768b`** (boot #47's PMP gate sweep).
+* The last built payload: **`065690af763bbc7eb25f41c67c1ff89ec322013538549b4aa2604987a139cdc1`**
+  (boot #47 — the PMP gate sweep).
 * The kernel log is streamed to `/tmp/opencode/phone-kmsg.log` by
   `GPU-WIP/tools/kmsg-host.py` (pid 412793; do **not** kill it).  Boot #N starts
   at the `GFX-STAGE 0/12` line.
