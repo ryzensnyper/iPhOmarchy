@@ -1740,3 +1740,71 @@ firmware's success path is the only thing that talks back:
   that the shape is right, and the reply value names the clock.
 * then the same few shapes on ep 33..40.
 * re-dump the mailbox page and the live IOP window afterwards.
+
+## Phase 2.2 — boot #25 executed: 96 gate shapes, still nothing (2026-11-12)
+
+Payload `6338cdbb…`.  All 12 stages, **no reset**.  After a STARTEP(32) (which
+the PMP answered with `0`), the sweep sent every combination of
+
+```
+command   in {0, 1, 2, 3}
+device    in {0, 106, 121, 124, 149, 514}
+value     in {0, 7, 269, 0xfff}
+```
+
+as `(cmd << 20) | (device << 12) | value` on ep 32, 300 ms apart:
+
+```
+gate sweep: 96 messages sent, no reply and no effect
+```
+
+The only PMP reply in the whole boot was the STARTEP's own `0`.  The mailbox
+page (`MAILBOX_SET`/`INBOX_CTRL`) stayed zero throughout, and the RGX core map
+was unchanged (one live word, `CORE_ID`).
+
+**The PMP gate route is now exhausted** for that encoding: 96 shapes over
+every field, with the endpoint started, no reply and no effect.
+
+### Where the mailbox enable really lives
+
+The `AppleA7IOP` kext — the one that owns this mailbox — reads three device
+properties before it touches the registers: `pc-sample-offset`,
+`ps-reg-offset` and `debug-ps-clock-gate`.  `ps-reg-offset` is the mailbox's
+own **power-state register**, and `debug-ps-clock-gate` names a **clock gate**.
+The kext's helper order is
+
+1. wait for the mailbox's power-state register to say "on" (`ps-reg-offset`),
+2. write `0x1111` to `MAILBOX_SET (+0x1000)`, write `1` to SET/CLR, write
+   `0x1000` to SET/CLR,
+3. set bit 0 of `OUTBOX_CTRL (+0x1020)`.
+
+Step 1 is the one we cannot do: the offset is an iBoot device-tree property
+and the ADT does not carry it.  So the missing piece is a **power (and clock)
+gate for the a7iop mailbox**, and the two candidate owners are the PMP
+firmware (tried, exhausted) and the **AP-side PMGR clock-gate bank** — whose
+registers the `ApplePMGR` kext writes through its `kRegGroup*` /
+`getRegMap(kRegMap*)` tables (the kext even has
+`enableTVM(VoltageRail, bool, bool, UInt32)`).
+
+### The asset: the AGXG10P kext
+
+The D21 kernelcache contains the A11's **own GPU driver**:
+
+```
+AGXG10P Graphics Kernel Extension      (AGXAcceleratorG10P_A0/B0,
+                                         AGXHardwareBufferBase, AGXGPUCoreConfig)
+AGXFirmwareKextG10PRTBuddy              (the GPU firmware for the RTBuddy)
+```
+
+That is the reference implementation of everything this effort is doing: the
+mailbox bring-up, the `AGXGPUCoreConfig` layout behind the device-info block
+at `0x204d04000`, the DART usage at `0x204d28000`, and the `CORE_ID` decode.
+Working from it is a far better use of effort than more blind probing.
+
+## Boot #26 candidates (not built)
+
+* RE `ApplePMGR`'s clock-gate path (the `kRegGroup*` / `kRegMap*` tables) for
+  the group that owns the GFX/a7iop clock, then write that register from the
+  AP side — the PMGR window is mapped by us, so this is a one-register change.
+* RE `AGXG10P` for the mailbox bring-up sequence and the `AGXGPUCoreConfig`
+  field offsets.

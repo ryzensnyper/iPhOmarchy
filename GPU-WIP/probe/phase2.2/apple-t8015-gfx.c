@@ -716,40 +716,57 @@ struct gfx_gate_try {
 
 
 
+
 /*
- * Phase 2.2 boot #24: STARTEP the endpoint *first*.
+ * Phase 2.2 boot #25: brute-force the PMP gate message shape.
  *
- * The PMP firmware's gate handler (0x0100d814, called from the dispatcher at
- * 0x0100e940) computes
+ * The firmware's gate handler only talks back on success: on failure it logs
+ * "!clg: %08x" into a debug channel we cannot see, so *silence is the
+ * failure signal* and the reply is the only oracle:
  *
  *   reply = 0x80000000 | (clock_id << 24) | (clock_id & 0xff00) | 1
- *   address = 0x80000000 + (device << 12) + endpoint + 0xfff
  *
- * and writes the mask through the worker at 0x0100d77c.  So a gate request
- * really does answer on the endpoint -- but boots #21 and #23 sent their
- * messages to ep 32 *without starting it first*, and the PMP driver in this
- * very tree notes that the firmware stays silent in that case ("boot #11
- * sent to ep 32 without it and the PMP stayed silent").
- *
- * So: STARTEP(32), wait for the reply (the PMP driver prints it as
- * "Received unexpected message to EP32: <value>"), and only then send the
- * gate messages and watch for their replies.
+ * So sweep the shape of (command, device index, value) over ep 32 after a
+ * STARTEP, 300 ms apart, and watch the PMP driver print the reply.  Each
+ * attempt also re-reads the mailbox page, so a gate that lands is visible
+ * even if the reply is lost.
  */
-static void apple_t8015_gfx_gate_try(struct apple_t8015_gfx *gfx,
-				     const char *tag, u32 dev, u32 value, u32 cmd)
+#define GFX_GATE_MAX_MSGS	140
+
+static void apple_t8015_gfx_gate_sweep(struct apple_t8015_gfx *gfx)
 {
-	u64 msg;
+	static const u32 cmds[] = { 1, 0, 2, 3 };
+	static const u32 devs[] = { 121, 149, 124, 106, 514, 0 };
+	static const u32 vals[] = { 269, 7, 0, 0xfff };
+	unsigned int c, d, v;
+	unsigned int sent = 0;
 	u32 v0, v8;
 
-	msg = ((u64)cmd << 20) | ((u64)dev << 12) | (u64)value;
-	dev_info(gfx->dev, "gate %s: dev %u value %u cmd %u -> msg %#llx\n",
-		 tag, dev, value, cmd, msg);
-	apple_t8015_pmp_send(32, msg);
-	msleep(300);
-	v0 = readl(gfx->iop + 0x1000);
-	v8 = readl(gfx->iop + 0x1008);
-	dev_info(gfx->dev, "gate %s: MAILBOX_SET %#x INBOX_CTRL %#x%s\n", tag, v0, v8,
-		 (v0 || v8) ? "   <-- the block is alive" : "");
+	for (c = 0; c < ARRAY_SIZE(cmds); c++) {
+		for (d = 0; d < ARRAY_SIZE(devs); d++) {
+			for (v = 0; v < ARRAY_SIZE(vals); v++) {
+				u64 msg;
+
+				if (sent >= GFX_GATE_MAX_MSGS)
+					return;
+				msg = ((u64)cmds[c] << 20) |
+				      ((u64)devs[d] << 12) | vals[v];
+				dev_info(gfx->dev, "gate sweep: cmd %u dev %u val %u -> %#llx\n",
+					 cmds[c], devs[d], vals[v], msg);
+				apple_t8015_pmp_send(32, msg);
+				sent++;
+				msleep(300);
+				v0 = readl(gfx->iop + 0x1000);
+				v8 = readl(gfx->iop + 0x1008);
+				if (v0 || v8) {
+					dev_info(gfx->dev, "gate sweep: cmd %u dev %u val %u woke the mailbox: SET %#x INBOX %#x\n",
+						 cmds[c], devs[d], vals[v], v0, v8);
+					return;
+				}
+			}
+		}
+	}
+	dev_info(gfx->dev, "gate sweep: %u messages sent, no reply and no effect\n", sent);
 }
 
 static void apple_t8015_gfx_boot_work(struct work_struct *work)
@@ -806,14 +823,10 @@ static void apple_t8015_gfx_boot_work(struct work_struct *work)
 	msleep(1500);
 	dev_info(dev, "GFX-DIAG: ep 32 started; the PMP should answer on it now\n");
 
-	apple_t8015_gfx_stage(gfx, "9/12: gate messages on the started endpoint");
-	apple_t8015_gfx_gate_try(gfx, "gfx-kf table121 id269", 121, 269, 1);
-	apple_t8015_gfx_gate_try(gfx, "gfx-kf id149 id269", 149, 269, 1);
-	apple_t8015_gfx_gate_try(gfx, "gfx-kf table121 psidx7", 121, 7, 1);
-	apple_t8015_gfx_gate_try(gfx, "gfx-kf table121 id269 cmd2", 121, 269, 2);
-	apple_t8015_gfx_gate_try(gfx, "gfx table106 id269", 106, 269, 1);
+	apple_t8015_gfx_stage(gfx, "9/12: brute-force the gate message shape");
+	apple_t8015_gfx_gate_sweep(gfx);
 
-	apple_t8015_gfx_stage(gfx, "10/12: the mailbox block after the attempts");
+	apple_t8015_gfx_stage(gfx, "10/12: the mailbox block after the sweep");
 	apple_t8015_gfx_dump_range(gfx, gfx->iop, "iop", 0x1000, 0x1040);
 	apple_t8015_gfx_dump_range(gfx, gfx->iop, "iop", 0x40, 0x100);
 
