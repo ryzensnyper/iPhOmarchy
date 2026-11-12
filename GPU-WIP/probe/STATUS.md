@@ -2053,3 +2053,46 @@ nothing else lives in it.
    driver must not claim that window.
 4. With both fixed, the GFX driver can do a real RTKit init and wait for the
    firmware's HELLO.
+
+## Phase 2.2 — boot #28 executed: the driver probes, the RTKit layer comes up on the mailbox (2026-11-12)
+
+Payload `375fe582…`.  **No -EBUSY any more**, and the RTKit stack is now
+sitting on the real mailbox:
+
+```
+apple-t8015-gfx 204000000.gpu: GFX power domain is up
+apple-t8015-gfx 204000000.gpu: firmware 381728 bytes in a 0x100000-byte window at 0x000000080c100000
+GFX-STAGE 10/12: RTKit init on the GFX mailbox
+GFX-DIAG: RTKit up; waiting for the firmware HELLO
+GFX-DIAG: RTKit version 0 after 15 s          <- no HELLO arrived
+```
+
+* The GFX driver probes cleanly (the Fender window is mapped without a
+  claim), the mailbox driver binds at `0x204d04000`, and
+  `devm_apple_rtkit_init()` succeeds on it — **the RTKit layer is now on the
+  right block**.
+* The firmware image is the right one: **381728 bytes = 0x5d320**, exactly the
+  size the knowledge base derived for the G10P image
+  (`gfx-t8015-const.bin[9 : 9+0x5d320]`, the 9-byte `\0Release\0` wrapper
+  stripped).
+* But **no message arrived**: no HELLO, no `GFX firmware ep …` line, and the
+  mailbox registers stayed at their reset values.
+
+So the mailbox is finally addressed correctly and still silent — because the
+**RTBuddy firmware is not running** (boot #26: the IOP status word never
+changes).  On the A11 the AGX driver does not start the firmware with a window
+plus a run bit; it starts it through the **Fender's config RAM**
+(`AGXFender::writeConfigRAMCommand32`), and the KB's §9f also lists a "GFX
+config restore" step over the **256 config registers at `+0x8130`** — the block
+we mapped as the DART in boot #21 (the masks we read are the reset values of
+those registers).
+
+### The tool for the next step is already in the KB
+
+`Known Good State/firmware/GPU/` has the AGXG10P kext extracted as raw
+segments — `AGXG10P__TEXT_EXEC.bin` (404 KiB of code), `AGXG10P__TEXT.bin`
+(strings), `AGXG10P__DATA_CONST.bin` (the vtables) — plus `agxg10p.asm` and the
+`tools/g10p-*` scripts.  That is enough to recover
+`writeConfigRAMCommand32(uint16_t offset, uint32_t value, uint8_t flags)` and
+the 256-register config block, and to write boot #29 with the A11's real
+bring-up instead of the A10's.
