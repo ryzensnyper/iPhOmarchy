@@ -2398,3 +2398,33 @@ and the V4 layouts.
 Boot #37 (payload `ce0bcf2a…`, built) is that sweep.  It prints every word
 as it reads it, so a hole in an aperture (which stalls the SoC) still leaves
 the pages read before it in the log.
+
+## Phase 2.2 — boot #37: the Fender window is empty, and +0x10044 hangs (2026-11-12)
+
+Payload `ce0bcf2a…`.  The sweep printed every word as it read it, so the
+pages read before the hang are all in the log — and then the phone reset
+itself into DFU with **no panic and no message**: reading
+`fender+0x10044` hangs the SoC hard (the same failure mode as the
+`+0x40c0` hole in the device-info page).
+
+What the sweep did cover (fender `+0x0000` … `+0x10000`, 17 pages):
+
+| page | live registers |
+|---|---|
+| `+0x0000` | `+0x54 = 0x6` |
+| `+0x1000` | the power state (0 at that moment; the request comes later) |
+| `+0x2000` | the window registers (at +0x200c, not probed) |
+| `+0x4000` | the device-info page (`0x01001000`, `0x00010704`, `0x00090303`, `0x00020202`, `+0x48 = 0x0f`, `+0x4c = 0x2f`, `+0x60 = 0x2`, `+0x80 = 0x28`, `+0x84 = 0x40`) |
+| every other page | **all zero** |
+
+So the mailbox is **not** in the Fender window's first 64 KiB.  The firmware's
+own IO map says the coprocessor's windows are `0x4d20000` (0x20000) and
+`0x04000000` (0x200000), so the mailbox the firmware uses for the HELLO is in
+the **IOP** window — which the sweep never reached, because the Fender
+window came first and killed the phone.
+
+Boot #38 (payload `227e0182…`, built) sweeps the IOP window only, at the
+five offsets that can tell a mailbox from a hole: `+0x00` (any content),
+`+0x08` (V2 INBOX / V4 M3Wrap_CTRL), `+0x20` (V2 OUTBOX), `+0x50` (V4
+INBOX), `+0x80` (V4 OUTBOX).  Five reads a page is also five times fewer
+chances to hit another trap.
