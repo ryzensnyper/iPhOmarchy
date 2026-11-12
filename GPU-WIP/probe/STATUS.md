@@ -2855,3 +2855,25 @@ gate is a plain gate register, and we have not found it yet.
 Also: the driver now reads the device-info page's `+0x80` as writable (the
 enable sweep changed it from 0x28 to 0x29), so that page is not entirely
 read-only after all.
+
+## Offline RE, 2026-11-12 (no boot): the G10P mailbox, from Apple's kext
+
+Lead 1 (the `AppleA7IOPV4GFX` register-map data) is **solved on the read
+side**.  `GPU-WIP/tools/a7iop-v4-gfx.py` reproduces everything offline from
+the D21 kernelcache.
+
+* the kext's class hierarchy and every REQUIRE string (file, function,
+  condition) are now known — `AppleA7IOPV4GFX.cpp` is the A11's class;
+* the "register map" is **not** an offset table: the accessor is
+  `ldr x8,[x0,#256]; ldr w0,[x8,w1,uxtw]` (0xfffffff00575b100), so the
+  offsets the kext passes around *are* the physical offsets;
+* `AppleA7IOPV4GFX` overrides `getMailboxBulk` and uses **+0x110** (CPU_CTRL),
+  **+0x114** (status), **+0x800** (TX) and **+0x830** (RX) — *not* the
+  M3Wrap base class's +0x08/+0x48/+0x50/+0x80;
+* the AGX register block is the **Fender window (0x204d00000)**, so the
+  mailbox is at **0x204d00110 / 0x204d00114 / 0x204d00800 / 0x204d00830**;
+* CPU_CTRL bits: 0 = enabled, 16 = TX full, 17 = RX empty; 0xc0000 = invalid.
+
+**Every earlier boot used the wrong offsets.**  The "enable sequence" of boots
+#43/#44 wrote at +0x08 and +0x48 — the *base* class's registers — and **+0x110
+was never read once in 19 boots**.  Boot #50 will read the new offsets.

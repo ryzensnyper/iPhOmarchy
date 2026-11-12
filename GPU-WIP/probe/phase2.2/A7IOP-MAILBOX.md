@@ -223,3 +223,119 @@ coprocessor that does not involve the mailbox at all.
 The class's two register maps (`_agxRegisterMap` + `_wrapRegisterMap`) are
 the next thing to find: their data would give the *physical* offsets, and
 `initialize()` would say which of the two apertures is the wrapper's.
+
+---
+
+# SOLVED: the AppleA7IOPV4GFX register map (2026-11-12, offline)
+
+Reproduce with `GPU-WIP/tools/a7iop-v4-gfx.py` (offline, reads the D21
+kernelcache only).  Everything below was read out of the binary; nothing is
+guessed.
+
+## The "register map" is not an offset table
+
+This is the surprise, and it ends the guessing.  The class's register accessor
+is two instructions (`__PLK_TEXT_EXEC`):
+
+```
+0xfffffff00575b100:  ldr  x8, [x0, #256]      ; the mapped register block
+0xfffffff00575b104:  ldr  w0, [x8, w1, uxtw]   ; ... at the given byte offset
+0xfffffff00575b108:  ret
+```
+
+(the same accessor exists for the base class at `0xfffffff00575bbc4`).  So the
+"offset" that the kext passes around **is the physical offset inside the
+mapped block** — there is no indirection table to look up.  `_agxRegisterMap`
+(instance member **+0x170**) is a *descriptor* struct, not an offset table:
+the kext only reads two fields of it (`+0x28` and `+0x44`).
+
+The offsets reach the accessor through the metaclass dispatch slot at
+`metaclass + 0x640` (selector 1600), i.e. `ldr x8,[x0]; ldr x8,[x8,#1600];
+mov w1,#<offset>; blr x8`.
+
+## The class hierarchy (from the kext's own REQUIRE strings)
+
+```
+AppleIOP
+└── AppleA7IOP                  (_akfRegisterMap, _autoBootRegisterMap)
+    └── AppleA7IOPV1            (_getInboxEmpty, _getOutboxEmpty, _mapFirmware)
+        └── AppleA7IOPV2
+            ├── AppleA7IOPV2GFX        (A10)
+            ├── AppleA7IOPV2Marconi    (_wrapper/_inbox/_outbox/_aop maps)
+            └── AppleA7IOPV2PMP        (_pmsCSRRegisterMap)
+                └── AppleA7IOPV4
+                    └── AppleA7IOPV4GFX    <-- the A11 (iop-gfx,t8015)
+AppleMxWrap                        (_wrapRegisterMap, _wrapMappedRegs)
+└── AppleM3WrapV2                 (getMailboxBulk at 0xfffffff00575aab4)
+AppleASCWrapV2 / AppleASCWrapV4   (_coreRegisterMap)
+AppleASCANS2                      (_ans2CpuMap)
+```
+
+Source files: `AppleA7IOPV4GFX.cpp`, `AppleMxWrap.cpp`, `AppleM3WrapV2.cpp`,
+`AppleA7IOPV1.cpp` … all under
+`/Library/Caches/com.apple.xbs/Sources/AppleA7IOP/`.
+
+## The G10P mailbox: the V4 GFX class does NOT use the M3Wrap layout
+
+`AppleA7IOPV4GFX` **overrides** `getMailboxBulk` (vtable slot +97, function
+`0xfffffff00575ba0c`) and the send/receive helpers (slots +115/+116).  The
+base `AppleM3WrapV2::getMailboxBulk` reads offsets 0x08/0x48/0x4c/0x50/0x80 —
+but the GFX class replaces that with a completely different set:
+
+| offset | register | evidence |
+|---|---|---|
+| **+0x110** | **CPU_CTRL** — the mailbox control register | read at 0x575b788, 0x575b974, 0x575b998, 0x575ba44 |
+| **+0x114** | **CPU_CTRL status** | read at 0x575b744, 0x575b9c4 |
+| **+0x800** | **TX data**, 16-byte words | written by `postMailbox`: 0x575b94c `add x10,x10,#2048; stp x8,x9,[x10]` |
+| **+0x830** | **RX data**, 16-byte words | read by `getMailboxBulk`: 0x575b938 `add x8,x8,#2096; ldp x8,x9,[x8]` |
+
+Status bits in CPU_CTRL (+0x110), from the GFX's own accessors:
+
+| bit | meaning | code |
+|---|---|---|
+| 0 | "enabled" | 0x575b77c: `readReg(0x110) & 1` |
+| 16 | TX full | 0x575b968: `ubfx w0,w0,#16,#1` |
+| 17 | RX empty | 0x575b98c: `ubfx w0,w0,#17,#1` |
+
+and `0xc0000` (bits 16|17 both set) is the "invalid" state the kext asserts
+against (`_getInboxEmpty`).
+
+## Which aperture is the AGX block?
+
+Three independent correlations put the AGX register block at **the Fender
+window, 0x204d00000**:
+
+| what the kext reads | kext offset | what we measured on the phone |
+|---|---|---|
+| the device-information page | +0x4008, +0x4020, +0x4040 | `0x204d04000` — the read-only G10P device-info page |
+| the power state | +0x1008, +0x1020 | `0x204d01000` — the Fender power-state register |
+| the AGX info | +0xb88 | — |
+
+So:
+
+| what | address |
+|---|---|
+| **mailbox control** | **0x204d00110** |
+| **mailbox status** | **0x204d00114** |
+| **mailbox TX** | **0x204d00800** |
+| **mailbox RX** | **0x204d00830** |
+
+## What this means for boots #34/#35 and #43/#44
+
+* The `0x1111` mask write, the `MAILBOX_CLR` unmask and `OUTBOX_CTRL |= 1`
+  (boots #34/#35) were the **V2 class's** sequence — wrong registers.
+* Boot #43/#44's "V4 enable sequence" wrote at **+0x08** (M3Wrap_CTRL) and
+  **+0x48** (IntOutIRQEn) — those are the *M3Wrap base class*'s offsets.  The
+  GFX class's control register is at **+0x110**, and +0x114 is its status.
+* **+0x110 was never read in any of the 19 boots.**  Every "the mailbox is
+  dead" conclusion so far was based on the wrong offsets (and on a dormant
+  mailbox reading zero anyway).
+
+## Still open after this
+
+* The **write** side: which bits to write to CPU_CTRL (+0x110) to enable the
+  mailbox and to unmask the RTKit interrupt.  The kext's write accessor was
+  not isolated (the 32-bit stores use a different code shape than the reads).
+* Whether the GFX class also needs an IRQ-enable register of its own (the
+  M3Wrap base had +0x48/+0x4c; the GFX overrides `getMailboxBulk` but no
+  +0x118/+0x11c access was seen).

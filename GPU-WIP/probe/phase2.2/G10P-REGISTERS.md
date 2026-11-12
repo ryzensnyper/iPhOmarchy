@@ -156,6 +156,28 @@ the rail register lives elsewhere entirely.  The GPU's core is alive
 and it is a `no_ps` device, so its gate is a plain gate register we have
 not found yet.
 
+## The G10P mailbox (from Apple's own kext, 2026-11-12)
+
+The A11's GFX IOP is driven by `AppleA7IOPV4GFX`, and **its mailbox is not at
+the M3Wrap offsets** (`+0x08`/`+0x48`/`+0x50`/`+0x80`) that boots #34/#35 and
+#43/#44 used.  AppleA7IOPV4GFX overrides `getMailboxBulk` and uses:
+
+| offset | register | address on the A11 |
+|---|---|---|
+| **+0x110** | **CPU_CTRL** (bit 0 = enabled, bit 16 = TX full, bit 17 = RX empty) | **0x204d00110** |
+| **+0x114** | **CPU_CTRL status** (0xc0000 = invalid) | **0x204d00114** |
+| **+0x800** | **TX data**, 16-byte words | **0x204d00800** |
+| **+0x830** | **RX data**, 16-byte words | **0x204d00830** |
+
+The AGX register block is the **Fender window (0x204d00000)**: the kext reads
+the device-information page at +0x4008/+0x4020/+0x4040 (we measured that page
+at 0x204d04000) and the power state at +0x1008/+0x1020 (we measured it at
+0x204d01000).
+
+**+0x110 was never read in any of the 19 boots**, so "the mailbox is dead" was
+never actually established.  See `A7IOP-MAILBOX.md` for the full derivation
+and `GPU-WIP/tools/a7iop-v4-gfx.py` to reproduce it.
+
 ## The AGX apertures, restated
 
 | window | AP address | size | contents |
