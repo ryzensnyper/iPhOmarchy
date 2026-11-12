@@ -2460,3 +2460,24 @@ iop window) and where the AppleA7IOP kext puts its registers
 The driver reads the block before and after the enable sequence, so the
 boot answers the question directly: **if the registers change, the mailbox
 was there and merely dormant; if they do not, the address is wrong.**
+
+## Phase 2.2 — boot #39: the DT now points at the kext's address (2026-11-12)
+
+Payload `dbd65024…`.  Clean boot, phone alive as `05ac:4144`.  The DT's
+`gpu_mbox` moved from `0x204d04000` to **`0x204d24000`** (IOP + 0x4000), so
+the kernel's a7iop mailbox driver ran Apple's enable sequence there for the
+first time — and the firmware still sent no HELLO (`apple_rtkit_boot ->
+-62`).
+
+But the driver's own diagnostic still read the *old* address, so boot #39
+cannot say whether `0x204d24000` takes writes at all.  **Boot #40** (payload
+`01f55868…`, built) points the diagnostic at the same address and prints
+the registers of **both** layouts before and after, having tried both
+enable sequences:
+
+* V2: `0x1111` → MAILBOX_SET (+0x00), `1` → MAILBOX_CLR (+0x04),
+  `OUTBOX_CTRL |= 1` (+0x20);
+* V4: `IntOutIRQEn = 0x1111` (+0x48), `OUTBOX_CTRL |= 1` (+0x80).
+
+If the page takes writes, the mailbox is there (and the problem is that the
+firmware does not run); if it does not, the address is wrong.
