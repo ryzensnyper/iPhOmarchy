@@ -3140,3 +3140,26 @@ names a **register**: PMGR window + (device << 12).
 None of those offsets has ever been read.  Boot #54 dumps them (in PMGR
 windows 0 and 1) **before and after** the gate sweep: whatever the PMP
 changes is the register it wrote — no need to guess the encoding.
+
+### Boot #54: crashed — the PMGR's windows are not adjacent (payload `164a91a3…`)
+
+The phone took an **SError on CPU5** and rebooted (it came back into iOS
+fine; no harm done).  The log shows exactly where:
+
+```
+gate reg before: window 0 +0x7b000      <- read fine (all zero)
+gate reg before: window 1 +0x7b000      <- SError here
+```
+
+**Boot #54 assumed PMGR window 1 = window 0 + 0x100000.**  It is not: the
+PMGR's two windows are **0x232000000** (the ADT's 0x32000000) and
+**0x235200000** (the ADT's 0x35200000) — 32 MiB apart, not 1 MiB.  So
+`window 0 + 0x100000` is the hole immediately past window 0, and reading it
+takes an asynchronous abort.
+
+Boot #49 had it right (`pmgr1+0x80000` = 0x235280000 ✓).
+
+**Boot #55** (payload `e0fe8296…`) sweeps the real addresses —
+`pmgr0+0x7b000`, `pmgr0+0x93000`, `pmgr1+0x93000` — before and after the
+gate sweep, printing each chunk's header first so that if one of them is
+a hole, the SError names it.
