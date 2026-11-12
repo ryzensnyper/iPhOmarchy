@@ -1808,3 +1808,60 @@ Working from it is a far better use of effort than more blind probing.
   AP side — the PMGR window is mapped by us, so this is a one-register change.
 * RE `AGXG10P` for the mailbox bring-up sequence and the `AGXGPUCoreConfig`
   field offsets.
+
+## Phase 2.2 — the AGXG10P kext and the PMGR groups (offline, 2026-11-12)
+
+### What the AGX kext says (D21 kernelcache, `AGXG10P Graphics Kernel Extension`)
+
+The A11's real GPU driver is in the kernelcache, and it changes the picture:
+
+| find | meaning |
+|---|---|
+| `AGXAcceleratorG10P_A0/B0`, `AGXHardwareBufferBase` | the A11's AGX accelerator classes |
+| **`AGXArmFenderKingfisher`** | the A11's Fender is "Kingfisher" — a different block from the A10's PowerVR Fender |
+| `AGXFender::initConfigRAMOffset`, `writeConfigRAMCommand32/64`, `terminateConfigRAMSequence` | **the AGX driver configures the GPU through the Fender's *config RAM***, not by direct register writes |
+| `AGXFender::isPoweredOffWaitingOnHost`, `readTimerPowerInterruptStatus`, `setGPCPerformanceState` | the A11's Fender has its own power/perf state registers |
+| **`AGXGPUCoreConfig`** with `num_cores`, `core_mask_list` | the core configuration, delivered by the firmware (the names match Mesa/asahi's `num_cores`/`core_masks`) |
+| `AGXFirmwareKextG10PRTBuddy` | the AGX firmware for the RTBuddy — our "GFX IOP" firmware |
+
+Two consequences:
+
+1. **Our driver is using the A10's PowerVR Fender map on an AGX GPU** (power
+   state `+0x1000`, window `+0x200c`, run bit `+0x2048`).  The A11's Fender is
+   Kingfisher and is driven through a config RAM.  So the window copy and the
+   run bit may be writing registers that mean nothing on the A11 — i.e. **the
+   RTBuddy firmware may never actually have started**, which would explain the
+   dead mailbox perfectly: the RTBuddy firmware is what enables its own
+   mailbox (and the AGX firmware kext is the RTBuddy's).
+2. The device-information block at `0x204d04000` is very likely the
+   `AGXGPUCoreConfig` — the A11's own `num_cores`/`core_mask_list`/geometry —
+   which is exactly what Phase 2.3 needs and what our tree still hardcodes
+   from the A10.
+
+### The PMGR clock-gate groups
+
+The `ApplePMGR` kext's `kRegGroup*` tables (19 groups) **are** the clock-gate
+name table we found earlier:
+
+```
+AFRTrigCtl  ANE1TrigCtl  ANETrigCtl  C1PPTTrigCtl  ClusterCtl  DPE0Cfg
+ECPUTrigCtl  FABTrigCtl  GPU1TrigCtl  GPU2TrigCtl  GPU3TrigCtl  GPUTrigCtl
+ISPRef0ClkCfg  MiscACG  PCPU1TrigCtl  PCPUTrigCtl  SOCTVM  Touch
+```
+
+with `kRegMap*` maps `ACCImpl  ACCPwrCtl  AOPGlobalAPControls  CPMImpl
+PACC1PwrCtl  PACCPwrCtl  PCPMImpl  PMGR  PMGRSOCEast`.  So the GPU's clocks
+live in the `GPU_TRIG_CTL` group and its voltage states in `GFX_TVM`/`SOCTVM`
+— the A11 even has **four** GPU clock groups (`GPU_TRIG_CTL` … `GPU3_TRIG_CTL`),
+one per GPU core.
+
+## Boot #26 candidate (not built — needs a go)
+
+Test the "the RTBuddy firmware never started" hypothesis, which is cheap:
+
+* probe `IOP+0x00` and the mailbox page **before** the window copy, **after**
+  the run bit + 1 s, and again after 5 s (the firmware may need time);
+* if `IOP+0x00` (`0x00000101` today) changes, the firmware is alive and the
+  mailbox enable must come from it;
+* also try the AGX-style bring-up order (Fender config RAM) instead of the
+  A10 window/run-bit order.
