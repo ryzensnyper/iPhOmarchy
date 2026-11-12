@@ -2428,3 +2428,35 @@ five offsets that can tell a mailbox from a hole: `+0x00` (any content),
 `+0x08` (V2 INBOX / V4 M3Wrap_CTRL), `+0x20` (V2 OUTBOX), `+0x50` (V4
 INBOX), `+0x80` (V4 OUTBOX).  Five reads a page is also five times fewer
 chances to hit another trap.
+
+## Phase 2.2 — boot #38: the IOP window has no mailbox either (2026-11-12)
+
+Payload `227e0182…`.  Clean boot, phone alive as `05ac:4144`.  The sweep
+covered all 32 pages of the IOP window (0x4d20000…0x4d3ffff) at five
+offsets a page and read **no mailbox**:
+
+| page | live words |
+|---|---|
+| `iop+0x0000` | `+0x00 = 0x101`, `+0x08` = the window base we wrote, `+0x38 = 1` (window enable), `+0x40 = 0x30000`, `+0x48 = 0x79` |
+| `iop+0x8000` | `+0x00` = the DART's `dart_vm_size` (0x79 before the copy, 0x4f after) |
+| `iop+0x10000` | `+0x00 = 0x0b`, `+0x08 = 0xffffffff` |
+| every other page | **all zero** |
+
+So neither the Fender window (boot #37) nor the IOP window (boot #38)
+contains a mailbox at the offsets of either layout — as *readable* registers.
+The remaining possibility is a mailbox that is **dormant**: the A7IOP
+mailbox's registers may well read zero until the host enables them, which is
+exactly what Apple's kext does first (`0x1111` to MAILBOX_SET, `1` to
+MAILBOX_CLR, `OUTBOX_CTRL |= 1`).
+
+**Boot #39** (payload `dbd65024…`, built) therefore goes back to the kext's
+own address: the DT's `gpu_mbox` moves from `0x204d04000` (the read-only
+device-info page) to **`0x204d24000`** — the IOP window + 0x4000, which is
+where the A10 put its mailbox (`mbox@201d24000`, right after the 0x1d20000
+iop window) and where the AppleA7IOP kext puts its registers
+(MAILBOX_SET +0x4000, MAILBOX_CLR +0x4004, INBOX_CTRL +0x4008, OUTBOX_CTRL
++0x4020, IDLE_STATUS +0x40f20).
+
+The driver reads the block before and after the enable sequence, so the
+boot answers the question directly: **if the registers change, the mailbox
+was there and merely dormant; if they do not, the address is wrong.**
