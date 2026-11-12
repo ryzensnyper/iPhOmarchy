@@ -563,71 +563,54 @@ struct gfx_probe {
 	phys_addr_t addr;
 };
 
-static const struct gfx_probe gfx_probes[] = {
-	{ "apple-mbox+1000",	0x204d21000UL },	/* IOP window base + 0x1000 */
-	{ "dt-mbox+1000",	0x204d25000UL },	/* DT mailbox base + 0x1000 */
-	{ "iop-head",		0x204d20000UL },
-	{ "dt-mbox",		0x204d24000UL },
-	{ "fender+3000",	0x204d03000UL },
-	{ "fender+4000",	0x204d04000UL },
-	{ "fender+4040",	0x204d04040UL },
-	{ "fender+4080",	0x204d04080UL },
-	{ "fender+2000",	0x204d02000UL },
-	{ "fender+1000",	0x204d01000UL },
-};
 
-static void apple_t8015_gfx_probe_dump(struct apple_t8015_gfx *gfx,
-				       const struct gfx_probe *p)
+
+
+
+/* Sweep a range of a window 64 bytes at a time and log what is not zero. */
+static void apple_t8015_gfx_sweep_range(struct apple_t8015_gfx *gfx,
+				       void __iomem *win, const char *tag,
+				       unsigned int from, unsigned int to)
 {
-	void __iomem *win;
-	u32 v[16];
-	unsigned int i;
+	unsigned int off;
+	u32 v[4];
+	unsigned int shown = 0;
 
-	win = devm_ioremap(gfx->dev, p->addr, GFX_PROBE_LEN);
-	if (!win) {
-		dev_info(gfx->dev, "probe %s @%#lx: cannot map\n",
-			 p->name, (unsigned long)p->addr);
-		return;
+	for (off = from; off + 0x40 <= to; off += 0x40) {
+		v[0] = readl(win + off + 0x0);
+		v[1] = readl(win + off + 0x4);
+		v[2] = readl(win + off + 0x8);
+		v[3] = readl(win + off + 0xc);
+		if (!(v[0] | v[1] | v[2] | v[3]))
+			continue;
+		if (shown++ < 40)
+			dev_info(gfx->dev, "%s sweep +%#06x: %08x %08x %08x %08x\n",
+				 tag, off, v[0], v[1], v[2], v[3]);
 	}
-	for (i = 0; i < GFX_PROBE_LEN; i += 4)
-		v[i / 4] = readl(win + i);
-	dev_info(gfx->dev, "probe %s @%#lx:\n", p->name, (unsigned long)p->addr);
-	for (i = 0; i < GFX_PROBE_LEN; i += 0x10)
-		dev_info(gfx->dev, "    +%#04x: %08x %08x %08x %08x\n", i,
-			 v[i / 4 + 0], v[i / 4 + 1], v[i / 4 + 2], v[i / 4 + 3]);
-	/* A live INBOX_CTRL has its status in bits 16..18. */
-	if (v[2] & 0x70000)
-		dev_info(gfx->dev, "probe %s: +0x08 has INBOX_CTRL-like status bits (%#x)\n",
-			 p->name, v[2]);
+	dev_info(gfx->dev, "%s sweep %#x..%#x: %u non-zero chunks\n", tag, from,
+		 to, shown);
 }
 
-static void apple_t8015_gfx_probe_enable(struct apple_t8015_gfx *gfx,
-					 const struct gfx_probe *p)
-{
-	void __iomem *win;
-	u32 before, after;
-
-	win = devm_ioremap(gfx->dev, p->addr, GFX_PROBE_LEN);
-	if (!win)
-		return;
-	before = readl(win + 0x00);
-	writel(0x1111, win + 0x00);
-	after = readl(win + 0x00);
-	dev_info(gfx->dev, "probe %s: wrote 0x1111 to +0x00: %#x -> %#x\n",
-		 p->name, before, after);
-	if (before != after) {
-		dev_info(gfx->dev, "probe %s: block after enable: %08x %08x %08x %08x %08x %08x %08x %08x\n",
-			 p->name,
-			 readl(win + 0x00), readl(win + 0x04), readl(win + 0x08),
-			 readl(win + 0x0c), readl(win + 0x10), readl(win + 0x14),
-			 readl(win + 0x18), readl(win + 0x1c));
-		dev_info(gfx->dev, "probe %s: +0x20..: %08x %08x %08x %08x %08x %08x %08x %08x\n",
-			 p->name,
-			 readl(win + 0x20), readl(win + 0x24), readl(win + 0x28),
-			 readl(win + 0x2c), readl(win + 0x30), readl(win + 0x34),
-			 readl(win + 0x38), readl(win + 0x3c));
-	}
-}
+/*
+ * Phase 2.2 boot #20: find the kext's base.
+ *
+ * Apple's AppleA7IOP kext reads these offsets from one base (found by
+ * scanning every "mov w1, #off ; blr" that goes through the kext's
+ * readRegister helper):
+ *
+ *   0x28  0x44  0x48  0x80c  0xb88
+ *   0x1000 0x1004 0x1008 0x1020          <- MAILBOX_SET/CLR/INBOX/OUTBOX
+ *   0x4000 0x4004 0x4008 0x4020 0x4040
+ *   0x8000 0x8110 0x8114
+ *
+ * Boot #18/19 found live registers at exactly +0x4000..+0x4040 of the
+ * *Fender* window (0x204d00000) and at +0x48/+0x80c of the *IOP* window
+ * (0x204d20000).  One base cannot be both, so one of the two windows is the
+ * kext's base -- and the +0x8000/+0x8110/+0x8114 cluster (read eight times
+ * between them) is what settles it: it has to be live in the kext's window.
+ */
+#define GFX_MBOX_ENABLE_SEQ_BASE_IOP	0x204d20000UL
+#define GFX_MBOX_ENABLE_SEQ_BASE_DT	0x204d24000UL
 
 static void apple_t8015_gfx_boot_work(struct work_struct *work)
 {
@@ -635,13 +618,17 @@ static void apple_t8015_gfx_boot_work(struct work_struct *work)
 		container_of(to_delayed_work(work), struct apple_t8015_gfx, work);
 	struct device *dev = gfx->dev;
 	unsigned int i;
-	int j;
 
 	/*
-	 * Boot #18.  The GPU path is proven and runs unchanged; the new work is
-	 * a set of targeted probes of the mailbox candidates, because boot
-	 * #17's blind sweep died on a hole at Fender+0x40c0 before it ever
-	 * reached the IOP window.
+	 * Boot #19.  Boot #18 probed ten candidates and found the mailbox
+	 * register block nowhere: 0x204d24000 (our DT node), 0x204d25000 and
+	 * 0x204d21000 are all zero, and the one live block (Fender+0x4000)
+	 * ignored the 0x1111 write, so it is read-only config rather than
+	 * MAILBOX_SET.
+	 *
+	 * So: run Apple's full enable sequence against every plausible base
+	 * and see whether anything wakes up, then sweep the two window ranges
+	 * that have never been read.
 	 */
 	apple_t8015_gfx_stage(gfx, "0/12: wait for the PMP to come up");
 	for (i = 0; i < GFX_PMP_READY_WAIT_MS / 500; i++) {
@@ -674,34 +661,22 @@ static void apple_t8015_gfx_boot_work(struct work_struct *work)
 	apple_t8015_gfx_stage(gfx, "7/12: RGX identity + CORE_ID/PBVNC");
 	apple_t8015_gfx_probe_rgx(gfx);
 
-	apple_t8015_gfx_stage(gfx, "8/12: probe the mailbox candidates");
-	for (i = 0; i < ARRAY_SIZE(gfx_probes); i++)
-		apple_t8015_gfx_probe_dump(gfx, &gfx_probes[i]);
+	apple_t8015_gfx_stage(gfx, "8/12: sweep the kext's +0x8000 block (IOP window)");
+	apple_t8015_gfx_sweep_range(gfx, gfx->iop, "iop+8000", 0x8000, 0x8200);
 
-	apple_t8015_gfx_stage(gfx, "9/12: mailbox enable write (0x1111)");
-	for (i = 0; i < ARRAY_SIZE(gfx_probes); i++) {
-		void __iomem *win;
-		u32 v;
+	apple_t8015_gfx_stage(gfx, "9/12: sweep the kext's +0x8000 block (Fender window)");
+	apple_t8015_gfx_sweep_range(gfx, gfx->fender, "fender+8000", 0x8000, 0x8200);
 
-		win = devm_ioremap(gfx->dev, gfx_probes[i].addr, GFX_PROBE_LEN);
-		if (!win)
-			continue;
-		v = readl(win + 0x08);
-		if (v & 0x70000) {
-			dev_info(dev, "probe %s: +0x08 = %#x looks like INBOX_CTRL; enabling\n",
-				 gfx_probes[i].name, v);
-			apple_t8015_gfx_probe_enable(gfx, &gfx_probes[i]);
-		}
-	}
+	apple_t8015_gfx_stage(gfx, "10/12: the kext's other offsets in both windows");
+	apple_t8015_gfx_sweep_range(gfx, gfx->iop, "iop+0080", 0x80, 0x100);
+	apple_t8015_gfx_sweep_range(gfx, gfx->fender, "fender+0080", 0x80, 0x100);
+	apple_t8015_gfx_sweep_range(gfx, gfx->iop, "iop+0b80", 0xb80, 0xb90);
+	apple_t8015_gfx_sweep_range(gfx, gfx->fender, "fender+0b80", 0xb80, 0xb90);
 
-	apple_t8015_gfx_stage(gfx, "10/12: re-probe the candidates");
-	for (j = 0; j < 2; j++) {
-		for (i = 0; i < ARRAY_SIZE(gfx_probes); i++)
-			apple_t8015_gfx_probe_dump(gfx, &gfx_probes[i]);
-		msleep(1000);
-	}
+	apple_t8015_gfx_stage(gfx, "11/12: the +0x4000 block in the IOP window");
+	apple_t8015_gfx_sweep_range(gfx, gfx->iop, "iop+4000", 0x4000, 0x4040);
 
-	apple_t8015_gfx_stage(gfx, "11/12: done");
+	apple_t8015_gfx_stage(gfx, "12/12: done");
 }
 
 static int apple_t8015_gfx_probe(struct platform_device *pdev)

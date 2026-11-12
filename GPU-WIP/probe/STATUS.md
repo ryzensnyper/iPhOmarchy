@@ -1303,3 +1303,55 @@ its address is outside everything probed so far.
    `0x204d03000`, `0x204d04000`.
 4. Sweep the first 4 KiB of the **IOP** window and of the **Fender** window
    (the ranges that were never read) for any other live block.
+
+## Phase 2.2 — boot #19 executed: the kext's base is pinned down (2026-11-12)
+
+Payload `8f9bfb9b…`.  All 13 stages, **no reset**.
+
+```
+enable iop-window @0x204d20000: SET 0x0->0x0 CLR 0x0->0x0 INBOX 0x0->0x0 OUTBOX 0x0->0x0
+enable dt-mbox     @0x204d24000: SET 0x0->0x0 CLR 0x0->0x0 INBOX 0x0->0x0 OUTBOX 0x0->0x0
+enable fender+3000 @0x204d03000: SET 0x1001000->0x1001000 CLR 0x0->0x0 INBOX 0x10704->0x10704 OUTBOX 0x0->0x0
+iop sweep +0x0040: 000f0401 00000000 0000004f 00000000
+iop sweep +0x0800: 00000060 00180018 00000000 60000003
+fender sweep 0x40..0x1000: 0 non-zero chunks
+```
+
+* Apple's **full enable sequence changed nothing**: the two candidate bases
+  ignore writes entirely, and the one live block ignores them too — it is
+  read-only configuration, not `MAILBOX_SET`.
+* **The Fender window head (`+0x40..+0x1000`) is entirely zero** — one window
+  is completely mapped out below `+0x1000`.
+* **The IOP window has two more live blocks**: `+0x40` (`0x000f0401`,
+  `0x0000004f`) and `+0x800` (`0x00000060`, `0x00180018`, `0x60000003`).
+
+### The kext's register offsets settle the window question
+
+Scanning every `mov w1, #off ; blr` that goes through the kext's
+`readRegister` helper gives the offsets Apple's code uses from its base:
+
+```
+0x28  0x44  0x48  0x80c  0xb88
+0x1000 0x1004 0x1008 0x1020        <- MAILBOX_SET/CLR/INBOX_CTRL/OUTBOX_CTRL
+0x4000 0x4004 0x4008 0x4020 0x4040
+0x8000 0x8110 0x8114
+```
+
+* `+0x4000..+0x4040` is **exactly** the live block found in the **Fender**
+  window (`0x204d04000`).
+* `+0x48` and `+0x80c` are exactly the live registers found in the **IOP**
+  window (`0x204d20048 = 0x4f`, `0x204d2080c = 0x60000003`).
+
+One base cannot be both windows — so the kext drives **two device instances**
+from one class, and the `+0x8000/+0x8110/+0x8114` cluster (read eight times
+between them) has to be live in whichever window is the kext's base.  That
+cluster is the discriminator.
+
+## Boot #20 plan (not built — needs a go)
+
+1. Proven GPU path.
+2. Sweep `+0x8000..+0x8200` of the **IOP** window.
+3. Sweep `+0x8000..+0x8200` of the **Fender** window.
+4. Sweep `+0x0080..+0x0100` and `+0x0b80..+0x0b90` of both windows.
+5. Sweep `+0x4000..+0x4040` of the IOP window (the one kext block not yet
+   read there).
