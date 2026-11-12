@@ -3328,3 +3328,40 @@ management requests never wrote anything.
 Stage 3b starts endpoint 32 and sweeps 88 messages (16 commands; 16×4
 device forms; the clg word ×{bit52} in the mgmt placement), watching
 CPU_CTRL/status, ps_gfx and the gate bank after each.  Repeated at 9d.
+
+### Boot #59: endpoint 32 is ALIVE — cmds 1/3/5 ack with the +1 convention (payload `bc98cfa9…`)
+
+Tree `6586463337d4`.  Clean boot, phone alive as `05ac:4144`.
+
+```
+pmp-v2: start_ep(32) -> 0
+pmp-t8015-v1: Received unexpected message to EP32: 0          <- the start confirm
+pmp-v2: start: CPU_CTRL 0, status 0, ps_gfx 0x0f0003ff, bank0 0x1f0000ff
+EP32: 2000000000000    <- ack to cmd 1 (cmd+1 = 2), sent 47.79, ack 47.80
+EP32: 40000ffffffff    <- ack to cmd 3 (cmd+1 = 4) + payload 0xffffffff, sent 48.05
+EP32: 6000000000000    <- ack to cmd 5 (cmd+1 = 6), sent 48.31
+```
+
+* **cmds 1, 3, 5 are the live PM commands** (the ack nibble = cmd + 1,
+  exactly ApplePMP's `pm_msg_get_cmd(ack_msg) == command + 1`).
+  Commands 0, 2, 4, 6..15 never acked.
+* **each command acked only ONCE**: the same commands later in the sweep
+  (with devices) and in the 9d re-run got nothing.  So the interesting
+  variants must be sent FIRST on a fresh boot.
+* **cmd 3's ack carried a value**: `0xffffffff` — a read of an
+  unmapped/absent target (the message had no device).
+* **the bank[6]/bank[20] toggles are housekeeping, not us**: they fired
+  on unrelated (cmd, dev) pairs across the two sweeps (cmd 5/148+123 in
+  run 1; cmd 7/149+124 and cmd 11/123, cmd 12/149 in run 2), are ~110 ms
+  wide and ~2 s apart — a periodic PMP tick writing status into
+  pmgr_mini's bank.  Do not attribute bank changes to commands without a
+  flush/quiet-baseline control.
+* `start_ep(32)` the second time returned -22 (already started); sends
+  still worked but nothing acked.
+* the GFX mailbox stayed dark (CPU_CTRL 0) through both sweeps; RTKit
+  version 0 at the end (the GFX's own channel never booted).
+
+**Interpretation**: cmd 3 looks like a *read* (it returns a 32-bit
+value); cmd 5 the likely *write*; cmd 1 maybe a state set.  With
+`arg = (dev << 12) | 0x202` — the very address the firmware's clg
+handler writes — cmd 3 should return the device's gate register.
