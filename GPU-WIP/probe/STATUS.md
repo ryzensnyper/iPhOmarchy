@@ -2287,3 +2287,28 @@ bits clear), which is what a mailbox nobody has initialised looks like.
 3. A read-only sweep of the whole IOP window before and after the run bit, to
    see whether the firmware touches *anything* (the DART/config block at
    `+0x8000` would be the first sign of life).
+
+## Phase 2.2 — the GFX bring-up, assembled offline (2026-11-12)
+
+`GPU-WIP/probe/phase2.2/G10P-BRINGUP.md` has the full write-up.  The short
+version: the `AppleA7IOP` kext's `AppleA7IOPV2GFX::initialize()` path is the
+reference for starting the G10P, and our diagnostic driver had **never run
+four of its eight steps**:
+
+| # | Apple's step | kext site | our address |
+|---|---|---|---|
+| 1 | mask all four mailbox IRQs: `0x1111` -> `MAILBOX_SET` | `0x756530` | `0x204d04000` |
+| 2 | unmask the A2I-empty interrupt: `1` -> `MAILBOX_CLR` | `0x756548` | `0x204d04004` |
+| 3 | outbox enable: `OUTBOX_CTRL \|= 1` | `0x7565d8` | `0x204d04020` |
+| 4 | **timebase sync**: `+0x80c &= ~2`, CNTVCT -> `+0x810`/`+0x818` (and the A10 pair `+0xc030`/`+0xc038`), `+0x80c \|= 2` | `0x755dc4`, `0x756850` | `0x204d2800c/10/18` |
+| 5 | GFX run: `+0x2048 \|= 1` | `0x756cfc` | `0x204d02048` |
+| 6 | GFX config restore: write 0x100 words at `+0x8130+` | `0x75944c` | `0x204d28130` |
+
+Step 4 is the one that matters most: **an RTKit coprocessor cannot start
+without the host giving it the timebase**, and we never did it.  Steps 1-3
+leave the mailbox in the state Apple's kext expects before the firmware runs
+(mask everything, unmask the A2I-empty interrupt, enable the outbox).
+
+Boot #34 (payload `70310397…`, built) runs steps 1-5 in Apple's order before
+the window copy and the run bit, then the RTKit boot, the two AGX endpoints,
+and the init message.

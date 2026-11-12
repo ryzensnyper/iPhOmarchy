@@ -54,6 +54,7 @@
 #include <linux/workqueue.h>
 #include <linux/sizes.h>
 #include <linux/soc/apple/rtkit.h>
+#include <asm/arch_timer.h>
 #include "rtkit-internal.h"
 
 #define GFX_WINDOW_SIZE		SZ_1M
@@ -826,6 +827,73 @@ static void apple_t8015_gfx_send_init(struct apple_t8015_gfx *gfx)
 		 ready_off, ready, i * 100);
 }
 
+/*
+ * Phase 2.2 boot #34: the GFX bring-up in Apple's own order.
+ *
+ * The AppleA7IOP kext's AppleA7IOPV2GFX::initialize() path does, in order:
+ *
+ *   1. mask all four mailbox IRQs        0x1111 -> MAILBOX_SET  (+0x4000)
+ *   2. unmask the A2I-empty interrupt     1     -> MAILBOX_CLR  (+0x4004)
+ *   3. outbox enable                      OUTBOX_CTRL (+0x4020) |= 1
+ *   4. timebase sync                      +0x80c &= ~2, CNTVCT -> +0x810/+0x818
+ *                                         (+0xc030/+0xc038), then +0x80c |= 2
+ *   5. GFX run                            +0x2048 |= 1
+ *
+ * We never did 1-4 (and never gave the coprocessor a timebase), which is the
+ * most likely reason the RTBuddy firmware never started.
+ */
+#define GFX_MBOX_BASE	0x204d04000UL
+#define GFX_IOP_BASE	0x204d20000UL
+
+#define GFX_MBOX_SET	0x00	/* MAILBOX_SET  */
+#define GFX_MBOX_CLR	0x04	/* MAILBOX_CLR  */
+#define GFX_MBOX_INBOX	0x08	/* INBOX_CTRL   */
+#define GFX_MBOX_OUTBOX	0x20	/* OUTBOX_CTRL  */
+
+#define GFX_TB_CTL	0x80c	/* timebase control */
+#define GFX_TB_LO	0x810	/* timebase low   */
+#define GFX_TB_HI	0x818	/* timebase high  */
+#define GFX_TB_LO2	0xc030	/* the A10 pair */
+#define GFX_TB_HI2	0xc038
+
+static void apple_t8015_gfx_gfx_init(struct apple_t8015_gfx *gfx)
+{
+	void __iomem *mbox, *iop;
+	u64 cnt;
+	u32 lo, hi, ctl;
+
+	mbox = devm_ioremap(gfx->dev, GFX_MBOX_BASE, SZ_4K);
+	iop = devm_ioremap(gfx->dev, GFX_IOP_BASE, 0x20000);
+	if (!mbox || !iop) {
+		dev_err(gfx->dev, "cannot map the mailbox or the IOP window\n");
+		return;
+	}
+
+	/* 1. mask every mailbox interrupt */
+	writel(0x1111, mbox + GFX_MBOX_SET);
+	/* 2. unmask the "A2I empty" interrupt */
+	writel(1, mbox + GFX_MBOX_CLR);
+	/* 3. enable the outbox */
+	writel(readl(mbox + GFX_MBOX_OUTBOX) | 1, mbox + GFX_MBOX_OUTBOX);
+	dev_info(gfx->dev, "mailbox: SET %#x CLR %#x INBOX %#x OUTBOX %#x\n",
+		 readl(mbox + GFX_MBOX_SET), readl(mbox + GFX_MBOX_CLR),
+		 readl(mbox + GFX_MBOX_INBOX), readl(mbox + GFX_MBOX_OUTBOX));
+
+	/* 4. the timebase: the coprocessor cannot run without it */
+	ctl = readl(iop + GFX_TB_CTL);
+	writel(ctl & ~2u, iop + GFX_TB_CTL);
+	cnt = arch_timer_read_cntvct_el0();
+	lo = (u32)cnt;
+	hi = (u32)(cnt >> 32);
+	writel(lo, iop + GFX_TB_LO);
+	writel(hi, iop + GFX_TB_HI);
+	writel(lo, iop + GFX_TB_LO2);
+	writel(hi, iop + GFX_TB_HI2);
+	writel(ctl | 2u, iop + GFX_TB_CTL);
+	dev_info(gfx->dev, "timebase: cnt %#llx -> lo %#x hi %#x; ctl %#x -> %#x\n",
+		 cnt, lo, hi, ctl, readl(iop + GFX_TB_CTL));
+}
+
 static void apple_t8015_gfx_boot_work(struct work_struct *work)
 {
 	struct apple_t8015_gfx *gfx =
@@ -864,19 +932,22 @@ static void apple_t8015_gfx_boot_work(struct work_struct *work)
 		dev_info(dev, "GFX-DIAG: RTKit up on the GFX mailbox\n");
 	}
 
-	apple_t8015_gfx_stage(gfx, "4/12: window copy + release the IOP");
+	apple_t8015_gfx_stage(gfx, "4/12: mailbox mask/unmask, outbox, timebase");
+	apple_t8015_gfx_gfx_init(gfx);
+
+	apple_t8015_gfx_stage(gfx, "5/12: window copy + release the IOP");
 	apple_t8015_gfx_set_window(gfx);
 	writel(readl(gfx->fender + FENDER_RUN) | FENDER_RUN_ENABLE,
 	       gfx->fender + FENDER_RUN);
 	dev_info(dev, "GFX IOP released; letting the firmware start\n");
 
-	apple_t8015_gfx_stage(gfx, "5/12: RTKit boot (waiting for the firmware HELLO)");
+	apple_t8015_gfx_stage(gfx, "6/12: RTKit boot (waiting for the firmware HELLO)");
 	if (gfx->rtk) {
 		ret = apple_rtkit_boot(gfx->rtk);
 		dev_info(dev, "GFX-DIAG: apple_rtkit_boot -> %d\n", ret);
 	}
 
-	apple_t8015_gfx_stage(gfx, "6/12: start the AGX endpoints");
+	apple_t8015_gfx_stage(gfx, "7/12: start the AGX endpoints");
 	if (gfx->rtk) {
 		ret = apple_rtkit_start_ep(gfx->rtk, APPLE_EP_AGX_INIT);
 		dev_info(dev, "GFX-DIAG: start_ep(0x%02x) -> %d\n",
@@ -886,7 +957,7 @@ static void apple_t8015_gfx_boot_work(struct work_struct *work)
 			 APPLE_EP_AGX_DOORBELL, ret);
 	}
 
-	apple_t8015_gfx_stage(gfx, "7/12: wait for the firmware to settle");
+	apple_t8015_gfx_stage(gfx, "8/12: wait for the firmware to settle");
 	for (i = 0; i < 5; i++) {
 		msleep(1000);
 		if (gfx->rtk)
@@ -894,21 +965,21 @@ static void apple_t8015_gfx_boot_work(struct work_struct *work)
 	}
 	apple_t8015_gfx_mbox_state(gfx);
 
-	apple_t8015_gfx_stage(gfx, "8/12: Fender power request (state 1)");
+	apple_t8015_gfx_stage(gfx, "9/12: Fender power request (state 1)");
 	apple_t8015_gfx_fender_power(gfx);
 
-	apple_t8015_gfx_stage(gfx, "9/12: send the AGX init message");
+	apple_t8015_gfx_stage(gfx, "10/12: send the AGX init message");
 	if (gfx->rtk)
 		apple_t8015_gfx_send_init(gfx);
 
-	apple_t8015_gfx_stage(gfx, "10/12: the mailbox registers");
+	apple_t8015_gfx_stage(gfx, "11/12: the mailbox registers");
 	apple_t8015_gfx_dump_range(gfx, gfx->iop, "iop", 0x00, 0x40);
 	apple_t8015_gfx_dump_range(gfx, gfx->iop, "iop", 0x1000, 0x1040);
 
-	apple_t8015_gfx_stage(gfx, "11/12: RGX identity + CORE_ID/PBVNC");
+	apple_t8015_gfx_stage(gfx, "12/12: RGX identity + CORE_ID/PBVNC");
 	apple_t8015_gfx_probe_rgx(gfx);
 
-	apple_t8015_gfx_stage(gfx, "12/12: the RTKit state");
+	apple_t8015_gfx_stage(gfx, "done: the RTKit state");
 	if (gfx->rtk)
 		dev_info(dev, "GFX-DIAG: RTKit version %d\n", gfx->rtk->version);
 
