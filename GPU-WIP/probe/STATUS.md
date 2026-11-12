@@ -1611,3 +1611,69 @@ indexes its own device table by *list index*, the right value is **121**.
   id (`269`).
 * CLKG on other PMP endpoints (ep 33..40), since ep 32 answered the earlier
   management message but stayed silent for the gate message.
+
+## Phase 2.2 — boot #23 executed, and the PMP handler explains the silence (2026-11-12)
+
+Payload `27598921…`.  All 12 stages, **no reset**.  Twelve gate-message
+shapes were sent (list indices `121`/`120`/`106` as well as the device ids
+`149`/`148`/`124`, the value field carrying the clock id `269`/`265` or the
+psidx `7` or `0xfff`, command 1 and 2, endpoints 32/33/34/40):
+
+```
+gate try clkg gfx-kf table121 id269: ep 32 msg 0x17910d   -> mailbox still zero
+gate try clkg gfx-kf table121 psidx7: ep 32 msg 0x179007 -> mailbox still zero
+gate try clkg gfx-kf id149 psidx7:   ep 32 msg 0x195007 -> mailbox still zero
+... (12 in all, no reply from the PMP, no change)
+```
+
+**No reply at all, and no effect.**  But the firmware explains why, and the
+answer is embarrassing: the PMP driver in this tree already carries the note
+
+```
+/* DIAG (boot #12): an application endpoint has to be STARTEP'ed before the
+ * firmware routes messages to its service; boot #11 sent to ep 32 without it
+ * and the PMP stayed silent. */
+```
+
+Boots #21 and #23 sent their gate messages **without starting ep 32 in the
+same session**, so the firmware dropped them — exactly the failure mode the
+comment describes.
+
+### What the gate handler actually does (`0x0100d814`)
+
+```
+0x0100d842: bfc   r8, #12, #20      ; r8 = the other message word & 0xfff
+0x0100d846: cmp.w r8, #0
+0x0100d84c: moveq r4, r2            ; descriptor = device << 12
+0x0100d84e: bfceq r4, #12, #20
+0x0100d854: bne   0xd8f6            ; fail if both low halves are zero
+0x0100d866: lsls.w r1, r11, #0x18   ; clock id -> mask
+0x0100d86a: and   r1, r11, #0xff00
+0x0100d870: addeq.w r11, r1, #1     ; mask = (id << 24) | (id & 0xff00) | 1
+0x0100d87e: add.w r1, r10, r8      ; device<<12 + endpoint
+0x0100d884: addw  r1, r1, #0xfff
+0x0100d888: orr   r0, r11, #0x80000000
+```
+
+So the PMP turns a gate request into
+
+* the **mask** `0x80000000 | (clock_id << 24) | (clock_id & 0xff00) | 1`, and
+* a **register address** `0x80000000 + (device << 12) + endpoint + 0xfff`,
+
+and it writes the mask through the worker at `0x0100d77c`.  Two consequences:
+
+1. the reply carries the mask, so a correct request is *visible* as
+   `Received unexpected message to EP32: 0x8…` — the PMP driver prints it;
+2. the address formula uses the **endpoint** and the **device index**, so both
+   have to be right, and the clock id is the *value* field of the message.
+
+## Boot #24 plan (built, NOT booted — needs a go)
+
+1. The proven GPU path.
+2. **STARTEP(32)** and wait 1.5 s for the PMP's answer (it answered `0` back
+   in boot #12).
+3. Five gate messages on the started endpoint: `gfx-kf` by table index `121`
+   and by id `149` with clock id `269`, the psidx `7` variant, command 2, and
+   `gfx` by index `106` — reading `MAILBOX_SET`/`INBOX_CTRL` after each.
+4. Full dump of the mailbox block and the live IOP window afterwards.
+5. The RGX core register map for Phase 2.3.

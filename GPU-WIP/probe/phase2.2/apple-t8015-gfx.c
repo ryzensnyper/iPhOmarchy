@@ -657,39 +657,6 @@ static void apple_t8015_gfx_dump_range(struct apple_t8015_gfx *gfx,
 #define PMGR_BANK_START	0x80000UL
 #define PMGR_BANK_END	0x8c000UL
 
-static void apple_t8015_gfx_pmgr_sweep(struct apple_t8015_gfx *gfx)
-{
-	struct device_node *ps_node, *pmgr_node;
-	void __iomem *pmgr;
-	unsigned int off;
-	u32 v[4];
-	unsigned int shown = 0, live = 0;
-
-	ps_node = of_parse_phandle(gfx->dev->of_node, "power-domains", 0);
-	if (!ps_node)
-		return;
-	pmgr_node = of_get_parent(ps_node);
-	if (!pmgr_node)
-		return;
-	pmgr = of_iomap(pmgr_node, 0);
-	if (!pmgr)
-		return;
-
-	for (off = PMGR_BANK_START; off < PMGR_BANK_END; off += 0x40) {
-		v[0] = readl(pmgr + off + 0x0);
-		v[1] = readl(pmgr + off + 0x4);
-		v[2] = readl(pmgr + off + 0x8);
-		v[3] = readl(pmgr + off + 0xc);
-		if (!(v[0] | v[1] | v[2] | v[3]))
-			continue;
-		live++;
-		if (shown++ < 40)
-			dev_info(gfx->dev, "pmgr bank +%#06x: %08x %08x %08x %08x\n",
-				 off, v[0], v[1], v[2], v[3]);
-	}
-	dev_info(gfx->dev, "pmgr bank %#x..%#x: %u non-zero chunks\n",
-		 (unsigned int)PMGR_BANK_START, (unsigned int)PMGR_BANK_END, live);
-}
 
 /*
  * The RGX core register area.  The A10 driver (which is what the DRM side
@@ -723,6 +690,66 @@ static void apple_t8015_gfx_rgx_dump(struct apple_t8015_gfx *gfx)
 				 readl(gfx->rgx + off + j + 12));
 	}
 	dev_info(gfx->dev, "rgx: %u non-zero chunks in the first 4 KiB\n", live);
+}
+
+/*
+ * Phase 2.2 boot #23: more shapes for the PMP clock-gate message.
+ *
+ * Boot #21 sent (1 << 20) | (dev_id << 12) | (clock id) and got neither a
+ * reply nor any effect.  Three things could be wrong:
+ *
+ *  - the "device index" may be the index in the PMGR's own device table
+ *    (GFX-KF is 149 by id but 121 by table position),
+ *  - the value field may be the psidx rather than the clock id,
+ *  - the gate service may not be on ep 32 at all.
+ *
+ * So try all of them, and watch two things: does the PMP answer, and does
+ * the mailbox page (IOP window + 0x1000) come alive?
+ */
+struct gfx_gate_try {
+	const char *tag;
+	u8 ep;
+	u32 dev;
+	u32 value;
+	u32 cmd;
+};
+
+
+
+/*
+ * Phase 2.2 boot #24: STARTEP the endpoint *first*.
+ *
+ * The PMP firmware's gate handler (0x0100d814, called from the dispatcher at
+ * 0x0100e940) computes
+ *
+ *   reply = 0x80000000 | (clock_id << 24) | (clock_id & 0xff00) | 1
+ *   address = 0x80000000 + (device << 12) + endpoint + 0xfff
+ *
+ * and writes the mask through the worker at 0x0100d77c.  So a gate request
+ * really does answer on the endpoint -- but boots #21 and #23 sent their
+ * messages to ep 32 *without starting it first*, and the PMP driver in this
+ * very tree notes that the firmware stays silent in that case ("boot #11
+ * sent to ep 32 without it and the PMP stayed silent").
+ *
+ * So: STARTEP(32), wait for the reply (the PMP driver prints it as
+ * "Received unexpected message to EP32: <value>"), and only then send the
+ * gate messages and watch for their replies.
+ */
+static void apple_t8015_gfx_gate_try(struct apple_t8015_gfx *gfx,
+				     const char *tag, u32 dev, u32 value, u32 cmd)
+{
+	u64 msg;
+	u32 v0, v8;
+
+	msg = ((u64)cmd << 20) | ((u64)dev << 12) | (u64)value;
+	dev_info(gfx->dev, "gate %s: dev %u value %u cmd %u -> msg %#llx\n",
+		 tag, dev, value, cmd, msg);
+	apple_t8015_pmp_send(32, msg);
+	msleep(300);
+	v0 = readl(gfx->iop + 0x1000);
+	v8 = readl(gfx->iop + 0x1008);
+	dev_info(gfx->dev, "gate %s: MAILBOX_SET %#x INBOX_CTRL %#x%s\n", tag, v0, v8,
+		 (v0 || v8) ? "   <-- the block is alive" : "");
 }
 
 static void apple_t8015_gfx_boot_work(struct work_struct *work)
@@ -774,18 +801,24 @@ static void apple_t8015_gfx_boot_work(struct work_struct *work)
 	apple_t8015_gfx_stage(gfx, "7/12: RGX identity + CORE_ID/PBVNC");
 	apple_t8015_gfx_probe_rgx(gfx);
 
-	apple_t8015_gfx_stage(gfx, "8/12: the RGX core register map (Phase 2.3)");
-	apple_t8015_gfx_rgx_dump(gfx);
+	apple_t8015_gfx_stage(gfx, "8/12: STARTEP the PMP endpoint 32");
+	apple_t8015_pmp_start_ep(32);
+	msleep(1500);
+	dev_info(dev, "GFX-DIAG: ep 32 started; the PMP should answer on it now\n");
 
-	apple_t8015_gfx_stage(gfx, "9/12: sweep the PMGR per-device bank");
-	apple_t8015_gfx_pmgr_sweep(gfx);
+	apple_t8015_gfx_stage(gfx, "9/12: gate messages on the started endpoint");
+	apple_t8015_gfx_gate_try(gfx, "gfx-kf table121 id269", 121, 269, 1);
+	apple_t8015_gfx_gate_try(gfx, "gfx-kf id149 id269", 149, 269, 1);
+	apple_t8015_gfx_gate_try(gfx, "gfx-kf table121 psidx7", 121, 7, 1);
+	apple_t8015_gfx_gate_try(gfx, "gfx-kf table121 id269 cmd2", 121, 269, 2);
+	apple_t8015_gfx_gate_try(gfx, "gfx table106 id269", 106, 269, 1);
 
-	apple_t8015_gfx_stage(gfx, "10/12: the live IOP window, for the record");
-	apple_t8015_gfx_dump_range(gfx, gfx->iop, "iop", 0x40, 0x100);
-	apple_t8015_gfx_dump_range(gfx, gfx->iop, "iop", 0x800, 0x820);
-
-	apple_t8015_gfx_stage(gfx, "11/12: the mailbox page, one more look");
+	apple_t8015_gfx_stage(gfx, "10/12: the mailbox block after the attempts");
 	apple_t8015_gfx_dump_range(gfx, gfx->iop, "iop", 0x1000, 0x1040);
+	apple_t8015_gfx_dump_range(gfx, gfx->iop, "iop", 0x40, 0x100);
+
+	apple_t8015_gfx_stage(gfx, "11/12: the RGX core register map (Phase 2.3)");
+	apple_t8015_gfx_rgx_dump(gfx);
 
 	apple_t8015_gfx_stage(gfx, "12/12: done");
 }
