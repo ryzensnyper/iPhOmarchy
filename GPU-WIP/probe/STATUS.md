@@ -1677,3 +1677,66 @@ and it writes the mask through the worker at `0x0100d77c`.  Two consequences:
    `gfx` by index `106` — reading `MAILBOX_SET`/`INBOX_CTRL` after each.
 4. Full dump of the mailbox block and the live IOP window afterwards.
 5. The RGX core register map for Phase 2.3.
+
+## Phase 2.2 — boot #24 executed: STARTEP works, the gate messages are still rejected (2026-11-12)
+
+Payload `56d27781…`.  All 12 stages, **no reset**.
+
+```
+GFX-STAGE 8/12: STARTEP the PMP endpoint 32
+pmp-t8015-v1: Received unexpected message to EP32: 0        <- the endpoint is alive
+GFX-STAGE 9/12: gate messages on the started endpoint
+gate gfx-kf table121 id269: dev 121 value 269 cmd 1 -> msg 0x17910d  MAILBOX_SET 0x0 INBOX_CTRL 0x0
+gate gfx-kf id149 id269:    dev 149 value 269 cmd 1 -> msg 0x19510d  MAILBOX_SET 0x0 INBOX_CTRL 0x0
+gate gfx-kf table121 psidx7: dev 121 value 7   cmd 1 -> msg 0x179007  MAILBOX_SET 0x0 INBOX_CTRL 0x0
+gate gfx-kf table121 id269 cmd2: ...                                MAILBOX_SET 0x0 INBOX_CTRL 0x0
+gate gfx table106 id269:    dev 106 value 269 cmd 1 -> msg 0x16a10d  MAILBOX_SET 0x0 INBOX_CTRL 0x0
+```
+
+The endpoint is now definitely started (the PMP answers the STARTEP with `0`),
+and the five gate messages on it still produce **no reply and no effect**.
+
+Re-reading the firmware handler settles why: on failure it does **not** reply,
+it only logs `!clg: %08x` into a debug channel we cannot see.  So *silence is
+the failure signal*, and the reply `0x80000000 | (clock_id << 24) |
+(clock_id & 0xff00) | 1` is the success oracle — which is why the gate message
+still needs the right (device index, clock id, endpoint) triple.
+
+Note also that the handler builds the mask from a **constant** `0x202`, not
+from our value field: so `0x202` is the *tag* the firmware uses, and the
+device index is what selects the clock.  The value field (bits 0..11) is
+carried through separately.
+
+### The A11 GPU is AGX, and the mailbox is not optional
+
+The D21 kernelcache has **no PowerVR kext**.  What it has is
+
+```
+AGXG10P Graphics Kernel Extension
+AGXFirmwareKextG10PRTBuddy        <- the GPU firmware, for the RTBuddy
+AGXFirmwareKextRTBuddy
+IOGPUFamily
+```
+
+with classes `AGXAcceleratorG10P_A0/B0`, `AGXHardwareBufferBase` and
+`AGXGPUCoreConfig` (the device-information structure).  So the A11 GPU is
+**AGX**, its firmware runs on the **RTBuddy** coprocessor — our "GFX IOP" —
+and the AP talks to it over exactly the a7iop mailbox we are chasing.  The
+mailbox is therefore not optional: without it the AGX firmware cannot talk
+back and the GPU cannot be brought up.  (It also means the DRM work is an
+AGX driver, not the A10's PowerVR one, and that the `AGXGPUCoreConfig`
+fields are what the device-information block at `0x204d04000` should decode
+to.)
+
+## Boot #25 plan (not built — needs a go)
+
+Use the reply as an oracle and brute-force the message shape, since the
+firmware's success path is the only thing that talks back:
+
+* for `cmd` in {0,1,2,3}, `device` in {0, 106, 121, 124, 149, 514} and
+  `value` in {0, 7, 269, 0xfff}, send `(cmd << 20) | (device << 12) | value`
+  on ep 32 after a STARTEP, 300 ms apart, and watch for
+  `Received unexpected message to EP32: 0x8…` — that is the *only* signal
+  that the shape is right, and the reply value names the clock.
+* then the same few shapes on ep 33..40.
+* re-dump the mailbox page and the live IOP window afterwards.
