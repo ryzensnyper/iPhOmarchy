@@ -2513,3 +2513,30 @@ Boot #41 (payload `1e3b499f…`, built) does both of the remaining two:
 the Fender window's upper half (upper half first, so a trap there cannot
 cost us the sweep) and then the A7IOP shim at 0x2ee00000 / +0x4000 /
 +0x8000.
+
+## Phase 2.2 — boot #41: the GFX apertures are empty, the shim hangs (2026-11-12)
+
+Payload `1e3b499f…`.  The Fender window's **upper half** (pages 17…31) read
+**all zero** — so there is no mailbox anywhere inside the two 128 KiB
+apertures the ADT gives the GFX.  Then the driver read the A7IOP shim
+aperture at `0x2ee00000` and **the phone died** (the log simply stops at
+"8c/12: the A7IOP shim aperture"; the SoC hangs on that address, like it
+does on `fender+0x10044`).  That lead is dead — the shim's registers are
+not reachable from the AP.
+
+### The position rule the A10 gives
+
+On the A10 the GFX's mailbox is its own DT node at `0x1d24000`, which is
+**one page past the end of the iop window** (`0x1d20000` + `0x4000` = its
+size).  The A11's iop window is `0x20000` long, so the same rule puts its
+mailbox at **`0x4d40000`** — a page that the ADT does not list under
+`gfx-kf` (and it does not list the A10's mailbox under the A10's gfx node
+either: that one had its own node).
+
+Boot #42 (payload `0aa937ab…`, built) therefore probes
+
+* the GPU **core** window `0x04000000`…`0x04003000` (the firmware's IO map
+  lists it at size 0x200000), and
+* the page **past the IOP window**, `0x4d40000`, plus `0x4d48000`,
+
+read-only, core first (it is a device we have read before).
