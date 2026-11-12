@@ -21,9 +21,22 @@ the gate is written by the **PMP**, in the PMP's own address space, which the
 AP cannot write directly (boot #58).
 
 So the next session's job is: **get the PMP to ungate the GFX-KF**, or find
-another way to wake the IOP.  The three ranked leads are in §8; the first
-one (the PMP's `meta-sw-interrupt` / `SET_IOP_PWR_STATE`) has never been
-tried.
+another way to wake the IOP.
+
+**Start at §8.1**: the gate is not a management message at all — it is a
+"call function" message to the PMP's **endpoint 32** (`PMPEndpoint1`), which
+the PMP advertises in its EPMAP and which **our driver never starts**.
+Boot #59 should start endpoint 32 and send the `clkG`/`pwrG` call for
+device 149 (GFX-KF).  The only thing missing is the message layout of
+that call, which is decoded from
+`ApplePMGRFunctionPMPInterrupt::_callFunctionPMPv2()` (vtable
+0xfffffff006ca0010, slot +12 = 0xfffffff005674354).
+
+§8.2 explains why the AP cannot do it itself (the PMGR is a dock-FIFO
+agent of the PMP) and notes that the PMP's **clock** gating is on by
+default while its **power** gating is off — so try the clock gate first.
+§8.3 has the remaining leads, led by the ADT's `meta-sw-interrupt`, which
+has never been tried.
 
 ---
 
