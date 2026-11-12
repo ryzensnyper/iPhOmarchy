@@ -2312,3 +2312,51 @@ leave the mailbox in the state Apple's kext expects before the firmware runs
 Boot #34 (payload `70310397…`, built) runs steps 1-5 in Apple's order before
 the window copy and the run bit, then the RTKit boot, the two AGX endpoints,
 and the init message.
+
+## Phase 2.2 — boot #35 executed: the bring-up runs, and the mailbox takes no writes (2026-11-12)
+
+Payload `e13d0199…`.  All stages ran, no reset, no IRQ-imbalance warning
+(the `enable_irq()` in the poll is now paired with a `recv_irq_masked` flag,
+and the mailbox messages now arrive once a second -- from our own 1 Hz poll --
+instead of every 2 ms).
+
+```
+GFX-STAGE 4/12: mailbox mask/unmask, outbox, timebase
+mailbox: SET 0x1001000 CLR 0x0 INBOX 0x10704 OUTBOX 0x0     <- unchanged
+timebase: cnt 0x95b3e4ea -> lo 0x95b3e4ea hi 0x0; ctl 0x2 -> 0x2
+GFX-STAGE 6/12: RTKit boot (waiting for the firmware HELLO)
+GFX-DIAG: apple_rtkit_boot -> -62                            <- still no HELLO
+GFX-DIAG: start_ep(0x20) -> -22, start_ep(0x21) -> -22
+```
+
+### The new finding: the mailbox block does not take writes
+
+We wrote `0x1111` to `MAILBOX_SET` (0x204d04000), `1` to `MAILBOX_CLR`
+(0x204d04004) and `OUTBOX_CTRL |= 1` (0x204d04020) -- and afterwards the
+registers read **exactly as before**: `SET = 0x01001000`, `CLR = 0`,
+`OUTBOX_CTRL = 0`.  The timebase registers took our values (lo/hi = the
+counter) but the control word was already `0x2`.
+
+So the block at `0x204d04000` answers reads but **ignores writes**.  Two
+readings:
+
+* it is a read-only status/config block that merely *looks* like the mailbox
+  (the KB's names came from the kext's log labels, and the values fit them
+  suspiciously well), or
+* the mailbox's writable registers live somewhere else in the window and
+  Apple's kext reaches them through a different base.
+
+Either way, the *writable* mailbox registers are still not found -- and until
+they are, the firmware cannot be told anything and the HELLO cannot arrive.
+The timebase registers at `0x204d28010`/`0x204d28018` *do* take writes, so the
+IOP window is writable and the mapping is right.
+
+### Open, in order
+
+1. Find the mailbox's **writable** registers: sweep the `0x4d00000` window for
+   registers that change when written (and re-read `0x204d04000` after a
+   *different* write, to see whether it is a RO status block).
+2. The **config restore** (0x100 words at `+0x8130` = `0x204d28130`) -- the
+   kext *writes* those; we only read them.
+3. The AGX **config RAM** (`AGXFender::writeConfigRAMCommand32`) -- still
+   unrecovered; the KB's `AGXG10P__TEXT_EXEC.bin` has the code.
