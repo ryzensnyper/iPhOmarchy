@@ -2540,3 +2540,45 @@ Boot #42 (payload `0aa937ab…`, built) therefore probes
 * the page **past the IOP window**, `0x4d40000`, plus `0x4d48000`,
 
 read-only, core first (it is a device we have read before).
+
+## Phase 2.2 — boot #42 died on the core window; the firmware's IO map explains why (2026-11-12)
+
+Payload `0aa937ab…`.  The driver printed "8c/12: the core window and the
+page past the IOP window" and then the phone **hung** — reading
+`0x204000000 + 0x00` (the RGX's first core register) traps the SoC, so we
+never reached the interesting page.  Reading the RGX's register space blind
+is not safe: only `+0x18` (CORE_ID) and `+0x20` have ever been read there.
+
+### The firmware's own IO map (the key)
+
+Both firmware images carry the same table, and the A10's lets us calibrate
+it:
+
+| | A10 (`gfx-t8010-const.bin` at 0x35565) | A11 (`g10p.img` at 0x3759c) |
+|---|---|---|
+| IOP window | base **0x01d20000**, size **0x20000** | base **0x04d20000**, size **0x20000** |
+| core window | base **0x01000000**, size **0x01000000** | base **0x04000000**, size **0x02000000** |
+
+The A10's mailbox (0x1d24000) is **inside** that IOP window, at +0x4000.  On
+the A11 the page at +0x4000 is dead (boot #40), so the A11's mailbox is in
+the same window at a **different offset** — and it is **dormant**: its
+status registers read zero until the host enables it, which is why every
+read-only sweep (boots #37, #38) came up empty.
+
+**Boot #43** (payload `70f55003…`, built) therefore enables every page of
+the IOP window with the sequence Apple's AppleA7IOPV2 class uses (mask all
+four interrupts, unmask A2I-empty, enable the inbox and the outbox) and
+with the V4 class's equivalents (IntOutIRQEn, INBOX_CTRL, OUTBOX_CTRL),
+then reads each page back: **the mailbox is the page that takes the
+write**.  The read-only probe came first, so this is no longer a blind
+write, and it all happens before the window copy, so the window registers
+are unaffected.
+
+Also found offline: the AGX **hwdata** table in the kernelcache's
+`__PLK_DATA_CONST` (0xfffffff006f8ab88, 53 entries of
+{firmware address, mask, buffer offset}) — the values the host hands the
+firmware: 0x20/0x24, 0x48/0x4c, 0x140/0x148, 0x188…0x19c, 0x404…0x414,
+0x500, 0x800…0x80c, 0x900…0x91c, 0xc10/0xc14, 0xc30/0xc34, 0xe00.  It
+includes the timebase pair at 0x808/0x80c and the A10-pair at 0xc30/0xc34
+— the very offsets our driver writes ✓ — so it is the hwdata layout, the
+same mechanism the A12 driver builds (`agx_fw.c`'s `agx_build()`).
