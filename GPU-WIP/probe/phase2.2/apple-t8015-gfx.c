@@ -616,32 +616,7 @@ struct gfx_pmp_try {
 	u32 cmd;	/* command in bits 20..21 */
 };
 
-static const struct gfx_pmp_try gfx_pmp_tries[] = {
-	{ "clkg gfx-kf 269",	149,	269,	1 },
-	{ "clkg gfx-sgx 265",	148,	265,	1 },
-	{ "clkg gfx 269",	124,	269,	1 },
-	{ "clkg gfx-kf 0",	149,	0,	1 },
-	{ "clkg gfx-kf all",	149,	0xfff,	1 },
-	{ "cmd0 gfx-kf 0",	149,	0,	0 },
-};
 
-static void apple_t8015_gfx_pmp_try(struct apple_t8015_gfx *gfx,
-				    const struct gfx_pmp_try *t)
-{
-	u64 msg;
-	u32 i;
-
-	msg = ((u64)t->cmd << 20) | ((u64)t->dev << 12) | (u64)t->value;
-	dev_info(gfx->dev, "PMP try %s: msg %#llx\n", t->tag, msg);
-	apple_t8015_pmp_send(32, msg);
-	msleep(300);
-	for (i = 0; i < 8; i++)
-		dev_info(gfx->dev, "  mailbox +%#04x: %08x %08x %08x %08x\n",
-			 0x1000 + 4 * i, readl(gfx->iop + 0x1000 + 4 * i),
-			 readl(gfx->iop + 0x1004 + 4 * i),
-			 readl(gfx->iop + 0x1008 + 4 * i),
-			 readl(gfx->iop + 0x100c + 4 * i));
-}
 
 /* Dump a range of a window in full (all 16 words per 64-byte chunk). */
 static void apple_t8015_gfx_dump_range(struct apple_t8015_gfx *gfx,
@@ -667,6 +642,87 @@ static void apple_t8015_gfx_dump_range(struct apple_t8015_gfx *gfx,
 				 readl(win + off + j), readl(win + off + j + 4),
 				 readl(win + off + j + 8), readl(win + off + j + 12));
 	}
+}
+
+/*
+ * Phase 2.2 boot #22: the Phase 2.3 RGX register map, and a hunt for the
+ * PMGR clock-gate bank.
+ *
+ * The PMGR window is 0x8c000 bytes (DT: reg = <0x2 0x32000000 0 0x8c000>)
+ * and the per-device state bank sits at 0x80300 + 8*n -- ps_gfx is 0x80338.
+ * If the clock gates have a parallel bank in the top 0xc000 bytes of the
+ * window, sweeping it will show it: the mailbox page is dead while the rest
+ * of the gfx-kf window is alive, which is what an unclocked block looks like.
+ */
+#define PMGR_BANK_START	0x80000UL
+#define PMGR_BANK_END	0x8c000UL
+
+static void apple_t8015_gfx_pmgr_sweep(struct apple_t8015_gfx *gfx)
+{
+	struct device_node *ps_node, *pmgr_node;
+	void __iomem *pmgr;
+	unsigned int off;
+	u32 v[4];
+	unsigned int shown = 0, live = 0;
+
+	ps_node = of_parse_phandle(gfx->dev->of_node, "power-domains", 0);
+	if (!ps_node)
+		return;
+	pmgr_node = of_get_parent(ps_node);
+	if (!pmgr_node)
+		return;
+	pmgr = of_iomap(pmgr_node, 0);
+	if (!pmgr)
+		return;
+
+	for (off = PMGR_BANK_START; off < PMGR_BANK_END; off += 0x40) {
+		v[0] = readl(pmgr + off + 0x0);
+		v[1] = readl(pmgr + off + 0x4);
+		v[2] = readl(pmgr + off + 0x8);
+		v[3] = readl(pmgr + off + 0xc);
+		if (!(v[0] | v[1] | v[2] | v[3]))
+			continue;
+		live++;
+		if (shown++ < 40)
+			dev_info(gfx->dev, "pmgr bank +%#06x: %08x %08x %08x %08x\n",
+				 off, v[0], v[1], v[2], v[3]);
+	}
+	dev_info(gfx->dev, "pmgr bank %#x..%#x: %u non-zero chunks\n",
+		 (unsigned int)PMGR_BANK_START, (unsigned int)PMGR_BANK_END, live);
+}
+
+/*
+ * The RGX core register area.  The A10 driver (which is what the DRM side
+ * will be built on) reads CORE_ID at 0x18, CORE_REVISION at 0x20 and the
+ * designer/revision fields at 0x28/0x30; everything else the driver needs
+ * about the clusters comes from the firmware.  So dump the first 4 KiB of
+ * the core window and see what this core actually implements.
+ */
+static void apple_t8015_gfx_rgx_dump(struct apple_t8015_gfx *gfx)
+{
+	unsigned int off, j;
+	unsigned int live = 0;
+
+	for (off = 0; off < 0x1000; off += 0x40) {
+		bool any = false;
+
+		for (j = 0; j < 0x40; j += 4) {
+			if (readl(gfx->rgx + off + j)) {
+				any = true;
+				break;
+			}
+		}
+		if (!any)
+			continue;
+		live++;
+		dev_info(gfx->dev, "rgx +%#06x:\n", off);
+		for (j = 0; j < 0x40; j += 0x10)
+			dev_info(gfx->dev, "    +%#04x: %08x %08x %08x %08x\n", j,
+				 readl(gfx->rgx + off + j), readl(gfx->rgx + off + j + 4),
+				 readl(gfx->rgx + off + j + 8),
+				 readl(gfx->rgx + off + j + 12));
+	}
+	dev_info(gfx->dev, "rgx: %u non-zero chunks in the first 4 KiB\n", live);
 }
 
 static void apple_t8015_gfx_boot_work(struct work_struct *work)
@@ -718,19 +774,18 @@ static void apple_t8015_gfx_boot_work(struct work_struct *work)
 	apple_t8015_gfx_stage(gfx, "7/12: RGX identity + CORE_ID/PBVNC");
 	apple_t8015_gfx_probe_rgx(gfx);
 
-	apple_t8015_gfx_stage(gfx, "8/12: ask the PMP to open the mailbox clock");
-	for (i = 0; i < ARRAY_SIZE(gfx_pmp_tries); i++)
-		apple_t8015_gfx_pmp_try(gfx, &gfx_pmp_tries[i]);
+	apple_t8015_gfx_stage(gfx, "8/12: the RGX core register map (Phase 2.3)");
+	apple_t8015_gfx_rgx_dump(gfx);
 
-	apple_t8015_gfx_stage(gfx, "9/12: the mailbox block after the attempts");
-	apple_t8015_gfx_dump_range(gfx, gfx->iop, "iop", 0x1000, 0x1080);
+	apple_t8015_gfx_stage(gfx, "9/12: sweep the PMGR per-device bank");
+	apple_t8015_gfx_pmgr_sweep(gfx);
 
-	apple_t8015_gfx_stage(gfx, "10/12: the DART block (Phase 2.3)");
-	apple_t8015_gfx_dump_range(gfx, gfx->iop, "iop", 0x8000, 0x8200);
-
-	apple_t8015_gfx_stage(gfx, "11/12: the rest of the live IOP window");
+	apple_t8015_gfx_stage(gfx, "10/12: the live IOP window, for the record");
 	apple_t8015_gfx_dump_range(gfx, gfx->iop, "iop", 0x40, 0x100);
 	apple_t8015_gfx_dump_range(gfx, gfx->iop, "iop", 0x800, 0x820);
+
+	apple_t8015_gfx_stage(gfx, "11/12: the mailbox page, one more look");
+	apple_t8015_gfx_dump_range(gfx, gfx->iop, "iop", 0x1000, 0x1040);
 
 	apple_t8015_gfx_stage(gfx, "12/12: done");
 }

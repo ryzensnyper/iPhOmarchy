@@ -1514,3 +1514,42 @@ therefore the GPU itself.  The PMP route is not it (no reply, no effect), so
 the next lead is the **PMGR clock gate** for `gfx-kf`/`clock-id 269` — the
 AP-side `ApplePMGR` kext writes those, and our `ps_gfx` write only ever
 touched the *power* state register at PMGR `+0x80338`.
+
+## Phase 2.2 — the PMGR clock-gate table (offline, 2026-11-12)
+
+The `ApplePMGR` kext keeps a **clock-gate name table** in the D21 kernelcache
+(`__PLK_DATA_CONST` at `0xfffffff006c9e8c8`): 35 entries of
+`{ const char *name; u32 a; u32 b; }`, 24 bytes each, with the two numbers
+zero in the image and filled in at init.  The names are
+
+```
+ISP_REF0_CLK_CFG  TOUCH  CLUSTER_CTL  SOC_TVM  GFX_TVM  GFX1_TVM  ANE_TVM
+ANE1_TVM  MISC_CORES  MISC_ACG  ECPU_TRIG_CTL  PCPU_TRIG_CTL  PCPU1_TRIG_CTL
+ANE_TRIG_CTL  ANE1_TRIG_CTL  GPU_TRIG_CTL  GPU1_TRIG_CTL  GPU2_TRIG_CTL
+GPU3_TRIG_CTL  MINI_MISC_CFG  MINI_ACG_CLK_CFG  DPE0_CFG  ANE_PERF_STATE
+ANE1_PERF_STATE
+```
+
+plus the earlier `C1_CPU3_IMPL ... PMGRClkGenSOC ... PMGRCLKGENAON ...` group
+(the *generators*).  The kext copies the static table into its per-device
+object at init (`0xfffffff00564b128`, 816 bytes to `obj+0x2600`), so the
+runtime numbers are filled from somewhere else — the ADT's numeric
+`clock-ids` (265 for `sgx`, 269 for `gfx-kf`) index a *larger* runtime table
+that has not been located yet.
+
+So the PMGR clock-gate route is not yet actionable; boot #22 therefore looks
+for the gate bank directly instead: the PMGR window is `0x8c000` bytes and
+the per-device state bank sits at `0x80300 + 8*n` (`ps_gfx` is `0x80338`), so
+a sweep of the window's top `0xc000` bytes will show any parallel bank.
+
+## Boot #22 plan (built, NOT booted — needs a go)
+
+1. The proven GPU path.
+2. **RGX core register map**: dump the first 4 KiB of the core window, every
+   non-zero 64-byte chunk in full (this is the Phase 2.3 input: the A10
+   driver reads `CORE_ID` at `0x18`, `CORE_REVISION` at `0x20`, the designer
+   fields at `0x28`/`0x30`, and the A11's cluster count has to come from
+   hardware).
+3. **Sweep the PMGR per-device bank** (`0x80000..0x8c000`) for a clock-gate
+   bank.
+4. Re-dump the live IOP window regions and the mailbox page for the record.
