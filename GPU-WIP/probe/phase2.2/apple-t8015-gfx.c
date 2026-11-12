@@ -567,29 +567,6 @@ struct gfx_probe {
 
 
 
-/* Sweep a range of a window 64 bytes at a time and log what is not zero. */
-static void apple_t8015_gfx_sweep_range(struct apple_t8015_gfx *gfx,
-				       void __iomem *win, const char *tag,
-				       unsigned int from, unsigned int to)
-{
-	unsigned int off;
-	u32 v[4];
-	unsigned int shown = 0;
-
-	for (off = from; off + 0x40 <= to; off += 0x40) {
-		v[0] = readl(win + off + 0x0);
-		v[1] = readl(win + off + 0x4);
-		v[2] = readl(win + off + 0x8);
-		v[3] = readl(win + off + 0xc);
-		if (!(v[0] | v[1] | v[2] | v[3]))
-			continue;
-		if (shown++ < 40)
-			dev_info(gfx->dev, "%s sweep +%#06x: %08x %08x %08x %08x\n",
-				 tag, off, v[0], v[1], v[2], v[3]);
-	}
-	dev_info(gfx->dev, "%s sweep %#x..%#x: %u non-zero chunks\n", tag, from,
-		 to, shown);
-}
 
 /*
  * Phase 2.2 boot #20: find the kext's base.
@@ -611,6 +588,86 @@ static void apple_t8015_gfx_sweep_range(struct apple_t8015_gfx *gfx,
  */
 #define GFX_MBOX_ENABLE_SEQ_BASE_IOP	0x204d20000UL
 #define GFX_MBOX_ENABLE_SEQ_BASE_DT	0x204d24000UL
+
+/*
+ * Phase 2.2 boot #21: ask the PMP to open the mailbox clock.
+ *
+ * The PMP firmware's message dispatcher (0x0100e940 in pmp-t8015.bin)
+ * decodes an incoming message as
+ *
+ *   bits  0..11  value
+ *   bits 12..19  device index
+ *   bits 20..21  command   (0..3; bits 22..23 set => "Not implemented")
+ *
+ * and builds the "device descriptor" dev<<12 for command 1 -- the form the
+ * knowledge base already recorded as 0x100000 | (idx << 12).  The error path
+ * of that dispatcher logs "!clg: %08x", i.e. it is the clock-gate handler.
+ *
+ * So a gate request is  (1 << 20) | (device << 12) | (gate id)  and the
+ * firmware replies on the endpoint, which the PMP driver prints as
+ * "Received unexpected message to EP32: <value>".  That reply is our
+ * feedback channel: after each attempt we re-read the mailbox page
+ * (IOP window + 0x1000) to see whether the block woke up.
+ */
+struct gfx_pmp_try {
+	const char *tag;
+	u32 dev;	/* PMGR device index */
+	u32 value;	/* gate id in bits 0..11 */
+	u32 cmd;	/* command in bits 20..21 */
+};
+
+static const struct gfx_pmp_try gfx_pmp_tries[] = {
+	{ "clkg gfx-kf 269",	149,	269,	1 },
+	{ "clkg gfx-sgx 265",	148,	265,	1 },
+	{ "clkg gfx 269",	124,	269,	1 },
+	{ "clkg gfx-kf 0",	149,	0,	1 },
+	{ "clkg gfx-kf all",	149,	0xfff,	1 },
+	{ "cmd0 gfx-kf 0",	149,	0,	0 },
+};
+
+static void apple_t8015_gfx_pmp_try(struct apple_t8015_gfx *gfx,
+				    const struct gfx_pmp_try *t)
+{
+	u64 msg;
+	u32 i;
+
+	msg = ((u64)t->cmd << 20) | ((u64)t->dev << 12) | (u64)t->value;
+	dev_info(gfx->dev, "PMP try %s: msg %#llx\n", t->tag, msg);
+	apple_t8015_pmp_send(32, msg);
+	msleep(300);
+	for (i = 0; i < 8; i++)
+		dev_info(gfx->dev, "  mailbox +%#04x: %08x %08x %08x %08x\n",
+			 0x1000 + 4 * i, readl(gfx->iop + 0x1000 + 4 * i),
+			 readl(gfx->iop + 0x1004 + 4 * i),
+			 readl(gfx->iop + 0x1008 + 4 * i),
+			 readl(gfx->iop + 0x100c + 4 * i));
+}
+
+/* Dump a range of a window in full (all 16 words per 64-byte chunk). */
+static void apple_t8015_gfx_dump_range(struct apple_t8015_gfx *gfx,
+				      void __iomem *win, const char *tag,
+				      unsigned int from, unsigned int to)
+{
+	unsigned int off, j;
+
+	for (off = from; off + 0x40 <= to; off += 0x40) {
+		bool any = false;
+
+		for (j = 0; j < 0x40; j += 4) {
+			if (readl(win + off + j)) {
+				any = true;
+				break;
+			}
+		}
+		if (!any)
+			continue;
+		dev_info(gfx->dev, "%s +%#06x:\n", tag, off);
+		for (j = 0; j < 0x40; j += 0x10)
+			dev_info(gfx->dev, "    +%#04x: %08x %08x %08x %08x\n", j,
+				 readl(win + off + j), readl(win + off + j + 4),
+				 readl(win + off + j + 8), readl(win + off + j + 12));
+	}
+}
 
 static void apple_t8015_gfx_boot_work(struct work_struct *work)
 {
@@ -661,20 +718,19 @@ static void apple_t8015_gfx_boot_work(struct work_struct *work)
 	apple_t8015_gfx_stage(gfx, "7/12: RGX identity + CORE_ID/PBVNC");
 	apple_t8015_gfx_probe_rgx(gfx);
 
-	apple_t8015_gfx_stage(gfx, "8/12: sweep the kext's +0x8000 block (IOP window)");
-	apple_t8015_gfx_sweep_range(gfx, gfx->iop, "iop+8000", 0x8000, 0x8200);
+	apple_t8015_gfx_stage(gfx, "8/12: ask the PMP to open the mailbox clock");
+	for (i = 0; i < ARRAY_SIZE(gfx_pmp_tries); i++)
+		apple_t8015_gfx_pmp_try(gfx, &gfx_pmp_tries[i]);
 
-	apple_t8015_gfx_stage(gfx, "9/12: sweep the kext's +0x8000 block (Fender window)");
-	apple_t8015_gfx_sweep_range(gfx, gfx->fender, "fender+8000", 0x8000, 0x8200);
+	apple_t8015_gfx_stage(gfx, "9/12: the mailbox block after the attempts");
+	apple_t8015_gfx_dump_range(gfx, gfx->iop, "iop", 0x1000, 0x1080);
 
-	apple_t8015_gfx_stage(gfx, "10/12: the kext's other offsets in both windows");
-	apple_t8015_gfx_sweep_range(gfx, gfx->iop, "iop+0080", 0x80, 0x100);
-	apple_t8015_gfx_sweep_range(gfx, gfx->fender, "fender+0080", 0x80, 0x100);
-	apple_t8015_gfx_sweep_range(gfx, gfx->iop, "iop+0b80", 0xb80, 0xb90);
-	apple_t8015_gfx_sweep_range(gfx, gfx->fender, "fender+0b80", 0xb80, 0xb90);
+	apple_t8015_gfx_stage(gfx, "10/12: the DART block (Phase 2.3)");
+	apple_t8015_gfx_dump_range(gfx, gfx->iop, "iop", 0x8000, 0x8200);
 
-	apple_t8015_gfx_stage(gfx, "11/12: the +0x4000 block in the IOP window");
-	apple_t8015_gfx_sweep_range(gfx, gfx->iop, "iop+4000", 0x4000, 0x4040);
+	apple_t8015_gfx_stage(gfx, "11/12: the rest of the live IOP window");
+	apple_t8015_gfx_dump_range(gfx, gfx->iop, "iop", 0x40, 0x100);
+	apple_t8015_gfx_dump_range(gfx, gfx->iop, "iop", 0x800, 0x820);
 
 	apple_t8015_gfx_stage(gfx, "12/12: done");
 }

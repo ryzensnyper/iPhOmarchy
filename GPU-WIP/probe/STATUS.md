@@ -1409,3 +1409,67 @@ attempt was rejected with `Received unexpected message to EP32: 0`, i.e. the
 *message format*, not the endpoint, is wrong.  That is the next offline target:
 the PMP command word (`bits 0..11` value, `bits 12..19` device index,
 `bits 20..21` command) in `pmp-t8015.bin`.
+
+## Phase 2.2 — the PMP gate message format, cracked offline (2026-11-12)
+
+No boot needed for this one.  `pmp-t8015.bin` is Thumb-2, and the host has
+`libcapstone` (`GPU-WIP/tools/pmp-fw-dis.py` wraps it through ctypes), so the
+firmware's message dispatcher can finally be read properly.
+
+The dispatcher lives at **`0x0100e940`** in the firmware and decodes the
+incoming message like this:
+
+```
+0x0100e940: ldr   r2, [sp, #0xc]        ; the message word
+0x0100e942: tst.w r2, #0xc00000        ; bits 22..23
+0x0100e946: bne   0xe9aa               ; -> prints "Not implemented"
+0x0100e952: lsrs  r6, r2, #0x14        ; command = message >> 20
+0x0100e954: sbfx  r1, r2, #0x0, #0xc   ; value    = message & 0xfff
+0x0100e958: ubfx  r3, r2, #0xc, #0x8   ; device   = (message >> 12) & 0xff
+0x0100e962: bne   0xe974               ; command bit 0 -> descriptor = dev << 12
+0x0100e966: bmi   0xe978               ; command bit 1 -> descriptor = dev << 20
+0x0100e970: lslne r2, r3, #0x15        ; command 3        -> dev << 21
+0x0100e97a: movw  r3, #0x202
+0x0100e97e: str   r2, [r4, #0x10]      ; the descriptor goes to the context
+```
+
+and the error path of the handler it calls logs **`!clg: %08x`** (the literal
+sits at `0x0100e9bc`, right in this function's pool) — so this is the
+**clock-gate** handler, and the descriptor for command 1 is `dev << 12`, the
+same `0x100000 | (idx << 12)` form the knowledge base had already spotted.
+
+**So a gate request to the PMP is:**
+
+```
+message = (command << 20) | (device_index << 12) | (gate_id)
+```
+
+with `command = 1` for a clock gate and `bits 22..23` left clear.  For the
+GFX IOP mailbox that is device 149 (`GFX-KF`, `clock-ids = 269`):
+
+```
+(1 << 20) | (149 << 12) | 269  =  0x109510d
+```
+
+The PMP answers on the endpoint, and the PMP driver prints that answer as
+`Received unexpected message to EP32: <value>` — so the reply is a usable
+feedback channel for every attempt.
+
+### Why this should work
+
+`ps_gfx` only covers *power* (the ADT gives `gfx-kf` `power-gates = 0x95`
+and `clock-gates = 0x95`, and the PMP firmware owns the clock gates: its tag
+table has `CLKG` next to `PWRG`).  Everything alive in the IOP window is on
+the AP clock; the mailbox page at IOP `+0x1000` is on the mailbox's own
+clock, which is exactly what has to be opened.
+
+## Boot #21 plan (not built — needs a go)
+
+1. The proven GPU path (unchanged).
+2. Six PMP gate attempts on ep32, each followed by a re-read of the mailbox
+   page: `clkg gfx-kf 269`, `clkg gfx-sgx 265`, `clkg gfx 269`,
+   `clkg gfx-kf 0`, `clkg gfx-kf all (0xfff)`, `cmd0 gfx-kf 0`.
+3. Full dump of the mailbox block after the attempts.
+4. Full dump of the **DART** block (IOP `+0x8000..0x8200`) for Phase 2.3.
+5. Full dump of the remaining live IOP window regions (`+0x40..0x100`,
+   `+0x800..0x820`).
