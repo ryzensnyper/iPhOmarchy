@@ -43,6 +43,23 @@
 bool apple_t8015_pmp_up;
 EXPORT_SYMBOL_GPL(apple_t8015_pmp_up);
 
+/* DIAG (boot #11): the PMP advertises application endpoints (ep 32 =
+ * "PMPEndpoint1" in iOS, the PMP v2 client interface).  Let the GPU
+ * diagnostic try candidate messages on them; the PMP's own syslog endpoint is
+ * started by the RTKit core, so its reaction ("Not implemented", "!clg: %08x")
+ * shows up in the Linux log. */
+struct apple_rtkit *apple_t8015_pmp_rtk;
+EXPORT_SYMBOL_GPL(apple_t8015_pmp_rtk);
+
+int apple_t8015_pmp_send(u8 ep, u64 msg)
+{
+	if (!apple_t8015_pmp_up || !apple_t8015_pmp_rtk)
+		return -ENODEV;
+
+	return apple_rtkit_send_message(apple_t8015_pmp_rtk, ep, msg, NULL, false);
+}
+EXPORT_SYMBOL_GPL(apple_t8015_pmp_send);
+
 struct apple_pmp {
 	void __iomem *akf_base;
 	void __iomem *ctl_base;
@@ -164,6 +181,7 @@ static int apple_pmp_boot(struct apple_pmp *pmp)
 	}
 
 	dev_info(pmp->dev, "PMP is up (AP power state ON, RTKit peer running)\n");
+	apple_t8015_pmp_rtk = pmp->rtk;
 
 	return 0;
 }
