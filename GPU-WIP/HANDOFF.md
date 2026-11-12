@@ -237,37 +237,91 @@ device id.
 
 ## 8. The open leads, ranked
 
+### 8.1 THE gate call goes to endpoint 32, not to management (the big one)
+
+`GPU-WIP/probe/phase2.2/PMP-FUNCTION-CALL.md` (written earlier in this
+session, still the best document in the repo) has it, and boot #57
+confirms it:
+
+* the PMP advertises **endpoint 32** — `RTKit: received endpoint bitmap
+  0x1 with base 0x1 (last)` → endpoint 32, i.e. `PMPEndpoint1`, the first
+  *application* endpoint.  **Our driver never starts it**: `rtkit.c`'s
+  EPMAP handler only starts endpoints 0..8 (mgmt, crashlog, syslog,
+  debug, ioreport, oslog), and the RTKit layer refuses to send on an
+  unstarted endpoint.
+* the ADT's `/arm-io` node carries `function-clock_gate = 30:clkG()` and
+  `function-power_gate = 30:pwrG()` — **provider 0x30**, the clock/power
+  gate provider, with **no arguments** (the device id comes from the
+  caller).  Other examples in the ADT show the same shape:
+  `30:TCLK(8, 100, 32768)`, `30:ARST(70)`, `30:Wait(126, 0, 0)`,
+  `75:pKW4('rBK3', 0x5020000)`.
+* the ApplePMGR kext has the matching classes —
+  `ApplePMGRFunctionClockGate` (vtable 0xfffffff006c9edb8) and
+  `ApplePMGRFunctionPowerGate` (vtable 0xfffffff006c9eef0) — both built
+  with provider **0x30**, on top of
+  `ApplePMGRFunctionPMPInterrupt` (vtable **0xfffffff006ca0010**, kext slots
+  -1, 0 and **+12 = 0xfffffff005674354**), whose
+  `_callFunctionPMPv2()` is what turns a `function-<name>` call into a
+  message on the PMP v2 interface.
+* **So the gate request is an RTKit message to endpoint 32 carrying a
+  "call function" payload.**  Everything we have sent so far went to the
+  *management* endpoint (0), which is why the PMP only ever echoed it.
+
+**Boot #59 should:** (1) `apple_t8015_pmp_start_ep(32)`, (2) send the
+"call function" message for `clkG`/`pwrG` of device **149** (GFX-KF; also
+try 148 and 123), (3) watch the mailbox's CPU_CTRL.
+
+The one thing still missing is the **message layout** of the "call
+function" payload — decode `ApplePMGRFunctionPMPInterrupt::_callFunctionPMPv2()`
+(vtable 0xfffffff006ca0010, slot +12 = 0xfffffff005674354) and the
+overrides in the ClockGate/PowerGate classes.
+
+### 8.2 Why the AP cannot ungate anything (explains boot #58)
+
+`PMP-POWER-MODEL.md` §2: the PMGR node has `pmp = 1`,
+`pmgr-dock-fifo-agent = 1`, `pmgr-dock-fifo-channel = 3`, and `sgx` sets
+`pmp-sw-interrupt = 1` — **the PMGR is an agent of the PMP's dock FIFO, so
+the hardware forwards power-state transitions to the PMP.  A PMGR write can
+only ever be a *request*.**  The three GPU gates (`GFX-SGX` 148,
+`GFX-BUSY` 123, `GFX-KF` 149) are "virtual" (`no_ps`) devices that the
+PMP has to move.  That is exactly what boot #58 measured: the AP's writes
+to the gate bank were silently dropped.
+
+`PMP-POWER-MODEL.md` §4 also records the PMP firmware's **tunable table**
+(file 0x17c68): `DOCK=1 CLKG=1 PWRG=0` — **dock handling and clock gating
+are on by default; *power* gating is off by default**, and it is the
+AP-side `ApplePMPFirmware` kext (kernelcache strings `pmp-clock-gating` /
+`pmp-power-gating` / `pmp-dock-fifo` / `light-em-up`) that can turn it on.
+So `pwrG` may be a no-op until that tunable is set, while `clkG` should
+work — **try the clock gate first**.
+
+### 8.3 The remaining leads
+
 1. **The ADT's `meta-sw-interrupt` (never tried).**  `/arm-io/sgx` has
    `meta-sw-interrupt = 0x32104020 <- 2, 0x321040a0 <- 2, 0x8` — a software
    interrupt to the GPU's *meta* processor, i.e. **a way to wake the
    coprocessor that does not involve the mailbox at all**.  In the AP's
-   space that is `0x233104020` / `0x2331040a0`.  Write 2 (then 8?) and see
-   whether the IOP wakes and the mailbox comes alive.  This is cheap, safe
-   and completely untried.
+   space that is `0x233104020` / `0x2331040a0`.  Cheap, safe, untried.
 2. **The PMP's `SET_IOP_PWR_STATE` (type 6, never tried).**  The PMP's
-   dispatch has type 6 → 0x0100ddde; the driver's `apple_rtkit_set_iop_power_state()`
-   sends `(6 << 52) | state` with the state in bits 15:0, but that is for
-   the *PMP's own* channel.  Sending it with the **GFX IOP's identity** in
-   the payload may be what raises the Kingfisher.  (The PMP's type-6
-   handler at 0x0100ddde is the thing to decode offline: it will show
+   dispatch has type 6 → 0x0100ddde; the driver's
+   `apple_rtkit_set_iop_power_state()` sends `(6 << 52) | state` with the
+   state in bits 15:0, but that is for the *PMP's own* channel.  Sending
+   it with the **GFX IOP's identity** in the payload may be what raises the
+   Kingfisher.  (Decode the type-6 handler at 0x0100ddde offline: it shows
    which payload field carries the IOP.)
-3. **The PMP's gate request (nearly).**  The format is decoded; what is
-   still unknown is the **device field**: the value `device << 12` is used
-   as an *address base*, so it may not be the PMGR device id at all — it
-   could be a psidx, a bank index or a small number.  We have swept the
+3. **The PMP's management type-3 handler** is decoded (§5) but the *device*
+   field is still unexplained: `device << 12` is used as an address base in
+   the PMP's space (its own PMGR descriptor is `base 0x32000000, size
+   0xd8000`), so the device may not be the PMGR device id.  We swept the
    device {149, 148, 123, 124}, the gate id 0..255, the command
-   {0x03, 0x23, 0x43, 0x83, 0xc3, 0x40000003, 0x80000003} and 21 payloads.
+   {0x03, 0x23, 0x43, 0x83, 0xc3, 0x40000003, 0x80000003} and 21 payloads;
+   the reply is an echo, so nothing could be learned from it.
    Note the handler's `ldrb.w r0, [r4, #56]` — **the gate id's low byte
-   must be zero** to take the normal path, and the payload's low 5 bits
+   must be zero** to take the normal path — and the payload's low 5 bits
    select a "gate class" (31 and 16 are special).
-4. **The GFX-KF's gate register.**  The PMP writes it at
-   `(device << 12) + 0x202` in the PMP's space; the AP cannot see that
-   address (we probed pmgr0 and pmgr1 at 0x93000..0x97000, which covers
-   0x95202, and it stayed zero) and cannot write the gate bank either.
-   So this is really lead 2/3.
-5. **The AGX block's +0x1014 = 2.**  One live register we have never
+4. **The AGX block's +0x1014 = 2.**  One live register we have never
    explained; it may be a state or a revision.
-6. **The core window (0x04000000).**  The firmware can reach it, so the
+5. **The core window (0x04000000).**  The firmware can reach it, so the
    mailbox may be there — but the RGX's registers trap, so it has to be
    probed one offset at a time.
 
