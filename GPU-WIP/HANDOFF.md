@@ -62,7 +62,16 @@ values are not.  The handler writes `device << 12` (or `<< 20`, `<< 21`) and
 the `<< 12` form is the only one that lands inside a PMGR window, so it
 names a **register**: PMGR window + (device << 12) — GFX-BUSY 0x7b000,
 GFX 0x7c000, GFX-SGX 0x94000, **GFX-KF 0x95000**.  None of those has ever
-been read.  **Boot #54 dumps them before and after the sweep and diffs.**
+been read.  **Boot #54 dumped them before and after the sweep and diffs — and the
+diff was empty**: the PMP wrote nothing at `device << 12`.  It does land on
+something real for the GFX (124 << 12 = 0x7c000 is a live block, but it
+holds rail-like *data*, not a gate register), while 0x94000 (GFX-SGX) and
+0x95000 (GFX-KF) are empty in both windows.  With the reply identical for
+all 84 requests, the request is being **rejected before any write**, and
+the one field never varied is the **gate id** (the high word's bits
+0..11).  **Boot #56 sweeps the gate id 0..255 for each GPU device** and
+watches for a reply that differs from `0x40000000000000`; it touches no
+PMGR register, so it cannot take an SError.
 
 ## 2. The hardware map (measured, all AP addresses)
 
@@ -296,11 +305,10 @@ cd /home/doug/orchard
 ```
 
 * The kernel tree is a git repo on branch **`gpu/phase2.2`**; the driver work
-  is committed as **`f20c35516b59`** (boot #55: the PMGR windows are not
-  adjacent).
+  is committed as **`0e28f5e`** (boot #56: sweep the gate id).
 * The last built payload:
-  **`e0fe8296d3960a98050b0045b503c48fe9f2bb209a807c1de5a6df017853b402`**
-  (boot #55).
+  **`d9b1fe6cc683a73f748de80a57fdae9175cb80e9f805688524c50c54836a0dd2`**
+  (boot #56).
 
 **The PMGR's two windows are 32 MiB apart, not 1 MiB:**
 
