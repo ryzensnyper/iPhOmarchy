@@ -508,3 +508,54 @@ block.  The block may well have been powered and clocked since boot #2.
 | `mailbox: A2I control @… = …` | IOP sub-block clocked — Phase 2.2 is a firmware question again |
 | `GFX firmware is up; RTKit handshake complete` | Phase 2.2 passes |
 
+
+### Boot #13 verdict (executed 2026-11-12)
+
+Payload `97fb4601…`.  The DT move is confirmed — the device binds as
+`204000000.gpu` and `mbox@204d24000`.  PMP up at 36.3 s, `ps_gfx`
+`0x1f0003ff`, then `GFX-STAGE 2/13: RGX identity (0x204000000+0x00..0xff)` at
+38.715 s and **the first read of `0x204000000` hung** → reset → iOS.
+
+Not an address verdict: the read order was wrong.  The RGX core is dark until
+Fender is asked for a power state (A10 `pvr_apple.c`: window → run bit →
+firmware → **`Fender+0x1000 = state|0x10`, poll bit 4** → RGX).  No earlier boot
+issued that request, so a hang on the core read is expected even with a correct
+address.
+
+ADT `pmgr/devices` confirms one domain for the whole family: `GFX` (124) owns
+the PS entry, and `GFX-SGX` (148, the core), `GFX-KF` (149, the IOP/Fender) and
+`GFX-BUSY` (123) are all `no_ps` children of it.
+
+---
+
+# Boot #14 plan (2026-11-12) — read Fender, then request the core's power state
+
+Order changed so the address verdict comes from the block that must be alive
+(Fender), and the RGX is only touched after the power request.
+
+| stage | action |
+|---|---|
+| `0/13` | wait for `apple_t8015_pmp_up` |
+| `1/13` | `ps_gfx` + `0x80300` bank dump |
+| `2/13` | **Fender identity**: `0x24D00000+0x1000..0x103f`, `+0x2000..0x204f` |
+| `3/13` | `STARTEP(32)` + six candidate messages |
+| `4/13` | `ps_gfx` off→on retoggle (non-fatal) |
+| `5/13` | mailbox read `0x24D24008` |
+| `6/13` | RTKit init (non-fatal) |
+| `7/13` | Fender window copy (`+0x200c`, 6 × u32) |
+| `8/13` | IOP window copy (`+0x08`, 6 × u64) + `+0x38 = 1` |
+| `9/13` | run bit: `Fender+0x2048 |= 1` |
+| `10/13` | RTKit wake (HELLO + endpoint starts) |
+| `11/13` | **Fender power request**: state 0 first if needed, then `0x11`, poll bit 4 |
+| `12/13` | RGX identity dump (`ROGUE_CR_CORE_ID` at `+0x18`) |
+| `13/13` | PMGR bridges `0x219000000` / `0x205000000` (last) |
+
+### Per-outcome interpretation
+
+| log | meaning |
+|---|---|
+| `fender +0x01000: …` | alias + `ps_gfx` cover Fender → family reachable; RGX hang was the missing request |
+| reset right after `2/13` with no `fender +` line | `0x24D00000` dead → alias is not universal, re-derive the map before writing |
+| `fender power: state 1 -> 0x…1 …` | request accepted; `12/13` is the core verdict |
+| `rgx +0x0018:` with plausible id | Phase 2.3 identity from hardware |
+| `GFX firmware is up; RTKit handshake complete` | Phase 2.2 passes |

@@ -64,6 +64,18 @@
 #define FENDER_RUN		0x2048
 #define FENDER_RUN_ENABLE	BIT(0)
 
+/*
+ * Fender power state: write "state | FENDER_POWER_REQUEST", hardware clears
+ * bit 4 when the state is reached, and the low 5 bits then read back the
+ * reached state (0 = off).  Same layout as the A10 G9P kext (which writes
+ * 0x11 for state 1) and as the A11 G10P kext's Fender code.
+ */
+#define FENDER_POWER_STATE	0x1000
+#define FENDER_POWER_REQUEST	0x10
+#define FENDER_POWER_ACK	BIT(4)
+#define FENDER_POWER_MASK	0x1f
+#define FENDER_STATUS		0x1010
+
 /* IOP: the same window block at an 8-byte stride, then the enable bit. */
 #define IOP_WINDOW		0x0008
 #define IOP_WINDOW_ENABLE	0x0038
@@ -184,11 +196,11 @@ static void apple_t8015_gfx_set_window(struct apple_t8015_gfx *gfx)
 	};
 	unsigned int i;
 
-	apple_t8015_gfx_stage(gfx, "9/13: Fender window copy");
+	apple_t8015_gfx_stage(gfx, "7/13: Fender window copy");
 	for (i = 0; i < ARRAY_SIZE(fields); i++)
 		writel(fields[i], gfx->fender + FENDER_WINDOW + 4 * i);
 
-	apple_t8015_gfx_stage(gfx, "10/13: IOP window copy + enable");
+	apple_t8015_gfx_stage(gfx, "8/13: IOP window copy + enable");
 	for (i = 0; i < ARRAY_SIZE(fields); i++)
 		writel(fields[i], gfx->iop + IOP_WINDOW + 8 * i);
 
@@ -492,17 +504,18 @@ static void apple_t8015_gfx_probe_rgx(struct apple_t8015_gfx *gfx)
 }
 
 /*
- * Diagnostic (Phase 2.2 boot #13): Fender's identity page.  Fender's control
- * registers sit above +0x2000 (the window fields the driver programs are at
- * +0x200c..+0x2020, the IOP release bit at +0x2048), so a read-only sweep
- * there shows whether the second GPU window answers at all.
+ * Diagnostic (Phase 2.2 boot #14): the window that must be alive while
+ * ps_gfx is on.  On the A10 the AP talks to Fender (power state, firmware
+ * window, run bit) as soon as the domain is up; the RGX core itself only
+ * answers after a Fender power request.  So this is the block to test, not
+ * the RGX.
  */
 static void apple_t8015_gfx_dump_fender(struct apple_t8015_gfx *gfx)
 {
 	unsigned int i;
 	u32 v[4];
 
-	for (i = 0x2000; i < 0x2080; i += 16) {
+	for (i = 0x1000; i < 0x1040; i += 16) {
 		v[0] = readl(gfx->fender + i + 0x0);
 		v[1] = readl(gfx->fender + i + 0x4);
 		v[2] = readl(gfx->fender + i + 0x8);
@@ -510,6 +523,57 @@ static void apple_t8015_gfx_dump_fender(struct apple_t8015_gfx *gfx)
 		dev_info(gfx->dev, "fender +%#06x: %08x %08x %08x %08x\n",
 			 i, v[0], v[1], v[2], v[3]);
 	}
+	for (i = 0x2000; i < 0x2050; i += 16) {
+		v[0] = readl(gfx->fender + i + 0x0);
+		v[1] = readl(gfx->fender + i + 0x4);
+		v[2] = readl(gfx->fender + i + 0x8);
+		v[3] = readl(gfx->fender + i + 0xc);
+		dev_info(gfx->dev, "fender +%#06x: %08x %08x %08x %08x\n",
+			 i, v[0], v[1], v[2], v[3]);
+	}
+}
+
+
+/*
+ * Phase 2.2 boot #14: the missing step.  The A10 kext asks Fender for a power
+ * state (write state|0x10, poll bit 4) *after* the IOP firmware is up; the
+ * AGX firmware is what brings the core's clock up.  Requesting state 1 is the
+ * lowest "on" state, and state 0 first resets a core left on by iBoot.
+ */
+static void apple_t8015_gfx_fender_power(struct apple_t8015_gfx *gfx)
+{
+	u32 val = readl(gfx->fender + FENDER_POWER_STATE);
+	u32 state = val & FENDER_POWER_MASK;
+	int i;
+
+	dev_info(gfx->dev, "fender power: state @%#x = %#x (state %u, ack %u)\n",
+		 FENDER_POWER_STATE, val, state, !!(val & FENDER_POWER_ACK));
+	if (val & FENDER_POWER_ACK) {
+		dev_info(gfx->dev, "fender power: a request is still pending, skip\n");
+		return;
+	}
+
+	if (state) {
+		writel(FENDER_POWER_REQUEST, gfx->fender + FENDER_POWER_STATE);
+		for (i = 0; i < 100; i++) {
+			val = readl(gfx->fender + FENDER_POWER_STATE);
+			if (!(val & FENDER_POWER_ACK))
+				break;
+			msleep(10);
+		}
+		dev_info(gfx->dev, "fender power: off -> %#x after %d ms\n",
+			 val, i * 10);
+	}
+
+	writel(FENDER_POWER_REQUEST | 1, gfx->fender + FENDER_POWER_STATE);
+	for (i = 0; i < 100; i++) {
+		val = readl(gfx->fender + FENDER_POWER_STATE);
+		if (!(val & FENDER_POWER_ACK) && (val & FENDER_POWER_MASK) == 1)
+			break;
+		msleep(10);
+	}
+	dev_info(gfx->dev, "fender power: state 1 -> %#x after %d ms (status %#x)\n",
+		 val, i * 10, readl(gfx->fender + FENDER_STATUS));
 }
 
 /*
@@ -570,75 +634,89 @@ static void apple_t8015_gfx_boot_work(struct work_struct *work)
 	apple_t8015_gfx_dump_ps(gfx);
 
 	/*
-	 * Boot #13: every earlier boot read the GPU at 0x04000000, the address
-	 * the *ADT* gives.  Linux reaches Apple blocks through the AP alias
-	 * (+0x200000000: PMGR is 0x232000000, not 0x32000000), and the A10 GPU
-	 * node in this tree is at 0x201000000 for the same reason.  The A11 GPU
-	 * node said 0x04000000, where nothing responds -- every access hung.
-	 * The DT now says 0x204000000; this read is the test of that.
+	 * Boot #14.  Boot #13 proved the DT move took effect (the device bound
+	 * as 204000000.gpu) and then hung on the *first* RGX read.  Two
+	 * readings of that: the address is still wrong, or the core is dark --
+	 * and on the A10 the core is brought up by a Fender power request that
+	 * this driver has never issued.  Fender itself is the block ps_gfx
+	 * powers, and the one the AP must be able to talk to before anything
+	 * else works.  So read Fender first: if it answers, the address model
+	 * is right and the RGX hang is a power-state problem.
 	 */
-	apple_t8015_gfx_stage(gfx, "2/13: RGX identity (0x204000000+0x00..0xff)");
-	apple_t8015_gfx_probe_rgx(gfx);
-
-	apple_t8015_gfx_stage(gfx, "3/13: Fender identity (0x24d00000+0x2000..0x207f)");
+	apple_t8015_gfx_stage(gfx, "2/13: Fender identity (0x24d00000+0x1000/+0x2000)");
 	apple_t8015_gfx_dump_fender(gfx);
 
-	/*
-	 * The GPU's own PMGR block (bridge 8 of 13) and the display's bridge
-	 * (group 7) as a known-clocked reference.  Both are read-only; when the
-	 * GPU port is down this window is where that shows.
-	 */
-	apple_t8015_gfx_stage(gfx, "4/13: PMGR bridge windows (GFX 0x205000000 / DISP0 0x219000000)");
-	apple_t8015_gfx_probe_bridges(gfx);
-
-	apple_t8015_gfx_stage(gfx, "5/13: PMP endpoint 32 STARTEP + candidates");
+	apple_t8015_gfx_stage(gfx, "3/13: PMP endpoint 32 STARTEP + candidates");
 	apple_t8015_gfx_try_pmp_calls(gfx);
 
-	apple_t8015_gfx_stage(gfx, "6/13: ps_gfx off->on (re-send the gate request)");
+	apple_t8015_gfx_stage(gfx, "4/13: ps_gfx off->on (re-send the gate request)");
+	/* Non-fatal: the point of this boot is the Fender/RGX verdict below. */
 	if (!apple_t8015_gfx_retoggle_ps(gfx))
-		return;
+		dev_warn(dev, "ps_gfx retoggle failed; continuing anyway\n");
 
-	apple_t8015_gfx_stage(gfx, "7/13: mailbox register read (IOP+0x4008)");
+	apple_t8015_gfx_stage(gfx, "5/13: mailbox register read (IOP+0x4008)");
 	apple_t8015_gfx_probe_mailbox(gfx);
 
-	apple_t8015_gfx_stage(gfx, "8/13: mailbox (RTKit) init");
+	apple_t8015_gfx_stage(gfx, "6/13: mailbox (RTKit) init");
 	gfx->rtk = devm_apple_rtkit_init(dev, gfx, NULL, 0,
 					 &apple_t8015_gfx_rtkit_ops);
 	if (IS_ERR(gfx->rtk)) {
-		dev_err(dev, "RTKit init failed\n");
-		return;
+		dev_err(dev, "RTKit init failed (%ld); continuing anyway\n",
+			PTR_ERR(gfx->rtk));
+		gfx->rtk = NULL;
 	}
 
+	/*
+	 * The firmware window and the run bit are Fender writes, so they run
+	 * whether or not the mailbox came up: they are also the test of whether
+	 * the *writes* land once the reads above did.
+	 */
 	apple_t8015_gfx_set_window(gfx);
-	apple_t8015_gfx_stage(gfx, "11/13: release the IOP (run bit)");
+	apple_t8015_gfx_stage(gfx, "9/13: release the IOP (run bit)");
 	writel(readl(gfx->fender + FENDER_RUN) | FENDER_RUN_ENABLE,
 	       gfx->fender + FENDER_RUN);
 	dev_info(dev, "GFX IOP released; waiting for RTKit HELLO\n");
 
-	ret = apple_rtkit_wake(gfx->rtk);
-	if (ret) {
-		/*
-		 * Keep the domain up and the machine alive: report.  The IOP
-		 * is left running, so a later stage (Phase 2.3) can retry.
-		 */
-		dev_err(dev, "GFX firmware did not answer (%d)\n", ret);
-	} else {
-		dev_info(dev, "GFX firmware is up; RTKit handshake complete\n");
+	if (gfx->rtk) {
+		apple_t8015_gfx_stage(gfx, "10/13: RTKit wake (HELLO)");
+		ret = apple_rtkit_wake(gfx->rtk);
+		if (ret) {
+			/*
+			 * Keep the domain up and the machine alive: report.  The
+			 * IOP is left running, so a later stage (Phase 2.3) can
+			 * retry.
+			 */
+			dev_err(dev, "GFX firmware did not answer (%d)\n", ret);
+		} else {
+			dev_info(dev, "GFX firmware is up; RTKit handshake complete\n");
 
-		/* Endpoints are only active if the firmware advertised them. */
-		ret = apple_rtkit_start_ep(gfx->rtk, GFX_EP_AGX_INIT);
-		if (ret)
-			dev_warn(dev, "AGX init endpoint unavailable: %d\n", ret);
-		ret = apple_rtkit_start_ep(gfx->rtk, GFX_EP_AGX_DOORBELL);
-		if (ret)
-			dev_warn(dev, "AGX doorbell endpoint unavailable: %d\n",
-				 ret);
+			/* Endpoints only exist if the firmware advertised them. */
+			ret = apple_rtkit_start_ep(gfx->rtk, GFX_EP_AGX_INIT);
+			if (ret)
+				dev_warn(dev, "AGX init endpoint unavailable: %d\n",
+					 ret);
+			ret = apple_rtkit_start_ep(gfx->rtk, GFX_EP_AGX_DOORBELL);
+			if (ret)
+				dev_warn(dev, "AGX doorbell endpoint unavailable: %d\n",
+					 ret);
+		}
 	}
 
-	apple_t8015_gfx_stage(gfx, "12/13: RGX re-read after bring-up");
+	/*
+	 * Boot #14: the step every earlier boot was missing.  On the A10 the
+	 * AGX firmware is what takes the core out of reset once Fender is asked
+	 * for a state (write state|0x10, poll bit 4), which is why the RGX was
+	 * dark in boots #2..#13 even when the domain read as on.
+	 */
+	apple_t8015_gfx_stage(gfx, "11/13: Fender power request (state 1)");
+	apple_t8015_gfx_fender_power(gfx);
+
+	apple_t8015_gfx_stage(gfx, "12/13: RGX identity (0x204000000+0x00..0xff)");
 	apple_t8015_gfx_probe_rgx(gfx);
 
-	apple_t8015_gfx_stage(gfx, "13/13: done");
+	/* Bonus, and last: a hang here costs nothing already learned. */
+	apple_t8015_gfx_stage(gfx, "13/13: PMGR bridges (0x219000000 / 0x205000000)");
+	apple_t8015_gfx_probe_bridges(gfx);
 }
 
 static int apple_t8015_gfx_probe(struct platform_device *pdev)

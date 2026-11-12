@@ -872,3 +872,68 @@ the address test first.
 | `rgx` reads all zero, Fender prints | RGX window responds but is unconfigured/held in reset — Fender/`AGX_PMGR` work is the next step |
 | `mailbox: A2I control @… = …` prints | the IOP sub-block is clocked; Phase 2.2 becomes a firmware question |
 | `GFX firmware is up; RTKit handshake complete` | Phase 2.2 passes |
+
+## Phase 2.2 — boot #13 executed: the alias took effect, the RGX is still dark (2026-11-12)
+
+Payload `97fb4601…` (DT `gpu@204000000`, `mbox@204d24000`).  The DT move is
+confirmed by the binding itself: the driver is now `apple-t8015-gfx
+204000000.gpu`, not `4000000.gpu`.  Everything up to the RGX read is unchanged
+from #11/#12: PMP-DIAG `0/4`…`4/4` 12.8→16.9 s, HELLO + EPMAP, IOP ACK, `RTKit
+wake returned -62`, forced `SET_AP_PWR_STATE(ON)` at 35.8 s, `PMP is up` at
+36.3 s, GFX work at 23.0 s, `ps_gfx` `0x1f0003ff` + the whole `0x80300` bank at
+38.69–38.71 s.
+
+Then:
+
+```
+[38.714985] apple-t8015-gfx 204000000.gpu: GFX-STAGE 2/13: RGX identity (0x204000000+0x00..0xff)
+<reset>
+```
+
+The **first** `readl(0x204000000)` hung.  That is a negative result, but it is
+*not* an address verdict: the read order was wrong.  On the A10 (`pvr_apple.c`,
+and the G10P kext's Fender code) the RGX core is dark until Fender is asked for
+a power state; the sequence is window → run bit → firmware boot → **Fender
+power request (`+0x1000 = state|0x10`, poll bit 4)** → RGX access.  Boots #2–#13
+never issued that request, so a dark core is exactly what should be there.
+
+Offline (ADT `pmgr/devices`), the GPU family is one power domain:
+
+| id | name | parents | `no_ps` | note |
+|---|---|---|---|---|
+| 124 | `GFX` | — | no | the PS entry `ps_gfx` maps to (bank `0x80300`, index 7) |
+| 148 | `GFX-SGX` | 124 | **yes** | the Rogue core |
+| 149 | `GFX-KF` | 124 | **yes** | the GFX IOP / Fender |
+| 123 | `GFX-BUSY` | — | **yes** | |
+
+So `ps_gfx` covers the core *and* Fender/IOP; if Fender does not answer, the
+address is wrong, and if it does, the missing piece is the power request.
+
+## Boot #14 (built, NOT booted — needs a go)
+
+One code change: the diagnostic order, plus the missing power request.
+
+| stage | action |
+|---|---|
+| `0/13` | wait for `apple_t8015_pmp_up` |
+| `1/13` | `ps_gfx` + `0x80300` bank dump |
+| `2/13` | **Fender identity** — `0x24D00000+0x1000..0x103f` (power state, status) and `+0x2000..0x204f` (window + run page).  This is the block `ps_gfx` powers and the AP must reach; a read here is the address verdict |
+| `3/13` | `STARTEP(32)` + the six candidate messages |
+| `4/13` | `ps_gfx` off→on retoggle (non-fatal now) |
+| `5/13` | mailbox read `0x24D24008` (A2I control) |
+| `6/13` | RTKit init (non-fatal now) |
+| `7/13` | Fender window copy (6 words at `+0x200c`) |
+| `8/13` | IOP window copy (8-byte stride) + enable |
+| `9/13` | run bit `Fender+0x2048 |= 1` |
+| `10/13` | RTKit wake → HELLO |
+| `11/13` | **Fender power request** — read `+0x1000`; if state ≠ 0 request 0 first; then write `0x11` and poll ack bit 4 |
+| `12/13` | RGX identity, `0x204000000+0x00..0xff` (`ROGUE_CR_CORE_ID` at `+0x18`) |
+| `13/13` | PMGR bridges `0x219000000` / `0x205000000` (last: a hang costs nothing already learned) |
+
+| log | meaning |
+|---|---|
+| `fender +0x01000: …` prints | the alias is right and `ps_gfx` really powers Fender — the GPU family is reachable; the RGX hang was the missing power request |
+| no `fender +` line, reset after `2/13` | `0x24D00000` does not answer: the GPU family is not reachable at alias + ADT, and the address map needs re-derivation |
+| `fender power: state 1 -> 0x…1 after … ms (status 0x…)` | the request was accepted; `12/13` is then the verdict on the core |
+| `rgx +0x0018: …` with a plausible `CORE_ID` (id in bits 16–31) | **Phase 2.3 identity**, from hardware |
+| `GFX firmware is up; RTKit handshake complete` | Phase 2.2 passes |
