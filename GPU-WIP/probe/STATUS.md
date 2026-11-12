@@ -3313,3 +3313,18 @@ PMP's own address space — which is consistent with the PMP writing to
 **The three entries that read 0x244 (bits 6, 9, 10)** — indices 13, 18, 19,
 22, 24, 25, 26, 28, 29, 30, 34, 37 — are the most likely "gated" devices,
 but the AP cannot touch them.
+
+### Boot #59 (planned): the PMP v2 call on endpoint 32
+
+Tree commit `6586463337d4`.  Offline, this session decoded the PMP v2
+message from ApplePMP.kext's own send path (`_sendPMCommand`, kext at
+0xfffffff0050e0e00): `msg = (1<<52)|(cmd<<48)|(domain<<42)|((arg>>12)<<16)`,
+ack = {cmd+1 at 44..51, domain at 40..43, device at 32..39}.  Also: the
+ADT says GFX-KF/SGX/BUSY all sit on gate-bank **entry 0** (psreg 0,
+psidx 0 → 0x235280000), and the management type-3 handler bails silently
+when the handle it resolves is not registered — which is why 336
+management requests never wrote anything.
+
+Stage 3b starts endpoint 32 and sweeps 88 messages (16 commands; 16×4
+device forms; the clg word ×{bit52} in the mgmt placement), watching
+CPU_CTRL/status, ps_gfx and the gate bank after each.  Repeated at 9d.

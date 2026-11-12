@@ -23,20 +23,40 @@ AP cannot write directly (boot #58).
 So the next session's job is: **get the PMP to ungate the GFX-KF**, or find
 another way to wake the IOP.
 
-**Start at §8.1**: the gate is not a management message at all — it is a
-"call function" message to the PMP's **endpoint 32** (`PMPEndpoint1`), which
-the PMP advertises in its EPMAP and which **our driver never starts**.
-Boot #59 should start endpoint 32 and send the `clkG`/`pwrG` call for
-device 149 (GFX-KF).  The only thing missing is the message layout of
-that call, which is decoded from
-`ApplePMGRFunctionPMPInterrupt::_callFunctionPMPv2()` (vtable
-0xfffffff006ca0010, slot +12 = 0xfffffff005674354).
+**Boot #59 (built, awaiting the go) sends the first messages ever to
+endpoint 32.**  The v2 message shape is now decoded from ApplePMP.kext's
+own send path (`ApplePMP::_sendPMCommand`'s construction at
+0xfffffff00610b868), which is better evidence than the kext vtables:
 
-§8.2 explains why the AP cannot do it itself (the PMGR is a dock-FIFO
-agent of the PMP) and notes that the PMP's **clock** gating is on by
-default while its **power** gating is off — so try the clock gate first.
-§8.3 has the remaining leads, led by the ADT's `meta-sw-interrupt`, which
-has never been tried.
+```
+msg    = (1 << 52) | (cmd << 48) | (domain << 42) | ((arg >> 12) << 16)
+ack    = (cmd+1) << 44 | domain << 40 | device << 32 | payload
+         (ApplePMP.cpp: pm_msg_get_cmd(ack_msg) == command + 1)
+```
+
+The boot sweeps: all sixteen `cmd`s, the device forms (`arg = dev << 28`
+puts the device at ack bits 32..39), and the clock-gate word
+`{value[11:0], device[19:12], mode[21:20]}` in the placement the
+management handler decoded — watching the GFX mailbox's CPU_CTRL, the
+GFX ps entry (0x232080338) and gate-bank entry 0 (0x235280000) after
+every message.  It runs at stage 3b, early, so the RTKit boot that
+follows runs against a live mailbox if one of them wakes the Kingfisher;
+it repeats at 9d.
+
+Two new offline facts since the last handoff (both committed):
+
+* **GFX-SGX (148), GFX-KF (149) and GFX-BUSY (123) all have
+  `psreg 0, psidx 0`** in the ADT — their ps register is **entry 0 of
+  the gate bank at 0x235280000** (boot #58 read it as 0x1f0000ff), while
+  the parent GFX (124) is on at `ps_gfx` (0x232080338).
+* the management endpoint's type-3 handler bails **silently** if the
+  handle it resolves (`obj+52`) is not in the firmware's registry —
+  which is why 336 requests never wrote anything: our device ids do not
+  index the PMP's function registry.
+
+§8.2 explains why the AP cannot ungate anything itself (the PMGR is a
+dock-FIFO agent of the PMP).  §8.3 has the remaining leads, led by the
+ADT's `meta-sw-interrupt`, which has never been tried.
 
 ---
 
@@ -280,14 +300,14 @@ confirms it:
   "call function" payload.**  Everything we have sent so far went to the
   *management* endpoint (0), which is why the PMP only ever echoed it.
 
-**Boot #59 should:** (1) `apple_t8015_pmp_start_ep(32)`, (2) send the
-"call function" message for `clkG`/`pwrG` of device **149** (GFX-KF; also
-try 148 and 123), (3) watch the mailbox's CPU_CTRL.
-
-The one thing still missing is the **message layout** of the "call
-function" payload — decode `ApplePMGRFunctionPMPInterrupt::_callFunctionPMPv2()`
-(vtable 0xfffffff006ca0010, slot +12 = 0xfffffff005674354) and the
-overrides in the ClockGate/PowerGate classes.
+**Boot #59 does all three** (committed as `6586463337d4` in the tree):
+`apple_t8015_pmp_start_ep(32)`, then the sweep above, then the mailbox.
+The v2 message layout is decoded from `ApplePMP::_sendPMCommand`
+(ApplePMP.kext at __PRELINK_TEXT 0xfffffff0050e0e00, size 0x1b9b; its
+REQUIRE strings name the pm_msg accessors — see the update to §0).  The
+ApplePMGRFunction* vtable slots turned out to be OSMetaClass
+constructors, not the call function; the real evidence is the send path
+itself.
 
 ### 8.2 Why the AP cannot ungate anything (explains boot #58)
 
@@ -355,11 +375,11 @@ cd /home/doug/orchard
 ```
 
 * The kernel tree is a git repo on branch **`gpu/phase2.2`**; the driver work
-  is committed as **`d63057aea2f9`** (boot #58: ungate the Kingfisher from
-  the AP).
-* The last built payload:
-  **`00696796dbc95d90f4ecbb4266175da83c4bf242cb6cb2580204bd1900af8ead`**
-  (boot #58).
+  is committed as **`6586463337d4`** (boot #59: the PMP v2 call on
+  endpoint 32; before it, `d63057aea2f9` = boot #58).
+* The last *booted* payload (boot #58):
+  **`00696796dbc95d90f4ecbb4266175da83c4bf242cb6cb2580204bd1900af8ead`**;
+  boot #59 is not built yet.
 * The kernel log is streamed to `/tmp/opencode/phone-kmsg.log` by
   `GPU-WIP/tools/kmsg-host.py` (pid 412793; do **not** kill it).  Boot #N
   starts at the `GFX-STAGE 0/12` line.  Per-boot extracts are in
