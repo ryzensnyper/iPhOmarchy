@@ -107,3 +107,105 @@ the enable write changes it.
 * Whether the `0x1111` enable is a mailbox enable at all or a *power-state*
   write (the same set/clear pattern exists for the sensors:
   `sensor-offset-CTL0-set` / `sensor-offset-CTL0-clr`).
+
+## The A11 uses a *different* class: AppleA7IOPV4GFX (2026-11-12)
+
+Everything above was reverse-engineered from **`AppleA7IOPV2GFX`** — the
+`AppleA7IOP` kext's class for `iop-gfx,s8000`, `iop-gfx,t8010` and
+`iop-gfx,t8011`.  **The A11 (t8015) is not one of those.**  The kernelcache's
+personality dictionary says:
+
+```xml
+<key>AppleA7IOPV2-GFX</key>
+  <key>IOClass</key><string>AppleA7IOPV2GFX</string>
+  <key>IONameMatch</key><array>
+    <string>iop-gfx,s8000</string><string>iop-gfx,t8010</string>
+    <string>iop-gfx,t8011</string></array>
+<key>AppleA7IOPV4-GFX</key>
+  <key>IOClass</key><string>AppleA7IOPV4GFX</string>
+  <key>IONameMatch</key><array><string>iop-gfx,t8015</string></array>
+<key>AppleA7IOPV4PMP</key>            <!-- iop-pmp,t8015 -->
+```
+
+So the A11's GFX IOP is driven by **`AppleA7IOPV4GFX`**, a different
+implementation with a different mailbox.
+
+### The V4 mailbox layout
+
+`AppleM3WrapV2::getMailboxBulk()` (the class the V4 GFX derives from) reads
+five registers through the vtable's `readRegister(offset)` call and logs them
+as:
+
+```
+M3Wrap_CTRL: 0x%08x
+M3Wrap_IntOutIRQEn: 0x%08x
+M3Wrap_IntOutSts: 0x%08x
+INBOX_CTRL: 0x%08x
+OUTBOX_CTRL: 0x%08x
+```
+
+In the disassembly (`__PLK_TEXT_EXEC` 0xfffffff00575aab4) the five offsets it
+passes to `readRegister()` are **0x08, 0x48, 0x4c, 0x50, 0x80**, and the
+send/receive helpers copy 16 bytes at **+0x60** (TX) and **+0xa0** (RX) from
+the mapped base (`[this + 0x100]`, the same member the V2 class used for the
+IOP base).  So the V4 mailbox block is:
+
+| offset | register |
+|---|---|
+| +0x08 | M3Wrap_CTRL |
+| +0x48 | M3Wrap_IntOutIRQEn |
+| +0x4c | M3Wrap_IntOutSts |
+| +0x50 | INBOX_CTRL |
+| +0x60 | TX (16 bytes) |
+| +0x80 | OUTBOX_CTRL |
+| +0xa0 | RX (16 bytes) |
+
+The status bits are the same as in the V2 class: `INBOX_CTRL`/`OUTBOX_CTRL`
+carry bit 16 (full) and bit 17 (empty), and Apple's code asserts that
+`0xc0000` is never set (`_getInboxEmpty()` at 0xfffffff0057564dc does
+`tst w0, #0xc0000` and calls the error path at 0x575cec8 when it is).
+
+**Our bring-up was modelled on the wrong class.**  The `0x1111` mask write, the
+`MAILBOX_CLR` unmask and the `OUTBOX_CTRL |= 1` of boots #34/#35 are the V2
+sequence; the V4 class has `M3Wrap_IntOutIRQEn`/`M3Wrap_IntOutSts` instead of
+the SET/CLR pair.
+
+### Where the mailbox is on the A11
+
+The ADT has **no separate mailbox node** for the GFX (unlike the A10, where
+`mbox@201d24000` is its own node).  The mailbox interrupts 259-262 belong to
+`/arm-io/gfx-kf`, whose two regions are `0x4d20000` (0x20000) and `0x4d00000`
+(0x20000) — so the mailbox has to live inside one of them.
+
+On this chip every *other* mailbox sits at **(node base + 0x8000)**:
+
+| node | base | mailbox |
+|---|---|---|
+| pmp | 0x32300000 | 0x32308000 |
+| smc | 0x36800000 | 0x36808000 |
+| ans | 0x57000000 | 0x57008000 |
+
+For the GFX that gives 0x4d28000 (which is the **DART**) or 0x4d08000
+(boot #36: **all zeros**).  So the GFX does not follow that pattern, and boot
+#36 found no mailbox in the pages it probed:
+
+| base | boot #36 |
+|---|---|
+| 0x4d00000 | all zero except **+0x54 = 0x6** |
+| 0x4d04000 | the read-only device-info page (SET 0x01001000, INBOX 0x00010704, +0x48 = 0x0f, +0x4c = 0x2f, +0x60 = 0x2, +0x80 = 0x28, +0x84 = 0x40) |
+| 0x4d08000 | all zero |
+| 0x4d20000 | window registers (+0x00 = 0x101, +0x38 = 1, +0x40 = 0x30000, +0x48 = 0x79) |
+| 0x4d24000 | all zero |
+
+Boot #37 therefore sweeps all 32 pages of both apertures at the fifteen
+offsets of both layouts.
+
+### What the ADT says about the GFX
+
+`/arm-io/gfx-kf`: `power-gates = 149`, `clock-gates = 149`, `clock-ids = 269`,
+`force-timebase-sync`, `iop-version = 1`, `role = GFX`.
+`/arm-io/sgx`: `reg = 0x4000000 (0x100000), 0x4d00000 (0x20000)`,
+`power-gates = 148, 123`, `clock-gates = 148, 123`, `has-kf = 1`, and
+`meta-sw-interrupt` = `0x32104020 <- 2`, `0x321040a0 <- 2`, `0x8` — a
+**software interrupt** to the GPU's "meta" processor, i.e. a way to wake the
+coprocessor that does not involve the mailbox at all.
