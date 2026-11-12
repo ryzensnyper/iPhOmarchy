@@ -23,8 +23,15 @@ Phase 2.2's stated goal — **Fender power + RGX identity** — is **met**:
 **The one thing still missing: the RTBuddy (GFX IOP) firmware never starts.**
 It never sends its RTKit HELLO, so `apple_rtkit_boot()` times out (-62), the
 AGX endpoints cannot be started (-22), and the init message cannot be sent
-(-22).  The channel that should carry the HELLO is the **GFX mailbox**, and
-after 19 boots we still do not know where it is.
+(-22).  The channel that should carry the HELLO is the **GFX mailbox**.
+
+**Since boot #49 that channel has been located** (offline, from Apple's own
+kext — see §3): the G10P mailbox is at **+0x110** of the AGX register block,
+which is the **Fender window at 0x204d00000** — so
+**0x204d00110 (control), 0x204d00114 (status), 0x204d00800 (TX),
+0x204d00830 (RX)**.  Boots #34/#35 and #43/#44 used the *M3Wrap base
+class's* offsets (+0x08/+0x48/...), and **+0x110 was never read once in 19
+boots**, so "the mailbox is dead" was never established.  Boot #50 reads it.
 
 ## 2. The hardware map (measured, all AP addresses)
 
@@ -72,16 +79,42 @@ and `OUTBOX_CTRL |= 1` of boots #34/#35 were writes to registers that do not
 exist in this class.  (The status bits are the same as in the V2 class: bit
 16 = full, bit 17 = empty, and `0xc0000` set means the invalid state.)
 
-**Where the class lives (for further RE):**
+**Where the class lives:**
 
 * the V4 GFX **vtable** is at `__PLK_DATA_CONST` **0xfffffff006ccc660** (found
-  via the metaclass constructor at `0x575ad10`, which stores it),
-* the M3Wrap base class's vtable is at `0xfffffff006ccb258`,
+  via the metaclass constructor at `0x575ad10`, which stores it); the M3Wrap
+  base class's vtable extension is at `0xfffffff006ccb258`,
 * the class asserts `_agxRegisterMap && _agxMappedRegs` (V4) and the base
   class has `_wrapRegisterMap`, `_wrapMappedRegs`, `_inboxRegisterMap`,
-  `_inboxMappedRegs` — **two maps means two apertures**, and gfx-kf has two,
-* the class's register-map *data* has not been located yet — that is the
-  single most valuable thing to find next (§8.1).
+  `_inboxMappedRegs` — two maps means two apertures, and gfx-kf has two.
+
+**SOLVED (2026-11-12, offline): the register map.**  Reproduce with
+`GPU-WIP/tools/a7iop-v4-gfx.py`.
+
+* The "register map" is **not** an offset table.  The accessor is two
+  instructions — `0xfffffff00575b100`:
+  `ldr x8,[x0,#256]` (`_agxMappedRegs`) / `ldr w0,[x8,w1,uxtw]` — so the
+  offsets the kext passes around **are** the physical offsets in the mapped
+  block.  `_agxRegisterMap` (member +0x170) is a descriptor struct, not a
+  table.
+* The class hierarchy, from the kext's own REQUIRE strings:
+  `AppleIOP → AppleA7IOP → AppleA7IOPV1 → AppleA7IOPV2 → {V2GFX, V2Marconi,
+  V2PMP} → AppleA7IOPV4 → AppleA7IOPV4GFX`, plus `AppleMxWrap →
+  AppleM3WrapV2`, `AppleASCWrapV2/V4`, `AppleASCANS2`.
+* **AppleA7IOPV4GFX overrides `getMailboxBulk`** (vtable slot +97,
+  `0xfffffff00575ba0c`) and uses a *different* layout from the M3Wrap base:
+
+  | offset | register | address on the A11 |
+  |---|---|---|
+  | **+0x110** | **CPU_CTRL** — bit 0 = enabled, 16 = TX full, 17 = RX empty | **0x204d00110** |
+  | **+0x114** | **CPU_CTRL status** (0xc0000 = invalid) | **0x204d00114** |
+  | **+0x800** | **TX data**, 16-byte words | **0x204d00800** |
+  | **+0x830** | **RX data**, 16-byte words | **0x204d00830** |
+
+* The AGX block is the **Fender window (0x204d00000)**: the kext reads the
+  device-information page at +0x4008 and the power state at +0x1008 — exactly
+  where we measured them.
+* CPU_CTRL bit 16 = TX full, bit 17 = RX empty, bit 0 = "enabled".
 
 ## 4. What the apertures actually contain (boots #36–#45)
 
@@ -180,22 +213,26 @@ the A11 is probably the same story — we have not found its register yet.
 
 ## 8. The open leads, ranked
 
-1. **The `AppleA7IOPV4GFX` register-map data** (§3).  `_agxRegisterMap` and
-   `_wrapRegisterMap` would give the *physical* offsets of the AGX registers
-   and of the mailbox wrapper directly, and `initialize()` would say which
-   aperture is which.  With the vtable at 0xfffffff006ccc660 the methods are
-   now reachable.  *This is the lead that ends the guessing.*
-2. **The GFX-KF's gate register** (§6).  The A12 writes its GPU's rails
+1. ~~**The `AppleA7IOPV4GFX` register-map data**~~ — **DONE, 2026-11-12.**
+   The offsets are +0x110/+0x114/+0x800/+0x830 in the Fender window (§3).
+   *What is left is the write side: which bits to write to CPU_CTRL to
+   enable the mailbox and unmask the RTKit interrupt, and whether the GFX
+   class has an IRQ-enable register of its own (the M3Wrap base had
+   +0x48/+0x4c; no +0x118/+0x11c access was seen).*
+2. **Boot #50's result** — does CPU_CTRL at 0x204d00110 read anything?  If
+   it is non-zero the mailbox is live and we can talk RTKit; if it is zero the
+   Kingfisher is still dark and lead 2 (the gate register) is next.
+3. **The GFX-KF's gate register** (§6).  The A12 writes its GPU's rails
    directly; find the A11's equivalent (the `no_ps` devices' gates) and
    write it.  The ADT's gfx-kf node uses the gate of device 149.
-3. **The PMP's gate service endpoint** (§5).  It is reached through a
+4. **The PMP's gate service endpoint** (§5).  It is reached through a
    computed dispatch (no function-pointer table entry), and the RTKit layer
    refuses to send on an endpoint that has not been started — so an endpoint
    sweep needs the STARTEP acknowledged, which 0x20 was not.
-4. **The enable values.**  Only the kext knows what M3Wrap_CTRL and
+5. **The enable values.**  Only the kext knows what M3Wrap_CTRL and
    IntOutIRQEn must be; our guesses (1 and 0x1111) may enable nothing, and
    a write-protected block looks exactly like a dead page.
-5. **The core window** (0x04000000): the firmware can reach it, so the
+6. **The core window** (0x04000000): the firmware can reach it, so the
    mailbox may be there — but the RGX's registers trap, so it has to be
    probed one offset at a time.
 
@@ -214,10 +251,11 @@ cd /home/doug/orchard
 ```
 
 * The kernel tree is a git repo on branch **`gpu/phase2.2`**; the driver work
-  is committed as **`9f136bd77570`** (boot #49's PMGR dump).
+  is committed as **`c6ee27e772b1`** (boot #50: the mailbox at Apple's V4 GFX
+  offsets).
 * The last built payload:
-  **`7c8722dd446ed0e117dad68e126e48f12329c8e52821a6e0a102f7973f986de3`**
-  (boot #49).
+  **`09c1f3080c80be96b9ded93c80e29bd95823d8351adcf932ec6721564ed13844`**
+  (boot #50, read-only).
 * The kernel log is streamed to `/tmp/opencode/phone-kmsg.log` by
   `GPU-WIP/tools/kmsg-host.py` (pid 412793; do **not** kill it).  Boot #N
   starts at the `GFX-STAGE 0/12` line.
@@ -252,6 +290,7 @@ built-in driver).
 | the mailbox map, and the V4 class | `GPU-WIP/probe/phase2.2/A7IOP-MAILBOX.md` |
 | the A12 (BadApple/Cascadia) AGX driver as a reference | `GPU-WIP/probe/phase2.2/A12-REFERENCE.md` |
 | the offline RE helpers (now in the repo) | `GPU-WIP/tools/` — see `tools/README.md` |
+| **the V4 GFX register map (solved)** | `GPU-WIP/probe/phase2.2/A7IOP-MAILBOX.md`, reproduced by `GPU-WIP/tools/a7iop-v4-gfx.py` |
 | the project's own earlier RE (huge) | `Known Good State/firmware/GPU/` — `A11-GPU-FINDINGS.md`, `A11-GPU-G10P-LAYOUT.md`, `A11-GPU-G10P-BOOTCHAIN.md`, `A11-GPU-G10P-STAGE2.md`, the extracted `AGXG10P__*.bin` segments, `agxg10p.asm` |
 
 ## 12. Conventions
