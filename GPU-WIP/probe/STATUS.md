@@ -937,3 +937,78 @@ One code change: the diagnostic order, plus the missing power request.
 | `fender power: state 1 -> 0x…1 after … ms (status 0x…)` | the request was accepted; `12/13` is then the verdict on the core |
 | `rgx +0x0018: …` with a plausible `CORE_ID` (id in bits 16–31) | **Phase 2.3 identity**, from hardware |
 | `GFX firmware is up; RTKit handshake complete` | Phase 2.2 passes |
+
+## Phase 2.2 — boot #14 executed: **Fender and the IOP mailbox answer** (2026-11-12)
+
+Payload `860b007a…`.  This is the boot that ends the "the GPU block is dark"
+question: both GPU-family windows the AP has to reach **read back without
+hanging**.
+
+```
+GFX-STAGE 2/13: Fender identity (0x24d00000+0x1000/+0x2000)
+fender +0x1000: 00000000 00000000 00000000 00000000
+fender +0x1010: 00000000 00000000 00000000 00000000
+...
+fender +0x2040: 00000000 00000000 00000000 00000000
+GFX-STAGE 5/13: mailbox register read (IOP+0x4008)
+mailbox: A2I control @0x0000000204d24000+0x08 = 0x0 (empty bit 0, full bit 0)
+```
+
+| stage | result |
+|---|---|
+| `2/13` Fender identity | **24 reads, all returned** (`0x24D01000..0x24D0204C` = all zero: block powered down, reset values) |
+| `5/13` mailbox read | **returned** `0x0` at `0x24D24008` — the read that hung boots #5/#6/#10/#11 is now a normal MMIO read |
+| `3/13` `STARTEP(32)` | `-> 0`, but the PMP logs `Received unexpected message to EP32: 0` — endpoint 32 is not a raw message endpoint |
+| `4/13` retoggle | `0x1f0003ff` → `0x0f0003ff`, actual `0xf` in 10 ms (unchanged) |
+| `6/13` RTKit init | two `RTKit: unknown management message: 0x0 (type: 0x00)`, then **the machine wedged** |
+
+The wedge: the phone still enumerates as `05ac:4144` (USB hardware alive) but
+does not answer ping and stops emitting kernel log.  `apple_mbox_poll_locked()`
+loops `while (!(i2a_control & control_empty))` (bit 17) and calls `rx()` for
+every word it reads; the I2A control never showed "empty", so it drained
+phantom `0x0` words in IRQ context and never left the handler.  The mailbox
+register layout for the `a7iop` variant is therefore the next thing to fix —
+and the boot after that can finally do a real HELLO.
+
+### What this changes
+
+- The `+0x200000000` alias is right for the GPU family: `0x24D00000` (Fender)
+  and `0x24D24000` (IOP mailbox) both respond; the raw ADT `0x04D00000` /
+  `0x04D24000` never did.
+- `ps_gfx` does power the SGFX core *and* the IOP (`GFX-SGX`/`GFX-KF` are
+  `no_ps` children of `GFX` in the ADT), so nothing else needs powering before
+  these windows work.
+- The RGX core is still unread (boot #14 never reached it), and the all-zero
+  Fender registers mean state 0 = off, exactly what the missing power request
+  predicts.
+
+## Boot #15 (built, NOT booted — needs a go)
+
+No mailbox/RTKit this round: the GPU verdict comes first, with the mailbox left
+as a read-only dump.  The goal is to convert "the windows answer" into "the
+core answers".
+
+| stage | action |
+|---|---|
+| `0/12` | wait for `apple_t8015_pmp_up` |
+| `1/12` | `ps_gfx` + bank dump |
+| `2/12` | Fender state read (`+0x1000`, `+0x1010`) |
+| `3/12` | **mailbox register dump `+0x00..+0x3c`** (read-only, no IRQ, no RTKit) |
+| `4/12` | `STARTEP(32)` + candidates (unchanged) |
+| `5/12` | `ps_gfx` retoggle |
+| `6/12` | Fender window copy (`+0x200c`, 6 × u32) |
+| `7/12` | IOP window copy (`+0x08`, 6 × u64) + enable, then **read-back of both copies** |
+| `8/12` | run bit (`Fender+0x2048 |= 1`), 1 s for the firmware to start |
+| `9/12` | Fender power request (state 1), ack poll |
+| `10/12` | **RGX identity dump** (`0x204000000+0x00..0xff`, `CORE_ID` at `+0x18`) |
+| `11/12` | bridges (last) |
+| `12/12` | done marker |
+
+| log | meaning |
+|---|---|
+| `window readback fender: <window values>` | Fender is a real writable block (not a zero-returning hole) — the firmware window is programmed |
+| readback all zero | writes do not stick: the block is in reset or the window register offsets are wrong |
+| `fender power: state 1 -> 0x…1` | the power request was accepted → the core should now answer |
+| `rgx +0x0018: …` | **the GPU core answers** — Phase 2.3 identity from hardware |
+| still no `rgx +` line | the core needs the AGX firmware handshake (mailbox) before it leaves reset, so the mailbox fix is the gate |
+| `mbox +0x00..0x3c` values | the `a7iop` layout needed to fix `apple_mbox_poll_locked()` |

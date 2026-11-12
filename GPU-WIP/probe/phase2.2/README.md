@@ -559,3 +559,48 @@ Order changed so the address verdict comes from the block that must be alive
 | `fender power: state 1 -> 0x…1 …` | request accepted; `12/13` is the core verdict |
 | `rgx +0x0018:` with plausible id | Phase 2.3 identity from hardware |
 | `GFX firmware is up; RTKit handshake complete` | Phase 2.2 passes |
+
+### Boot #14 verdict (executed 2026-11-12)
+
+Payload `860b007a…`.  **Fender and the IOP mailbox both answer.**
+
+- `0x24D01000..0x24D0204C`: 24 reads, all returned, all zero (powered down,
+  reset values).  The block is reachable.
+- `0x24D24008` (A2I control): returned `0x0`.  This is the read that hung boots
+  #5, #6, #10 and #11 at the raw ADT address `0x04D24000`.
+- `STARTEP(32) -> 0` but the PMP logs `Received unexpected message to EP32: 0`.
+- RTKit init: two `unknown management message: 0x0 (type: 0x00)`, then the
+  machine wedged (USB still present, no ping, no log).  `apple_mbox_poll_locked()`
+  loops while `i2a_control & BIT(17)` is clear and drains phantom `0x0` words in
+  IRQ context — the `a7iop` mailbox layout is the next fix.
+
+---
+
+# Boot #15 plan (2026-11-12) — GPU verdict first, mailbox read-only
+
+| stage | action |
+|---|---|
+| `0/12` | wait for `apple_t8015_pmp_up` |
+| `1/12` | `ps_gfx` + bank dump |
+| `2/12` | Fender state read (`+0x1000`, `+0x1010`) |
+| `3/12` | mailbox register dump `+0x00..+0x3c` (read-only) |
+| `4/12` | `STARTEP(32)` + candidates |
+| `5/12` | `ps_gfx` retoggle |
+| `6/12` | Fender window copy (`+0x200c`) |
+| `7/12` | IOP window copy (`+0x08`) + enable, then read-back of both |
+| `8/12` | run bit + 1 s |
+| `9/12` | Fender power request (state 1, ack bit 4) |
+| `10/12` | RGX identity dump |
+| `11/12` | bridges (last) |
+| `12/12` | done |
+
+### Per-outcome interpretation
+
+| log | meaning |
+|---|---|
+| window readback shows the written values | Fender is a real writable block; firmware window programmed |
+| window readback all zero | writes do not stick — wrong window offsets or block in reset |
+| `fender power: state 1 -> 0x…1` | power request accepted → core should answer |
+| `rgx +0x0018:` | **core answers** — Phase 2.3 identity from hardware |
+| no `rgx +` line | core needs the AGX firmware handshake first → mailbox fix is the gate |
+| `mbox +0x00..0x3c` dump | the real `a7iop` register layout for fixing the poll loop |
