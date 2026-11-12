@@ -3284,3 +3284,32 @@ after each write.  If one of those entries is the GFX-KF's gate, the
 Kingfisher powers up and we learn which one it was.  Every value is saved
 and restored if nothing works, and the register is one we have already
 mapped and read safely dozens of times, so there is no SError risk.
+
+### Boot #58: ungating from the AP — the writes do not stick (payload `00696796…`)
+
+Clean boot, phone alive as `05ac:4144`.  Stage 9c/12 walked the AP's gate
+bank (pmgr1 + 0x80000) and cleared bit 6 in each entry that had it, reading
+the mailbox's CPU_CTRL after every write:
+
+```
+ungate: entry 0  0x1f0000ff -> 0x1f0000ff, CPU_CTRL = 0x00000000
+ungate: entry 13 0x00000244 -> 0x00000244, CPU_CTRL = 0x00000000
+ungate: entry 22 0x00000244 -> 0x00000244, CPU_CTRL = 0x00000000
+...
+ungate: no entry woke the mailbox
+```
+
+**Every write read back unchanged.**  Clearing bits 5 and 6 of 0x1f0000ff
+should have given 0x1f00009f, so the write was *rejected*, not raced: **the
+AP cannot write the PMGR's gate bank.**  The mask in the ADT
+(`ps-regs[0].mask = 0x00200c53`) describes what the *PMP* may write there,
+not the AP.  (Bit 5 is not even in the mask; bit 6 is, and it still did
+not take.)
+
+So the Kingfisher's gate can only be cleared by the PMP itself, from the
+PMP's own address space — which is consistent with the PMP writing to
+`(device << 12) + 0x202`, an address the AP does not have a mapping for.
+
+**The three entries that read 0x244 (bits 6, 9, 10)** — indices 13, 18, 19,
+22, 24, 25, 26, 28, 29, 30, 34, 37 — are the most likely "gated" devices,
+but the AP cannot touch them.
