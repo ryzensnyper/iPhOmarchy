@@ -604,3 +604,34 @@ Payload `860b007a…`.  **Fender and the IOP mailbox both answer.**
 | `rgx +0x0018:` | **core answers** — Phase 2.3 identity from hardware |
 | no `rgx +` line | core needs the AGX firmware handshake first → mailbox fix is the gate |
 | `mbox +0x00..0x3c` dump | the real `a7iop` register layout for fixing the poll loop |
+
+### Boot #15 verdict (executed 2026-11-12)
+
+Payload `d06c1f7d…`.  **The RGX core answers: `CORE_ID (0x0018) = 0x7E1`.**
+
+```
+window readback fender: 0e100000 00000008 00000000 00000000 00100000 00000000
+window readback iop: 0e100000 00000000 (enable 00000001)
+fender power: state 1 -> 0x1 after 10 ms (status 0x0)
+rgx +0x10: 00000000 00000000 000007e1 00000000
+```
+
+- Fender window copy **reads back exactly** → real writable block.
+- Fender power request latches `state 0x1` in 10 ms; the ack bit is not the A10
+  bit 4, so poll the state field.
+- `CORE_ID` decodes as `{ID=0x0000, CONFIG=0x07E1}` (`n=7, c=0xE1` under the
+  A10 Rogue mapping — verify against the G10P kext).  `0x0020` (PBVNC) is 0.
+- Mailbox window `0x204D24000 +0x00..0x3c` is **all zero**, which is exactly why
+  RTKit livelocked in boot #14: "empty" is tested as a set bit.
+- DISP0 bridge answers (`+0x10=0x8f04`), but the scan **stalls inside the
+  window** shortly after `0x4000` → dump only `0x00..0x1c` from now on.
+
+### Boot #16 changes
+
+1. Keep the proven path (window → run → power request).
+2. `8/10`: **enable** the mailbox FIFOs (write the enable bit to both control
+   registers), then re-dump `0x00..0x3c` + one I2A read.  All-zero before enable
+   is expected; non-zero after proves the layout and unblocks RTKit with a
+   bounded poll loop.
+3. `9/10`: 64-bit `0x0020` PBVNC + `CORE_REVISION` for the identity record.
+4. `10/10`: done — no bridge scan.
