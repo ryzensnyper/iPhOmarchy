@@ -1012,3 +1012,75 @@ core answers".
 | `rgx +0x0018: …` | **the GPU core answers** — Phase 2.3 identity from hardware |
 | still no `rgx +` line | the core needs the AGX firmware handshake (mailbox) before it leaves reset, so the mailbox fix is the gate |
 | `mbox +0x00..0x3c` values | the `a7iop` layout needed to fix `apple_mbox_poll_locked()` |
+
+## Phase 2.2 — boot #15 executed: **the RGX core answers** (2026-11-12)
+
+Payload `d06c1f7d…`.  GPU verdict first, mailbox read-only, no RTKit.  The
+phone reset at the very end (sacrificial bridge scan), but every stage that
+mattered printed first.
+
+```
+GFX-STAGE 6/12: Fender window copy
+GFX-STAGE 7/12: IOP window copy + enable
+window readback fender: 0e100000 00000008 00000000 00000000 00100000 00000000
+window readback iop: 0e100000 00000000 (enable 00000001)
+GFX-STAGE 8/12: release the IOP (run bit)
+GFX-STAGE 9/12: Fender power request (state 1)
+fender power: state 1 -> 0x1 after 10 ms (status 0x0)
+GFX-STAGE 10/12: RGX identity (0x204000000+0x00..0xff)
+rgx +0x10: 00000000 00000000 000007e1 00000000
+```
+
+| stage | result |
+|---|---|
+| `6/12` Fender window copy | **written and read back**: `0x0E100000` (upper `0x8`), size `0x00100000` |
+| `7/12` IOP window copy | `0x0E100000` + enable `0x1` read back — the IOP really is pointed at the firmware window |
+| `8/12` run bit | accepted, firmware released, 1 s settle |
+| `9/12` Fender power request | **`state 1 -> 0x1` in 10 ms** (status/ack bit stayed 0 — the A11 ack bit is not the A10 one) |
+| `10/12` RGX identity | **`0x204000018 = 0x7E1`** — `ROGUE_CR_CORE_ID` answered; the only non-zero word in `0x00..0xff` |
+| `3/12` mailbox dump | **all 16 registers `0x00..0x3c` read `0x0`** at `0x204D24000` |
+| `5/12` retoggle | `0x1f0003ff -> 0x0f0003ff`, actual `0xf` (unchanged) |
+| `4/12` PMP calls | `STARTEP(32) -> 0` + `unexpected message to EP32`; all clg-word/fn30 calls `-> 0` |
+| `11/12` bridges | DISP0 `0x219000000` answered: `+0x10=0x8f04`, `+0x14=0x4`, `+0x18=0x10001`, `+0x1c=0x40`, `+0x20=0x40`, `+0x4000=0xc00c000c`; the scan then **stalled inside the DISP0 window** (`0x4000`-ish+) and the phone reset to iOS |
+
+### What this changes
+
+- **The GPU core is alive and reportable.** `CORE_ID (0x0018) = 0x7E1` is the
+  hardware identity Phase 2.3 needed; the missing step all along was the
+  Fender power request (boot #13 hung on the *same* first RGX read with no
+  request pending).
+- **Fender is a real writable block**, not a zero-returning hole: the window
+  copy reads back exactly what was written, and the power-request state
+  latched `0x1`.
+- The A11 ack bit is not the A10 one (`status 0x0` after a successful state
+  transition), so the power poll must key on the state field, not bit 4.
+- **The IOP mailbox window reads all-zero.** That is why RTKit wedged the
+  machine in boot #14: `apple_mbox_poll_locked()` tests "empty" as a set bit,
+  and an unclocked/all-zero block never sets it. The mailbox is either not
+  clocked by `ps_gfx` alone or its `a7iop` register map is wrong — the next
+  boot must *enable* the FIFOs and re-dump, not just read.
+- Bridge scans past the first `0x20` bytes are dangerous: the DISP0 window
+  stalls shortly after `0x4000`. Any future dump is `0x00..0x1c` only.
+
+### Decoding `0x7E1`
+
+`ROGUE_CR_CORE_ID` (offset `0x0018`) is `{ID[31:16], CONFIG[15:0]}`, so the
+raw read is `ID=0x0000, CONFIG=0x07E1` → `n=0x07, c=0xE1` under the A10
+(PowerVR Rogue) mapping.  `ROGUE_CR_CORE_ID__PBVNC`/`CORE_REVISION` at `0x0020`
+read `0x0`, so the newer BVNC path is not implemented on this core.  The A11
+core is Apple's own, so whether `CONFIG` means 7 clusters must be checked
+against the G10P kext before it is trusted.
+
+## Boot #16 plan (not built — needs a go)
+
+1. `1/10`–`7/10`: the proven GPU path (`ps_gfx` → Fender window → run bit →
+   power request) — keep it, it is the only way to a live RGX.
+2. `8/10`: **mailbox enable experiment** on `0x204D24000`: write the
+   `A7IOP_MBOX_CONTROL_ENABLE` bit to both FIFO control registers, then
+   re-dump `0x00..0x3c` and read the I2A FIFO once.  If the block goes from
+   all-zero to a real control value, the layout is right and RTKit can be
+   retried with a bounded poll loop; if it stays zero, the mailbox needs its
+   own clock/power (GFX bridge / `AGX_PMGR`) and that is the next address to
+   find.
+3. `9/10`: 64-bit `0x0020` (PBVNC) + `CORE_REVISION` read for the identity.
+4. `10/10`: done.  **No bridge scan this time.**
