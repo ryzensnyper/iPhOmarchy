@@ -1865,3 +1865,47 @@ Test the "the RTBuddy firmware never started" hypothesis, which is cheap:
   mailbox enable must come from it;
 * also try the AGX-style bring-up order (Fender config RAM) instead of the
   A10 window/run-bit order.
+
+## Phase 2.2 — boot #26 executed: the RTBuddy firmware never starts (2026-11-12)
+
+Payload `6319a53d…`.  All 12 stages, **no reset**.
+
+```
+watch pre   : iop+0x00=0x101 iop+0x08=0x0      iop+0x38=0x1 | mbox=0/0 | fender+0x1000=0x0 fender+0x2048=0x0
+watch t+1s  : iop+0x00=0x101 iop+0x08=0xe100000 iop+0x38=0x1 | mbox=0/0 | fender+0x1000=0x0 fender+0x2048=0x1
+watch t+3s  : (identical)
+watch t+10s : (identical)
+watch after-pwr: iop+0x00=0x101 ... | fender+0x1000=0x1 fender+0x2048=0x1
+rgx core_id 0x000007e1 (id 0x0000 config 0x07e1 n 0x07 c 0xe1)
+```
+
+### What this says
+
+1. **`IOP+0x38` (the window enable) already reads `1` *before* we touch
+   anything** — the boot ROM enabled the RTBuddy window.  So the IOP block is
+   enabled from the start; it is not gated.
+2. **`IOP+0x00` = `0x101` never changes**, not at 1 s, 3 s or 10 s after the
+   run bit, and not after the power request.  Whatever that word is, the
+   firmware does not touch it — so **the RTBuddy firmware never starts**.
+3. The mailbox page stays zero throughout, which now has a cause: no firmware,
+   no mailbox (the RTBuddy firmware is what enables its own mailbox).
+4. The RGX answers `CORE_ID = 0x7E1` *without* any firmware — so the core is
+   alive from the power domain alone, and the firmware is only needed for the
+   AGX bring-up.
+
+### Why the run bit does nothing
+
+`Fender+0x2048` latches our write (it reads back 1) but nothing happens, and
+the AGXG10P kext says the A11's GPU is started through the **Fender config
+RAM** (`AGXFender::initConfigRAMOffset` / `writeConfigRAMCommand32` /
+`terminateConfigRAMSequence`) — not through a window plus a run bit.  So
+`+0x200c` (window base) and `+0x2048` (run bit) are **A10 PowerVR registers**,
+and on the A11's Kingfisher Fender they are something else entirely (or
+nothing).
+
+The next thing to extract from the AGXG10P kext is therefore the **A11 Fender
+register map**: the config-RAM command format and the register offsets it uses
+(`writeConfigRAMCommand32(uint16_t, uint32_t, uint8_t)`), plus the power
+register the A11 really uses (`AGXFender::isPoweredOffWaitingOnHost`,
+`readTimerPowerInterruptStatus`).  With that, the firmware can be started the
+way iOS starts it, and the mailbox should follow.

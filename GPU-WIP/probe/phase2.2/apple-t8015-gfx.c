@@ -236,13 +236,6 @@ static void apple_t8015_gfx_set_window(struct apple_t8015_gfx *gfx)
 		 readl(gfx->iop + IOP_WINDOW_ENABLE));
 }
 
-/*
- * Diagnostic (Phase 2.2): what does the PMGR itself say about ps_gfx?  The
- * register is the one the power-domain driver writes: PS_TARGET is the
- * requested state, PS_ACTUAL the reached one, and the two "was" bits say
- * whether the block was clock- or power-gated when the domain came up.
- * Reading it is harmless: the PMGR is always on.
- */
 static void apple_t8015_gfx_dump_ps(struct apple_t8015_gfx *gfx)
 {
 	struct device_node *ps_node, *pmgr_node;
@@ -658,39 +651,6 @@ static void apple_t8015_gfx_dump_range(struct apple_t8015_gfx *gfx,
 #define PMGR_BANK_END	0x8c000UL
 
 
-/*
- * The RGX core register area.  The A10 driver (which is what the DRM side
- * will be built on) reads CORE_ID at 0x18, CORE_REVISION at 0x20 and the
- * designer/revision fields at 0x28/0x30; everything else the driver needs
- * about the clusters comes from the firmware.  So dump the first 4 KiB of
- * the core window and see what this core actually implements.
- */
-static void apple_t8015_gfx_rgx_dump(struct apple_t8015_gfx *gfx)
-{
-	unsigned int off, j;
-	unsigned int live = 0;
-
-	for (off = 0; off < 0x1000; off += 0x40) {
-		bool any = false;
-
-		for (j = 0; j < 0x40; j += 4) {
-			if (readl(gfx->rgx + off + j)) {
-				any = true;
-				break;
-			}
-		}
-		if (!any)
-			continue;
-		live++;
-		dev_info(gfx->dev, "rgx +%#06x:\n", off);
-		for (j = 0; j < 0x40; j += 0x10)
-			dev_info(gfx->dev, "    +%#04x: %08x %08x %08x %08x\n", j,
-				 readl(gfx->rgx + off + j), readl(gfx->rgx + off + j + 4),
-				 readl(gfx->rgx + off + j + 8),
-				 readl(gfx->rgx + off + j + 12));
-	}
-	dev_info(gfx->dev, "rgx: %u non-zero chunks in the first 4 KiB\n", live);
-}
 
 /*
  * Phase 2.2 boot #23: more shapes for the PMP clock-gate message.
@@ -733,40 +693,36 @@ struct gfx_gate_try {
  */
 #define GFX_GATE_MAX_MSGS	140
 
-static void apple_t8015_gfx_gate_sweep(struct apple_t8015_gfx *gfx)
+
+
+/*
+ * Phase 2.2 boot #26: did the RTBuddy firmware actually start?
+ *
+ * The AGXG10P kext says the A11's GPU is driven through the Fender's *config
+ * RAM* and that the AGX firmware for the RTBuddy is AGXFirmwareKextG10PRTBuddy
+ * -- our "GFX IOP" firmware.  The RTBuddy firmware is what enables its own
+ * mailbox, so if our window copy and run bit (A10 PowerVR semantics) never
+ * started it, the mailbox page stays dead and every AP-side write to it is
+ * ignored -- exactly what we see.
+ *
+ * So watch the firmware's footprint: the IOP status word, the mailbox page
+ * and the Fender's power/run registers, before the bring-up and 1 s / 3 s /
+ * 10 s after it.
+ */
+static void apple_t8015_gfx_watch_firmware(struct apple_t8015_gfx *gfx,
+					  const char *when)
 {
-	static const u32 cmds[] = { 1, 0, 2, 3 };
-	static const u32 devs[] = { 121, 149, 124, 106, 514, 0 };
-	static const u32 vals[] = { 269, 7, 0, 0xfff };
-	unsigned int c, d, v;
-	unsigned int sent = 0;
-	u32 v0, v8;
+	u32 iop0, iop8, iop38, mbox0, mbox8, fen0, fen48;
 
-	for (c = 0; c < ARRAY_SIZE(cmds); c++) {
-		for (d = 0; d < ARRAY_SIZE(devs); d++) {
-			for (v = 0; v < ARRAY_SIZE(vals); v++) {
-				u64 msg;
-
-				if (sent >= GFX_GATE_MAX_MSGS)
-					return;
-				msg = ((u64)cmds[c] << 20) |
-				      ((u64)devs[d] << 12) | vals[v];
-				dev_info(gfx->dev, "gate sweep: cmd %u dev %u val %u -> %#llx\n",
-					 cmds[c], devs[d], vals[v], msg);
-				apple_t8015_pmp_send(32, msg);
-				sent++;
-				msleep(300);
-				v0 = readl(gfx->iop + 0x1000);
-				v8 = readl(gfx->iop + 0x1008);
-				if (v0 || v8) {
-					dev_info(gfx->dev, "gate sweep: cmd %u dev %u val %u woke the mailbox: SET %#x INBOX %#x\n",
-						 cmds[c], devs[d], vals[v], v0, v8);
-					return;
-				}
-			}
-		}
-	}
-	dev_info(gfx->dev, "gate sweep: %u messages sent, no reply and no effect\n", sent);
+	iop0 = readl(gfx->iop + 0x00);
+	iop8 = readl(gfx->iop + 0x08);
+	iop38 = readl(gfx->iop + 0x38);
+	mbox0 = readl(gfx->iop + 0x1000);
+	mbox8 = readl(gfx->iop + 0x1008);
+	fen0 = readl(gfx->fender + 0x1000);
+	fen48 = readl(gfx->fender + 0x2048);
+	dev_info(gfx->dev, "watch %-6s: iop+0x00=%#x iop+0x08=%#x iop+0x38=%#x | mbox+0x1000=%#x mbox+0x1008=%#x | fender+0x1000=%#x fender+0x2048=%#x\n",
+		 when, iop0, iop8, iop38, mbox0, mbox8, fen0, fen48);
 }
 
 static void apple_t8015_gfx_boot_work(struct work_struct *work)
@@ -777,15 +733,17 @@ static void apple_t8015_gfx_boot_work(struct work_struct *work)
 	unsigned int i;
 
 	/*
-	 * Boot #19.  Boot #18 probed ten candidates and found the mailbox
-	 * register block nowhere: 0x204d24000 (our DT node), 0x204d25000 and
-	 * 0x204d21000 are all zero, and the one live block (Fender+0x4000)
-	 * ignored the 0x1111 write, so it is read-only config rather than
-	 * MAILBOX_SET.
+	 * Boot #26.  The AGXG10P kext says the A11's GPU is driven through the
+	 * Fender's *config RAM* and that the AGX firmware for the RTBuddy is
+	 * AGXFirmwareKextG10PRTBuddy -- our "GFX IOP" firmware.  The RTBuddy
+	 * firmware is what enables its own mailbox, so if our window copy and
+	 * run bit (A10 PowerVR semantics) never started it, the mailbox page
+	 * stays dead and every AP-side write to it is ignored -- exactly what
+	 * we see.
 	 *
-	 * So: run Apple's full enable sequence against every plausible base
-	 * and see whether anything wakes up, then sweep the two window ranges
-	 * that have never been read.
+	 * So watch the firmware's footprint: the IOP status word, the mailbox
+	 * page and the Fender's power/run registers, before the bring-up and
+	 * 1 s / 3 s / 10 s after it.
 	 */
 	apple_t8015_gfx_stage(gfx, "0/12: wait for the PMP to come up");
 	for (i = 0; i < GFX_PMP_READY_WAIT_MS / 500; i++) {
@@ -803,6 +761,9 @@ static void apple_t8015_gfx_boot_work(struct work_struct *work)
 	if (!apple_t8015_gfx_retoggle_ps(gfx))
 		dev_warn(dev, "ps_gfx retoggle failed; continuing anyway\n");
 
+	apple_t8015_gfx_stage(gfx, "3/12: before the bring-up");
+	apple_t8015_gfx_watch_firmware(gfx, "pre");
+
 	/* The firmware image was loaded into the window by ->probe(). */
 	apple_t8015_gfx_set_window(gfx);
 
@@ -810,28 +771,29 @@ static void apple_t8015_gfx_boot_work(struct work_struct *work)
 	writel(readl(gfx->fender + FENDER_RUN) | FENDER_RUN_ENABLE,
 	       gfx->fender + FENDER_RUN);
 	dev_info(dev, "GFX IOP released; letting the firmware start\n");
+
+	apple_t8015_gfx_stage(gfx, "6/12: one second after the run bit");
 	msleep(1000);
+	apple_t8015_gfx_watch_firmware(gfx, "t+1s");
 
-	apple_t8015_gfx_stage(gfx, "6/12: Fender power request (state 1)");
+	apple_t8015_gfx_stage(gfx, "7/12: three seconds after the run bit");
+	msleep(2000);
+	apple_t8015_gfx_watch_firmware(gfx, "t+3s");
+
+	apple_t8015_gfx_stage(gfx, "8/12: ten seconds after the run bit");
+	msleep(7000);
+	apple_t8015_gfx_watch_firmware(gfx, "t+10s");
+
+	apple_t8015_gfx_stage(gfx, "9/12: Fender power request (state 1)");
 	apple_t8015_gfx_fender_power(gfx);
+	apple_t8015_gfx_watch_firmware(gfx, "after-pwr");
 
-	apple_t8015_gfx_stage(gfx, "7/12: RGX identity + CORE_ID/PBVNC");
+	apple_t8015_gfx_stage(gfx, "10/12: RGX identity + CORE_ID/PBVNC");
 	apple_t8015_gfx_probe_rgx(gfx);
 
-	apple_t8015_gfx_stage(gfx, "8/12: STARTEP the PMP endpoint 32");
-	apple_t8015_pmp_start_ep(32);
-	msleep(1500);
-	dev_info(dev, "GFX-DIAG: ep 32 started; the PMP should answer on it now\n");
-
-	apple_t8015_gfx_stage(gfx, "9/12: brute-force the gate message shape");
-	apple_t8015_gfx_gate_sweep(gfx);
-
-	apple_t8015_gfx_stage(gfx, "10/12: the mailbox block after the sweep");
+	apple_t8015_gfx_stage(gfx, "11/12: the IOP window head and the mailbox");
+	apple_t8015_gfx_dump_range(gfx, gfx->iop, "iop", 0x00, 0x40);
 	apple_t8015_gfx_dump_range(gfx, gfx->iop, "iop", 0x1000, 0x1040);
-	apple_t8015_gfx_dump_range(gfx, gfx->iop, "iop", 0x40, 0x100);
-
-	apple_t8015_gfx_stage(gfx, "11/12: the RGX core register map (Phase 2.3)");
-	apple_t8015_gfx_rgx_dump(gfx);
 
 	apple_t8015_gfx_stage(gfx, "12/12: done");
 }
