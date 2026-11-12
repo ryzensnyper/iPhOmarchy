@@ -29,36 +29,37 @@ endpoints cannot be started (-22), and the init message cannot be sent (-22).
 HELLO, so `apple_rtkit_boot()` times out (-62), the AGX endpoints cannot be
 started (-22), and the init message cannot be sent (-22).  The channel that
 should carry the HELLO is the GFX mailbox, and **we still do not know where
-it is.**
+it is or how to enable it.**
 
-What we know (boot #36, after the kernelcache RE):
+### What the last boots established (boots #36…#45)
 
-* The A11's GFX IOP is driven by **`AppleA7IOPV4GFX`** — the kernelcache's
-  personality dictionary binds `iop-gfx,t8015` to it and
-  `iop-gfx,{s8000,t8010,t8011}` to the V2 class we had been modelling.  The
-  V4 mailbox is **M3Wrap_CTRL +0x08, IntOutIRQEn +0x48, IntOutSts +0x4c,
-  INBOX_CTRL +0x50, TX +0x60, OUTBOX_CTRL +0x80, RX +0xa0** — no SET/CLR
-  pair.  Full write-up: `GPU-WIP/probe/phase2.2/A7IOP-MAILBOX.md`.
-* The block at **`0x204d04000`** (where our DT points) is the **read-only
-  device-info page**: `0x01001000 / 0x00010704 / 0x00090303 / …`, with
-  `+0x80 = 0x28` (40 = the A10's `phys_bus_width`) and `+0x84 = 0x40`.  It
-  answers reads and ignores writes — which is why boots #34/#35's "mailbox
-  writes" changed nothing.
-* On this chip every other mailbox is at **(node base + 0x8000)**: pmp
-  0x32308000, smc 0x36808000, ans 0x57008000.  For the GFX that is
-  0x4d28000 (the DART) or 0x4d08000 (zeros).
-* The **firmware's own IO map** (`g10p.img` at 0x37598) says the coprocessor
-  sees `0x4d20000` (0x20000) and `0x04000000` (0x200000).  So the mailbox the
-  firmware uses is inside the 128 KiB at 0x4d20000.
-* The ADT gives `/arm-io/gfx-kf` `power-gates = 149`, `clock-gates = 149`,
-  `force-timebase-sync`, and `/arm-io/sgx` a `meta-sw-interrupt`
-  (`0x32104020 <- 2`, `0x321040a0 <- 2`) — a way to wake the coprocessor that
-  does not go through the mailbox at all.
+| what | result |
+|---|---|
+| the A11's GFX IOP class | **`AppleA7IOPV4GFX`** (the kernelcache binds `iop-gfx,t8015` to it; the V2 class we had modelled belongs to s8000/t8010/t8011).  Its mailbox is M3Wrap_CTRL +0x08, IntOutIRQEn +0x48, IntOutSts +0x4c, INBOX_CTRL +0x50, TX +0x60, OUTBOX_CTRL +0x80, RX +0xa0 — no SET/CLR pair |
+| `0x204d04000` | the **read-only G10P device-info page** (+0x80 = 40 = the A10's `phys_bus_width`), not the mailbox |
+| `0x204d24000` (the kext's "IOP + 0x4000") | a **dead page**: reads zero, ignores every write (boot #40) |
+| the Fender window (0x4d00000, 128 KiB) | swept; only the device-info page is live.  `fender+0x10044` traps the SoC |
+| the IOP window (0x4d20000, 128 KiB) | swept; the window registers, the DART and a chip-ID block at +0x10000 — no mailbox |
+| both apertures, **written** with both classes' enable sequences | only the known pages take the write — no mailbox |
+| the A7IOP shim (0x2ee00000) | hangs the SoC — not reachable from the AP |
+| the core window (0x04000000) | `+0x00` traps the SoC (boot #42); only `+0x18` (CORE_ID) is safe |
+| the firmware's IO map | `0x04d20000` size 0x20000 and `0x04000000` size 0x02000000 (the A10's is `0x01d20000`/0x20000 and `0x01000000`/0x100000) — so the firmware can reach the IOP window *and* the core window |
 
-**Boot #37** (payload `ce0bcf2a…`, built) sweeps all 32 pages of both
-apertures at the fifteen offsets of both layouts, printing every word as it
-is read (a hole stalls the SoC, so the pages read before it are still in the
-log).
+### The three open leads
+
+1. **The enable value may be wrong.**  Only the `AppleA7IOPV4GFX` code knows
+   what `M3Wrap_CTRL` and `IntOutIRQEn` want; our guesses (1 and 0x1111)
+   may enable nothing, and a write-protected block is indistinguishable
+   from a dead page.
+2. **The clock gate.**  The ADT gives `/arm-io/gfx-kf` `power-gates = 149`
+   and `clock-gates = 149`.  We have only ever touched the *perf state*
+   (`ps_gfx`, PMGR 0x80338) — never a gate.  A GFX with its clock off would
+   have a mailbox that reads zero *and* ignores writes, which is exactly
+   what every candidate does.  The PMP gate message we tried in earlier
+   boots may be the wrong lever or the wrong format.
+3. **The core window.**  The firmware's IO map lists it, so the mailbox may
+   be there; it has to be probed one offset at a time because the RGX's
+   registers trap.
 
 ## The bring-up we now run (boots #34/#35)
 
@@ -128,9 +129,9 @@ cd /home/doug/orchard
 ```
 
 * The kernel tree is a git repo on branch **`gpu/phase2.2`**; the driver work is
-  committed as **`1533e2231172`** (boot #37's sweep).
-* The last built payload: **`ce0bcf2a3fe3211abd8667e5832ba761b8b0884a2e5c13ff032726ac8fbacfda`**
-  (boot #37 — the aperture sweep).
+  committed as **`5f8f4a585fa8`** (boot #44's Fender sweep).
+* The last built payload: **`214d320fde966ecd7d3d7e2e7e295a7c822081b874629eadefe0470fc696b95a`**
+  (boot #45 — the candidate pages in full).
 * The kernel log is streamed to `/tmp/opencode/phone-kmsg.log` by
   `GPU-WIP/tools/kmsg-host.py` (pid 412793; do **not** kill it).  Boot #N starts
   at the `GFX-STAGE 0/12` line.
