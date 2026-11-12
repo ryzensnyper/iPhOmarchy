@@ -184,15 +184,15 @@ static void apple_t8015_gfx_set_window(struct apple_t8015_gfx *gfx)
 	};
 	unsigned int i;
 
-	apple_t8015_gfx_stage(gfx, "7/12: Fender window copy");
+	apple_t8015_gfx_stage(gfx, "7/13: Fender window copy");
 	for (i = 0; i < ARRAY_SIZE(fields); i++)
 		writel(fields[i], gfx->fender + FENDER_WINDOW + 4 * i);
 
-	apple_t8015_gfx_stage(gfx, "8/12: IOP window copy");
+	apple_t8015_gfx_stage(gfx, "8/13: IOP window copy");
 	for (i = 0; i < ARRAY_SIZE(fields); i++)
 		writel(fields[i], gfx->iop + IOP_WINDOW + 8 * i);
 
-	apple_t8015_gfx_stage(gfx, "9/12: IOP window enable");
+	apple_t8015_gfx_stage(gfx, "9/13: IOP window enable");
 	writel(1, gfx->iop + IOP_WINDOW_ENABLE);
 }
 
@@ -283,7 +283,7 @@ static void __iomem *apple_t8015_gfx_map_pmgr(struct apple_t8015_gfx *gfx)
  * that register is where it shows; both candidate bases are dumped because
  * m1n1's own decoder disagrees with the ADT offsets.  Reads only.
  */
-static const struct { const char *name; u32 idx; } dvfs_known[] = {
+static const struct { const char *name; u32 idx; } __maybe_unused dvfs_known[] = {
 	{ "dvfs-MCC", 0x25 }, { "dvfs-DCS01", 0x26 }, { "dvfs-ACS", 0x28 },
 	{ "dvfs-DISP0_GP", 0x29 }, { "dvfs-PMP", 0x2a },
 	{ "dvfs-PMS_SRAM", 0x2b }, { "dvfs-GFX", 0x2c },
@@ -292,9 +292,11 @@ static const struct { const char *name; u32 idx; } dvfs_known[] = {
 	{ "dev-PCIE", 0x14 }, { "dev-GFX", 0x16 }, { "dev-SEP", 0x17 },
 };
 
-/* One of the two candidate perf windows (see the block comment). */
-static void apple_t8015_gfx_dump_dvfs_win(struct apple_t8015_gfx *gfx,
-					  u32 base, const char *tag)
+/* One of the two candidate perf windows (see the block comment).  Kept for
+ * the next DVFS attempt; boot #12 reads the bridge windows instead. */
+static void __maybe_unused
+apple_t8015_gfx_dump_dvfs_win(struct apple_t8015_gfx *gfx,
+			      u32 base, const char *tag)
 {
 	void __iomem *pmgr = apple_t8015_gfx_map_pmgr(gfx);
 	unsigned int i, k;
@@ -328,6 +330,62 @@ static void apple_t8015_gfx_dump_dvfs_win(struct apple_t8015_gfx *gfx,
  * syslog tell us what it made of them.
  */
 extern int apple_t8015_pmp_send(u8 ep, u64 msg);
+extern int apple_t8015_pmp_start_ep(u8 ep);
+
+/*
+ * DIAG (Phase 2.2 boot #12): the PMGR "bridge" windows.  bridge-reg-index=19
+ * in the ADT means bridge b is pmgr reg[19+b]; GFX is group 8, so the GPU's
+ * own power/clock block ("AGX_PMGR" in ApplePMGR's block table) is
+ * 0x05000000/0x9000.  ApplePMGR has readGFXClkGenReg/writeGFXClkGenReg, so
+ * this window holds the GPU clock generator that nothing in Linux programs.
+ * Compare it with the DISP0_BE bridge (group 7, 0x19000000), which is
+ * demonstrably clocked and running (simplefb drives the panel).
+ */
+#define GFX_BRIDGE_ADDR		0x05000000UL
+#define GFX_BRIDGE_SIZE		0x9000UL
+#define DISP0_BRIDGE_ADDR	0x19000000UL
+#define DISP0_BRIDGE_SIZE	0x9000UL
+
+static void apple_t8015_gfx_dump_bridge(struct apple_t8015_gfx *gfx,
+					const char *tag, phys_addr_t addr,
+					size_t size)
+{
+	void __iomem *win;
+	unsigned int i, nz = 0;
+
+	win = devm_ioremap(gfx->dev, addr, size);
+	if (!win) {
+		dev_info(gfx->dev, "bridge %s: cannot map %pa\n", tag, &addr);
+		return;
+	}
+
+	/* First 0x80 bytes verbatim: that is where a target/actual or
+	 * enable/divider pair normally sits. */
+	for (i = 0; i < 0x20; i += 4)
+		dev_info(gfx->dev, "bridge %s @%pa+%#04x = %#010x\n",
+			 tag, &addr, i, readl(win + i));
+
+	for (i = 0x20; i < size; i += 4) {
+		u32 val = readl(win + i);
+
+		if (!val)
+			continue;
+		nz++;
+		if (nz <= 40)
+			dev_info(gfx->dev, "bridge %s nz @%#06x = %#010x\n",
+				 tag, i, val);
+	}
+	dev_info(gfx->dev, "bridge %s: %u non-zero words in %#zx bytes\n",
+		 tag, nz, size);
+}
+
+static void apple_t8015_gfx_probe_bridges(struct apple_t8015_gfx *gfx)
+{
+	apple_t8015_gfx_dump_bridge(gfx, "disp0(7)", DISP0_BRIDGE_ADDR,
+				    DISP0_BRIDGE_SIZE);
+	apple_t8015_gfx_dump_bridge(gfx, "gfx(8)", GFX_BRIDGE_ADDR,
+				    GFX_BRIDGE_SIZE);
+}
 
 static void apple_t8015_gfx_try_pmp_calls(struct apple_t8015_gfx *gfx)
 {
@@ -340,6 +398,13 @@ static void apple_t8015_gfx_try_pmp_calls(struct apple_t8015_gfx *gfx)
 		{ "fn30 arg=124", (30ULL << 32) | 124 },
 	};
 	unsigned int i;
+	int ret;
+
+	/* Boot #12: start the endpoint first -- boot #11 sent to ep 32 while
+	 * it was still stopped. */
+	ret = apple_t8015_pmp_start_ep(32);
+	dev_info(gfx->dev, "pmp-call STARTEP(32) -> %d\n", ret);
+	msleep(1500);
 
 	for (i = 0; i < ARRAY_SIZE(cand); i++) {
 		dev_info(gfx->dev, "pmp-call %-22s msg=%#llx -> %d\n",
@@ -460,7 +525,7 @@ static void apple_t8015_gfx_boot_work(struct work_struct *work)
 
 	/* Boot #9: everything below is only meaningful once the PMP -- the
 	 * block that owns this GPU's gates -- is a running RTKit peer. */
-	apple_t8015_gfx_stage(gfx, "0/12: wait for the PMP to come up");
+	apple_t8015_gfx_stage(gfx, "0/13: wait for the PMP to come up");
 	for (i = 0; i < GFX_PMP_READY_WAIT_MS / 500; i++) {
 		if (apple_t8015_pmp_up)
 			break;
@@ -469,30 +534,28 @@ static void apple_t8015_gfx_boot_work(struct work_struct *work)
 	dev_info(dev, "GFX-DIAG: PMP %s after %d ms\n",
 		 apple_t8015_pmp_up ? "is up" : "never came up", i * 500);
 
-	apple_t8015_gfx_stage(gfx, "1/12: ps_gfx power state (PMGR read)");
+	apple_t8015_gfx_stage(gfx, "1/13: ps_gfx power state (PMGR read)");
 	apple_t8015_gfx_dump_ps(gfx);
 
 	/*
-	 * Both candidate windows sit inside the PMGR extent the PMP firmware
-	 * itself describes (base 0x32000000, size 0xd8000), so a read here is
-	 * as safe as the PS banks -- and this is the only place the GPU's
-	 * *clock* configuration can show up.
+	 * Boot #12: the GPU's own PMGR block (bridge 8 of 13) and the display's
+	 * bridge (group 7) as a known-clocked reference.  Both are read-only;
+	 * when the GPU port is down this window is where that shows.
 	 */
-	apple_t8015_gfx_stage(gfx, "2/12: DVFS/perf block (PMGR read)");
-	apple_t8015_gfx_dump_dvfs_win(gfx, PMGR_DVFS_LOW, "low");
-	apple_t8015_gfx_dump_dvfs_win(gfx, PMGR_DVFS_HIGH, "high");
+	apple_t8015_gfx_stage(gfx, "2/13: PMGR bridge windows (GFX 0x5000000 / DISP0 0x19000000)");
+	apple_t8015_gfx_probe_bridges(gfx);
 
-	apple_t8015_gfx_stage(gfx, "3/12: PMP endpoint candidates (RTKit send)");
+	apple_t8015_gfx_stage(gfx, "3/13: PMP endpoint 32 STARTEP + candidates");
 	apple_t8015_gfx_try_pmp_calls(gfx);
 
-	apple_t8015_gfx_stage(gfx, "4/12: ps_gfx off->on (re-send the gate request)");
+	apple_t8015_gfx_stage(gfx, "4/13: ps_gfx off->on (re-send the gate request)");
 	if (!apple_t8015_gfx_retoggle_ps(gfx))
 		return;
 
-	apple_t8015_gfx_stage(gfx, "5/12: mailbox register read (IOP+0x4008)");
+	apple_t8015_gfx_stage(gfx, "5/13: mailbox register read (IOP+0x4008)");
 	apple_t8015_gfx_probe_mailbox(gfx);
 
-	apple_t8015_gfx_stage(gfx, "6/12: mailbox (RTKit) init");
+	apple_t8015_gfx_stage(gfx, "6/13: mailbox (RTKit) init");
 	gfx->rtk = devm_apple_rtkit_init(dev, gfx, NULL, 0,
 					 &apple_t8015_gfx_rtkit_ops);
 	if (IS_ERR(gfx->rtk)) {
@@ -501,7 +564,7 @@ static void apple_t8015_gfx_boot_work(struct work_struct *work)
 	}
 
 	apple_t8015_gfx_set_window(gfx);
-	apple_t8015_gfx_stage(gfx, "10/12: release the IOP (run bit)");
+	apple_t8015_gfx_stage(gfx, "10/13: release the IOP (run bit)");
 	writel(readl(gfx->fender + FENDER_RUN) | FENDER_RUN_ENABLE,
 	       gfx->fender + FENDER_RUN);
 	dev_info(dev, "GFX IOP released; waiting for RTKit HELLO\n");
@@ -527,7 +590,7 @@ static void apple_t8015_gfx_boot_work(struct work_struct *work)
 	}
 
 	/* Phase 2.3 precursor, last because a dark RGX window hangs the bus. */
-	apple_t8015_gfx_stage(gfx, "11/12: RGX core id read (0x4000000+0x18)");
+	apple_t8015_gfx_stage(gfx, "11/13: RGX core id read (0x4000000+0x18)");
 	apple_t8015_gfx_probe_rgx(gfx);
 }
 

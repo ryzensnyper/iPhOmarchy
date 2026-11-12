@@ -395,7 +395,7 @@ in `../STATUS.md`.  Summary of what changed:
 |---|---|
 | `drivers/soc/apple/rtkit.c` | `APPLE_RTKIT_WAIT_MS` 1000 → **15000**; HELLO/EPMAP/IOP-ACK/AP-ACK transitions promoted to `dev_info` (DIAG) |
 | `drivers/soc/apple/pmp_t8015_v1.c` | bring-up at 12 s; poll `apple_rtkit_is_running()` for 25 s; send `SET_AP_PWR_STATE(ON)` by hand if `boot()` aborted; export `apple_t8015_pmp_up` (copy in this directory) |
-| `drivers/soc/apple/apple-t8015-gfx.c` | wait for `apple_t8015_pmp_up` (≤40 s); PS-bank + both DVFS windows (read-only); `ps_gfx` off→on re-toggle, aborting before the GPU accesses if the domain does not come back; then mailbox read, RTKit bring-up, RGX read (copy in this directory) |
+| `drivers/soc/apple/apple-t8015-gfx.c` | wait for `apple_t8015_pmp_up` (≤40 s); PS-bank dump; **bridge-window dump (`0x05000000`, `0x19000000`, read-only)**; ep-32 `STARTEP` + six candidate messages; `ps_gfx` off→on re-toggle, aborting before the GPU accesses if the domain does not come back; then mailbox read, RTKit bring-up, RGX read (copy in this directory) |
 | payload `init` (unchanged) | `gpu-diag` early stop + kmsg bridge at `172.16.42.2:6666` |
 
 ### Per-outcome interpretation
@@ -408,3 +408,47 @@ in `../STATUS.md`.  Summary of what changed:
 | mailbox `A2I control` prints a value | the fender/IOP sub-block is clocked |
 | `GFX firmware is up; RTKit handshake complete` | **Phase 2.2 passes** |
 | `rgx: core id …` | Phase 2.3 identity read for free |
+
+---
+
+# Boot #12 plan (2026-11-12, after boot #11)
+
+Boot #11 verdict: PMP up, `ps_gfx` ACTIVE (`0x1f0003ff`), both DVFS windows
+read 0 everywhere, six candidate messages to ep 32 accepted with **no PMP
+reaction**, retoggle works, `IOP+0x4008` read still hangs.  Two fixes came out
+of the offline work (full write-up: `PMGR-BRIDGES.md`):
+
+1. **`STARTEP(32)` before talking to the PMP service.**  Boot #11 sent to an
+   application endpoint that was never started; mainline only starts the
+   system endpoints in the EPMAP handler.
+2. **The GPU has its own PMGR block.**  `pmgr/#bridges = 13` and
+   `bridge-reg-index = 19` ⇒ bridge *b* = `pmgr reg[19+b]`; GFX is group 8 ⇒
+   **`0x05000000`/`0x9000`**, the block `ApplePMGR` calls **`AGX_PMGR`** and
+   reaches with `readGFXClkGenReg`/`writeGFXClkGenReg`.  Linux maps neither
+   (the D21 DT's `pmgr` region is `0x8c000` only) and there is no A11 PMGR
+   clock driver, so the GPU's clock generator is simply never programmed.
+
+This boot is **read-only** apart from the existing `ps_gfx` retoggle.
+
+### Stages
+
+| stage | action |
+|---|---|
+| `0/13` | wait for `apple_t8015_pmp_up` |
+| `1/13` | `ps_gfx` + `0x80300` bank dump (unchanged) |
+| `2/13` | **new**: dump `0x19000000` (DISP0 bridge, known clocked) then `0x05000000` (GFX bridge / `AGX_PMGR`), `0x80` bytes verbatim + every non-zero word |
+| `3/13` | **new**: `apple_rtkit_start_ep(pmp, 32)`, then the six candidate messages |
+| `4/13` | `ps_gfx` off→on retoggle (unchanged) |
+| `5/13` | mailbox read `IOP+0x4008` — still the single verdict |
+| `6/13`…`11/13` | RTKit bring-up, Fender/IOP window, run bit, RGX identity |
+
+### Per-outcome interpretation
+
+| log | meaning |
+|---|---|
+| `bridge gfx(8)` prints values, `0x80` head non-zero | the GPU bridge window is readable from the AP — next step is a targeted `ClkGen` write |
+| `bridge gfx(8)` head all zero but count > 0 | block responds but is unconfigured/held in reset — compare offsets with the DISP0 dump |
+| boot dies right after the `2/13` banner **without** any `bridge disp0` line | even the DISP0 window read hangs: our bridge model is wrong, do not write anything |
+| `bridge disp0` prints, then boot dies on the GFX window | the GFX bridge itself is not answering — bridge 8 is the suspect, and the fix is a write, not a read |
+| `pmp-call STARTEP(32) -> 0` and PMP syslog lines appear | the PMP service is now really talking to us |
+| `mailbox: A2I control …` prints | **the block is clocked** — Phase 2.2 can proceed |

@@ -674,7 +674,67 @@ firmware's `!clg:`/`Not implemented` syslog prints should show up in the Linux
 log as `RTKit: syslog message: ...`, so one boot can both ask and read the
 answer — with the IOP mailbox read kept for last.
 
+## Phase 2.2 — boot #11 executed: calls accepted, block still dark (2026-11-12)
+
+Payload `19d57c0c…`.  Sequence as designed: PMP up (11.5 s after the GFX work
+started, AP `SET_AP_PWR_STATE(ON)` acked), `ps_gfx` `0x1f0003ff`, DVFS/perf
+windows, six candidate messages to endpoint 32, `ps_gfx` retoggle, mailbox
+read.
+
+| stage | result |
+|---|---|
+| `ps_gfx` @`0x80338` | `0x1f0003ff` — auto 1, was-clkgated 1, was-pwrgated 1, actual `0xf`, target `0xf` |
+| DVFS low (`+0x100+idx*0x10`) and high (`+0xb4000+idx*0x10`) | **every** known index reads `0` (MCC, DCS01, ACS, DISP0_GP, PMP, PMS_SRAM, GFX, SEP, ANS2, MSR, PCIE, …) |
+| six `pmp-call` messages to ep 32 | all accepted (`-> 0`), **no `RTKit: syslog message` reaction** |
+| retoggle `0x1f0003ff` → `0x0f0003ff` | actual `0xf` within 10 ms (PMGR still owns the domain) |
+| **stage 5/12 mailbox read `IOP+0x4008`** | **hung the bus → reset → iOS** |
+
+Conclusions: neither DVFS window is the GFX perf array *as seen from the AP*
+(all-zero, including DRAM domains that must be configured — either the block
+is write-only/AP-invisible or the offsets are wrong); the six candidate gate
+messages are accepted by the mailbox layer but the firmware does nothing
+visible; and the GPU block is still dark.
+
+Two things were then found offline that change the plan (below): the messages
+were sent to an application endpoint that was **never started**, and the GPU
+has **its own PMGR block that Linux never maps**.
+
+## Offline (2026-11-12, after boot #11): the GPU's own PMGR block — bridge 8 = `0x05000000`
+
+Detail and every address: **`phase2.2/PMGR-BRIDGES.md`**.  Short version:
+
+* The ADT `pmgr` node carries `#bridges = 13`, `bridge-reg-index = 19`,
+  `optional-bridge-mask = 0x800` and `bridge-counters` (13 entries).
+* `bridge-reg-index = 19` means **bridge *b* is `pmgr` `reg[19 + b]`**.  Proof:
+  the bridge windows happen to coincide with three subsystem bases —
+  ISP (device group 5) → `reg[24] = 0x0F000000` = the `isp` node's base,
+  AVD (9) → `reg[28] = 0x28000000` = the `avd` base,
+  VENC/"ave" (3) → `reg[22] = 0x23000000` = the `ave` base.
+* The device-group id is the 16-bit field m1n1 calls `unk3` in each device
+  table entry.  Only the subsystem entries have one: MSR 1, JPG 2, VENC 3,
+  VDEC0 4, ISP_SYS 5, RTMUX 6, DISP0_BE 7, **GFX 8**, AVD_SYS 9, PCIE 10,
+  SBR 11.
+* **GFX = group 8 → `pmgr reg[27] = 0x05000000`, size `0x9000`.**  That window
+  is a PMGR block of its own, separate from the GPU's `0x4000000`; in the
+  kext's 94-entry block-name table it is **`AGX_PMGR`** (neighbours:
+  `DOCKFIFO`, `CPU_FABRIC`, `NRT_FABRIC`, `RT_FABRIC`, `LIO_CLK_RST`,
+  `GFX_TVM`, `GPU_TRIG_CTL`, `PMGRClkGenSOC`).
+* `ApplePMGR` maps every bridge at start: `getDeviceMemoryWithIndex(bridge-reg-index + b)`
+  (confirmed in the disassembly at `0xfffffff0056528fc`…`0xfffffff005652990`),
+  then logs `ApplePMGR: [Die %u] Bridge %u, virtual address = 0x%p, physical address = 0x%p`
+  — and `Bridge %d has no mapping` when a reg index is missing.
+* **`ApplePMGR` exposes `readGFXClkGenReg` / `writeGFXClkGenReg` /
+  `waitGFXClkGenReg`** (assert strings at `0xfffffff004de1873`…), so the GFX
+  *clock generator* is a first-class PMGR register set — nothing in Linux
+  programs it, because the D21 DT maps `pmgr` as only `0x8c000` and there is no
+  A11 PMGR clock driver, and `0x05000000` is in no node at all.
+
+This is the first mechanism found that can leave `ps_gfx` reading ACTIVE while
+every access inside the GPU block hangs: the power domain is up, the GPU's
+clock generator/bridge was never configured.
+
 ## Resolved (no longer a GUESS)
+
 
 | item | value | how it was resolved |
 |---|---|---|

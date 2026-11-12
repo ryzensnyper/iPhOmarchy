@@ -60,6 +60,18 @@ int apple_t8015_pmp_send(u8 ep, u64 msg)
 }
 EXPORT_SYMBOL_GPL(apple_t8015_pmp_send);
 
+/* DIAG (boot #12): an application endpoint has to be STARTEP'ed before the
+ * firmware routes messages to its service; boot #11 sent to ep 32 without it
+ * and the PMP stayed silent. */
+int apple_t8015_pmp_start_ep(u8 ep)
+{
+	if (!apple_t8015_pmp_up || !apple_t8015_pmp_rtk)
+		return -ENODEV;
+
+	return apple_rtkit_start_ep(apple_t8015_pmp_rtk, ep);
+}
+EXPORT_SYMBOL_GPL(apple_t8015_pmp_start_ep);
+
 struct apple_pmp {
 	void __iomem *akf_base;
 	void __iomem *ctl_base;
