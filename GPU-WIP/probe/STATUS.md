@@ -3231,3 +3231,56 @@ request so far carried a payload of **zero**.
 devices and then reads the PS bank, the AGX block and the mailbox.  The
 observable is the mailbox coming alive, not the reply: the reply has been
 constant from the start.
+
+### Boot #57: the payload sweep — and the reply was never a status (payload `ae0162a0…`)
+
+Clean boot, phone alive as `05ac:4144`.  336 requests (21 payloads x 4 gate
+ids x 4 devices) and the replies are:
+
+```
+   16 x  0x40000000000000      <- payload 0
+   16 x  0x40000000000001      <- payload 1
+   16 x  0x40000000000002      <- payload 2
+   ...
+   16 x  0x4000000007b000      <- payload 0x7b000
+   16 x  0x40000000095000      <- payload 0x95000
+   16 x  0x400000ffffffff      <- payload 0xffffffff
+```
+
+**The reply echoes the payload.**  It is `0x40000000000000 | payload`, the
+same for every request — so the reply was never a status and never told us
+anything.  (The `0x40000000000000` is a constant flag bit; the PMP's
+dispatcher answers type N with type N+1.)
+
+And nothing changed: the PS bank is unchanged, the mailbox is still dark.
+
+### The gate request, fully decoded (offline, 2026-11-12)
+
+The handler's tail (0x0100c142) is the actual write:
+
+```
+0x0100c15e: ldr  r1, [r5, #8]       ; the base = device << 12
+0x0100c162: ldr  r2, [r1, r0]      ; the register at base + 0x202
+0x0100c164: bic  r2, r2, #0x8960   ; clear bits 5, 6, 11, 12
+0x0100c168: it   eq
+0x0100c16a: addeq.w r2, r2, #0x2000 ; set bit 13 if the message == 1
+0x0100c16e: str  r2, [r1, r0]      ; write it back
+```
+
+So the PMP **clears bit 6** — the "gated" bit — of a per-device gate
+register at `(device << 12) + 0x202`, in the PMP's own address space (which
+is why the AP cannot see the register change at the same address: we
+probed pmgr0 and pmgr1 at 0x93000..0x97000, which covers 0x95202, and it
+stayed zero).
+
+**But bit 6 is exactly the bit the AP's own gate bank carries**: the ADT's
+`pmgr/ps-regs[0]` is `{reg 1, offset 0x80000, mask 0x00200c53}` — a bank
+whose writable mask includes bits 6 and 13 — and three of its entries read
+**0x244 (bits 6, 9, 10)**.
+
+**Boot #58** (payload `00696796…`) therefore walks that bank from the AP,
+clears bit 6 in one entry at a time, and watches the mailbox's CPU_CTRL
+after each write.  If one of those entries is the GFX-KF's gate, the
+Kingfisher powers up and we learn which one it was.  Every value is saved
+and restored if nothing works, and the register is one we have already
+mapped and read safely dozens of times, so there is no SError risk.
