@@ -2877,3 +2877,78 @@ the D21 kernelcache.
 **Every earlier boot used the wrong offsets.**  The "enable sequence" of boots
 #43/#44 wrote at +0x08 and +0x48 — the *base* class's registers — and **+0x110
 was never read once in 19 boots**.  Boot #50 will read the new offsets.
+
+### Boot #50: the mailbox at Apple's V4 GFX offsets (payload `09c1f308…`)
+
+Clean boot, phone alive as `05ac:4144`.  New stage **8b2/12** read every
+offset Apple's `AppleA7IOPV4GFX` uses, in both apertures.
+
+```
+mailbox map 0x204d00000 (the Fender window):
+  +0x0008 = 0x00000000   M3Wrap_CTRL (the base class's)
+  +0x0028 = 0x00000000   ?
+  +0x0048 = 0x00000000   M3Wrap_IntOutIRQEn
+  +0x004c = 0x00000000   M3Wrap_IntOutSts
+  +0x0050 = 0x00000000   INBOX_CTRL
+  +0x0060 = 0x00000000   TX
+  +0x0080 = 0x00000000   OUTBOX_CTRL
+  +0x00a0 = 0x00000000   RX
+  +0x0110 = 0x00000000   CPU_CTRL  <== the GFX's mailbox control
+  +0x0114 = 0x00000000   CPU_CTRL status
+  +0x0b88 = 0x00000000
+  +0x1008 = 0x00000000   the power state + 8
+  +0x1020 = 0x00000000   the power state + 0x20
+  +0x4008 = 0x00010704   the device-info page + 8   <== LIVE
+  +0x800 (TX) = 0 0 0 0
+  +0x830 (RX) = 0 0 0 0
+
+mailbox map 0x204d20000 (the IOP window):
+  +0x0008 = 0x0e100000   the firmware window base
+  +0x0028 = 0x00100000
+  +0x0048 = 0x0000004f
+  +0x0110 = 0x00000000   CPU_CTRL
+  +0x0114 = 0x00000000
+  +0x4008 = 0x00000000   (the dead page at 0x4d24000)
+  +0x800 (TX) = 00000060 00180018 00000000 60000003
+```
+
+**The AGX register block is confirmed to be the Fender window**: `+0x4008`
+reads `0x00010704`, which is exactly the second word of the device-information
+page we measured at `0x204d04004`.  The IOP window has the firmware-window
+registers at +0x08/+0x28/+0x48 and the dead page at +0x4000, so it is *not*
+the AGX block.
+
+**But the mailbox read all zero — because of an ordering bug in my own
+probe.**  Stage 8b2/12 runs *before* stage 9/12, which is where the driver
+requests the Fender's power state; the log shows
+
+```
+GFX-STAGE 9/12: Fender power request (state 1)
+fender power: state @0x1000 = 0x0 (state 0, ack 0)
+fender power: state 1 -> 0x1 after 10 ms (status 0x0)
+```
+
+so at the moment of the probe the block was still **powered down** (its own
+power-state register read 0).  A powered-down block reads zero.  The offsets
+are right; the *timing* was wrong.
+
+**Boot #51** (payload `d332ce32…`) moves the probe after the power request
+(new stage 9b/12) and then performs Apple's own enable sequence, which
+`AppleA7IOPV4GFX` implements at `0xfffffff00575b72c` (vtable slot +124):
+
+```
+readReg(0x114) -> w0
+w8 = (w0 & ~1) | 1
+str w8, [this->_agxMappedRegs + 0x114]
+```
+
+i.e. a read-modify-write of **bit 0 of +0x114**.  (The M3Wrap base class does
+the same to its INBOX_CTRL at +0x50; the GFX class overrides it to +0x114.)
+
+Also decoded offline from the same kext:
+
+* the mailbox messages are **16 bytes**, not 8;
+* the control word is a **ring queue**: bits 8-10 = the TX write pointer,
+  bits 12-14 = the RX read pointer, bit 16 = TX full, bit 17 = RX empty
+  (`0xfffffff00575b8f4` decodes them; 8 entries deep);
+* `+0x800` = TX data, `+0x830` = RX data (16 bytes each).
