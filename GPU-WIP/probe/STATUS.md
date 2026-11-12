@@ -1553,3 +1553,61 @@ a sweep of the window's top `0xc000` bytes will show any parallel bank.
 3. **Sweep the PMGR per-device bank** (`0x80000..0x8c000`) for a clock-gate
    bank.
 4. Re-dump the live IOP window regions and the mailbox page for the record.
+
+## Phase 2.2 — boot #22 executed: the RGX core window is sparse, the PMGR has no clock bank (2026-11-12)
+
+Payload `b69934ed…`.  All 12 stages, **no reset**.
+
+### The RGX core register map
+
+The whole first **4 KiB** of the core window contains exactly **one** non-zero
+64-byte chunk: `0x204000018` = `0x7E1` (`CORE_ID`).  Every other register in
+`0x0000..0x0FFF` reads zero.
+
+That is the answer to the Phase 2.3 question: the A11 core does **not**
+implement the Rogue cluster/tile registers in its core window, so the
+cluster count and the geometry cannot come from there.  They come from the
+**device-information block** at `0x204d04000` (`0x28` = 40 = bus width, and
+friends) or from the firmware, exactly as on the A10.
+
+### The PMGR per-device bank
+
+Sweeping `0x80000..0x8c000` found 16 non-zero chunks, all of them power-state
+entries.  The bank layout is now exact:
+
+```
+base(psreg) = 0x80300 + 0x100 * (psreg - 4)      index = psidx
+```
+
+which matches `ps_gfx` = GFX (dev 124, psreg 4, psidx 7) at `0x80338`, and
+identifies `0x80400` as **SEP** (dev 126, psreg 5) and `0x80500..` as the ISP
+block.  `0x80840`, `0x84000` and `0x88000` are the remaining banks.
+
+**There is no clock-gate bank in the PMGR window** — the clock gates are the
+PMP firmware's, which is consistent with its `CLKG` tag.
+
+### The mailbox, still dark
+
+The IOP window's live registers are unchanged and the mailbox page at IOP
+`+0x1000` is still all zero.
+
+One new datum for the next attempt: the PMGR device table indexes the GFX
+family as
+
+| device | dev id | list index | psreg/psidx |
+|---|---|---|---|
+| GFX | 124 | 106 | 4 / 7 (`0x80338`) |
+| GFX-SGX | 148 | 120 | no_ps |
+| GFX-KF | 149 | **121** | no_ps |
+| GFX-BUSY | 123 | 122 | no_ps |
+
+and boot #21 sent the gate message with the **device id** (149).  If the PMP
+indexes its own device table by *list index*, the right value is **121**.
+
+## Boot #23 candidates (not built)
+
+* CLKG with the list indices (`121`, `120`, `106`) instead of the device ids.
+* CLKG with the value field carrying the *psidx* (`7`) instead of the clock
+  id (`269`).
+* CLKG on other PMP endpoints (ep 33..40), since ep 32 answered the earlier
+  management message but stayed silent for the gate message.

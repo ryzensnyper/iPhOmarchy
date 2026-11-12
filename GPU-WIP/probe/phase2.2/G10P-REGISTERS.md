@@ -21,7 +21,11 @@ mailbox IRQs `260, 259, 262, 261`, `power-gates = 0x95` (device 149) and
 |---|---|---|
 | `0x0018` | `0x000007e1` | `ROGUE_CR_CORE_ID` = `{ID=0x0000, CONFIG=0x07e1}` → `n=0x07`, `c=0xe1` under the Rogue encoding |
 | `0x0020` | `0x0` | `CORE_REVISION` / `CORE_ID__PBVNC` — not implemented on this core |
-| `0x0000..0x00ff` | all zero except `0x0018` | the identity register is the only live word in the first 256 bytes |
+| `0x0000..0x0fff` | all zero except `0x0018` | **the whole first 4 KiB of the core window is sparse**: `CORE_ID` is the only live word |
+
+So the A11 core does not implement the Rogue cluster/tile registers in its
+core window: the cluster count and the geometry come from the
+device-information block below (or from the firmware), not from the core.
 
 ## Device information — Fender block `0x204d04000`
 
