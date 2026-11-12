@@ -2360,3 +2360,41 @@ IOP window is writable and the mapping is right.
    kext *writes* those; we only read them.
 3. The AGX **config RAM** (`AGXFender::writeConfigRAMCommand32`) -- still
    unrecovered; the KB's `AGXG10P__TEXT_EXEC.bin` has the code.
+
+## Phase 2.2 — boot #36: the mailbox is not where we were pointing (2026-11-12)
+
+Payload `1600c6e4…`.  Clean boot, no reset, phone alive as `05ac:4144`.
+The V2-style mailbox writes of boots #34/#35 were **removed** (they wrote to
+the read-only device-info page) and replaced by a read-only hunt.
+
+```
+GFX-STAGE 4/12: timebase sync + mailbox hunt
+timebase: cnt 0x24527d0a1 -> lo 0x4527d0a1 hi 0x2; ctl 0x2 -> 0x2   <- still writes
+mbox hunt: fender+0x0000  -> all zero except +0x54 = 0x6
+mbox hunt: fender+0x4000  -> 0x01001000 / 0x00010704 / ... (the RO device info)
+mbox hunt: fender+0x8000  -> all zero
+mbox hunt: iop+0x0000     -> +0x00 = 0x101, +0x38 = 1, +0x40 = 0x30000, +0x48 = 0x79
+mbox hunt: iop+0x4000     -> all zero
+apple_rtkit_boot -> -62 ; start_ep(0x20) -> -22 ; init message -> -22
+```
+
+**Two findings, both from the kernelcache rather than the hardware:**
+
+1. The A11's GFX IOP is **`AppleA7IOPV4GFX`**, not the `AppleA7IOPV2GFX` we
+   had modelled (see `phase2.2/A7IOP-MAILBOX.md` for the personality
+   dictionary and the V4 register layout).  Our whole mailbox sequence was the
+   wrong class's.
+2. On this chip every other mailbox lives at (node base + 0x8000) — pmp
+   0x32308000, smc 0x36808000, ans 0x57008000.  For the GFX that is
+   0x4d28000 (the DART) or 0x4d08000 (zeros).
+
+**From the firmware image** (`g10p.img` at 0x37598 — the firmware's own IO
+map): the coprocessor's windows are `0x4d20000` (size 0x20000) and
+`0x04000000` (size 0x200000, the core).  So the mailbox the firmware uses for
+its RTKit HELLO is inside the 128 KiB at 0x4d20000 — which is why boot #37
+sweeps all 32 pages of both apertures at the fifteen offsets of both the V2
+and the V4 layouts.
+
+Boot #37 (payload `ce0bcf2a…`, built) is that sweep.  It prints every word
+as it reads it, so a hole in an aperture (which stalls the SoC) still leaves
+the pages read before it in the log.
