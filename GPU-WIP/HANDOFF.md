@@ -25,24 +25,40 @@ endpoints cannot be started (-22), and the init message cannot be sent (-22).
 
 ## The blocker, precisely
 
-The **GFX mailbox** is the channel to that firmware.  We found it: it is at
-**`0x204d04000`** — the `0x4d00000` window + `0x4000` — because the live
-registers there carry exactly the mailbox's names and semantics
-(`MAILBOX_SET 0x01001000`, `MAILBOX_CLR 0x0`, `INBOX_CTRL 0x00010704`,
-`OUTBOX_CTRL 0x0`).
+**The RTBuddy (GFX IOP) firmware never starts.**  It never sends its RTKit
+HELLO, so `apple_rtkit_boot()` times out (-62), the AGX endpoints cannot be
+started (-22), and the init message cannot be sent (-22).  The channel that
+should carry the HELLO is the GFX mailbox, and **we still do not know where
+it is.**
 
-* Our DT had it at `0x204d24000` — **a hole**: it reads zero and ignores
-  writes.  Fixed: `t8015.dtsi` → `gpu_mbox: mbox@204d04000`.
-* The in-tree `apple_mbox_a7iop_hw` map already matches that block exactly.
-* **Boot #35's new finding: the block at `0x204d04000` ignores our writes.**
-  `MAILBOX_SET` still reads `0x01001000` after `0x1111` was written, `MAILBOX_CLR`
-  still `0` after `1`, `OUTBOX_CTRL` still `0` after `|= 1`.  The timebase
-  registers in the *other* window (`0x204d28010`/`0x204d28018`) **do** take
-  writes, so the mapping and the window are right.
+What we know (boot #36, after the kernelcache RE):
 
-So either `0x204d04000` is a read-only status block that only looks like the
-mailbox, or the mailbox's writable registers live elsewhere in the `0x4d00000`
-window.
+* The A11's GFX IOP is driven by **`AppleA7IOPV4GFX`** — the kernelcache's
+  personality dictionary binds `iop-gfx,t8015` to it and
+  `iop-gfx,{s8000,t8010,t8011}` to the V2 class we had been modelling.  The
+  V4 mailbox is **M3Wrap_CTRL +0x08, IntOutIRQEn +0x48, IntOutSts +0x4c,
+  INBOX_CTRL +0x50, TX +0x60, OUTBOX_CTRL +0x80, RX +0xa0** — no SET/CLR
+  pair.  Full write-up: `GPU-WIP/probe/phase2.2/A7IOP-MAILBOX.md`.
+* The block at **`0x204d04000`** (where our DT points) is the **read-only
+  device-info page**: `0x01001000 / 0x00010704 / 0x00090303 / …`, with
+  `+0x80 = 0x28` (40 = the A10's `phys_bus_width`) and `+0x84 = 0x40`.  It
+  answers reads and ignores writes — which is why boots #34/#35's "mailbox
+  writes" changed nothing.
+* On this chip every other mailbox is at **(node base + 0x8000)**: pmp
+  0x32308000, smc 0x36808000, ans 0x57008000.  For the GFX that is
+  0x4d28000 (the DART) or 0x4d08000 (zeros).
+* The **firmware's own IO map** (`g10p.img` at 0x37598) says the coprocessor
+  sees `0x4d20000` (0x20000) and `0x04000000` (0x200000).  So the mailbox the
+  firmware uses is inside the 128 KiB at 0x4d20000.
+* The ADT gives `/arm-io/gfx-kf` `power-gates = 149`, `clock-gates = 149`,
+  `force-timebase-sync`, and `/arm-io/sgx` a `meta-sw-interrupt`
+  (`0x32104020 <- 2`, `0x321040a0 <- 2`) — a way to wake the coprocessor that
+  does not go through the mailbox at all.
+
+**Boot #37** (payload `ce0bcf2a…`, built) sweeps all 32 pages of both
+apertures at the fifteen offsets of both layouts, printing every word as it
+is read (a hole stalls the SoC, so the pages read before it are still in the
+log).
 
 ## The bring-up we now run (boots #34/#35)
 
@@ -112,9 +128,9 @@ cd /home/doug/orchard
 ```
 
 * The kernel tree is a git repo on branch **`gpu/phase2.2`**; the driver work is
-  committed as **`3af7971b5f1a`**.
-* The last built payload: **`e13d0199af67daa7f0ee339efc54bf2fc9d116172855bc706e835f9602658f2e`**
-  (boot #35 — the bring-up + the livelock fix).
+  committed as **`1533e2231172`** (boot #37's sweep).
+* The last built payload: **`ce0bcf2a3fe3211abd8667e5832ba761b8b0884a2e5c13ff032726ac8fbacfda`**
+  (boot #37 — the aperture sweep).
 * The kernel log is streamed to `/tmp/opencode/phone-kmsg.log` by
   `GPU-WIP/tools/kmsg-host.py` (pid 412793; do **not** kill it).  Boot #N starts
   at the `GFX-STAGE 0/12` line.
@@ -143,7 +159,8 @@ symbols are not linkable from a built-in driver).
 | the boot log of every attempt | `GPU-WIP/probe/STATUS.md` (chronological, with verdicts) |
 | the A11 register map we measured | `GPU-WIP/probe/phase2.2/G10P-REGISTERS.md` |
 | the GFX bring-up spec | `GPU-WIP/probe/phase2.2/G10P-BRINGUP.md` |
-| the mailbox map from Apple's kext | `GPU-WIP/probe/phase2.2/A7IOP-MAILBOX.md` |
+| the mailbox map from Apple's kext (and the V4 class) | `GPU-WIP/probe/phase2.2/A7IOP-MAILBOX.md` |
+| the A12 (BadApple/Cascadia) AGX driver as a reference | `GPU-WIP/probe/phase2.2/A12-REFERENCE.md` |
 | tools | `GPU-WIP/tools/` — `kmsg-host.py`, `a7iop-mailbox-re.py` (the mailbox map extractor), `pmp-fw-dis.py` (Thumb-2 PMP firmware via capstone) |
 | the project's own earlier RE (huge) | `Known Good State/firmware/GPU/` — `A11-GPU-FINDINGS.md`, `A11-GPU-G10P-LAYOUT.md`, `A11-GPU-G10P-BOOTCHAIN.md`, `A11-GPU-G10P-STAGE2.md`, the extracted `AGXG10P__*.bin` segments, `agxg10p.asm`, `tools/` |
 | host-side helpers | `/tmp/opencode/` — `kcdis.py` (arm64 in the kernelcache), `xref.py`, `pmp-dis.py`, `d21ap-kernelcache.macho` |
