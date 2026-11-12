@@ -696,36 +696,30 @@ struct gfx_gate_try {
 
 
 
+
+
 /*
- * Phase 2.2 boot #26: did the RTBuddy firmware actually start?
+ * Phase 2.2 boot #29: follow the tree's own A11 bring-up order.
  *
- * The AGXG10P kext says the A11's GPU is driven through the Fender's *config
- * RAM* and that the AGX firmware for the RTBuddy is AGXFirmwareKextG10PRTBuddy
- * -- our "GFX IOP" firmware.  The RTBuddy firmware is what enables its own
- * mailbox, so if our window copy and run bit (A10 PowerVR semantics) never
- * started it, the mailbox page stays dead and every AP-side write to it is
- * ignored -- exactly what we see.
+ * drivers/gpu/drm/imagination/pvr_apple.c already knows how the G10P is
+ * started, and our diagnostic driver had been doing the steps in a different
+ * order and missing two of them:
  *
- * So watch the firmware's footprint: the IOP status word, the mailbox page
- * and the Fender's power/run registers, before the bring-up and 1 s / 3 s /
- * 10 s after it.
+ *   pvr_apple_power_on():
+ *       pvr_apple_set_window(apple);                       <- window copy
+ *       writel(fender + FENDER_RUN |= FENDER_RUN_ENABLE);  <- run bit
+ *       apple_rtkit_boot(apple->rtk);                     <- EPMAP + IOP pwr ACK
+ *       apple_rtkit_start_ep(apple->rtk, 0x20);           <- AGX_INIT
+ *       apple_rtkit_start_ep(apple->rtk, 0x21);           <- AGX_DOORBELL
+ *       pvr_apple_request_power_state(apple, 0);          <- reset first
+ *       pvr_apple_request_power_state(apple, state);      <- then power up
+ *
+ * Two things we had wrong: the RTKit layer has to be *listening before* the
+ * firmware boots (the firmware initiates the HELLO), and the power request
+ * comes *after* the RTKit boot, not before it.
  */
-static void apple_t8015_gfx_watch_firmware(struct apple_t8015_gfx *gfx,
-					  const char *when)
-{
-	u32 iop0, iop8, iop38, mbox0, mbox8, fen0, fen48;
-
-	iop0 = readl(gfx->iop + 0x00);
-	iop8 = readl(gfx->iop + 0x08);
-	iop38 = readl(gfx->iop + 0x38);
-	mbox0 = readl(gfx->iop + 0x1000);
-	mbox8 = readl(gfx->iop + 0x1008);
-	fen0 = readl(gfx->fender + 0x1000);
-	fen48 = readl(gfx->fender + 0x2048);
-	dev_info(gfx->dev, "watch %-6s: iop+0x00=%#x iop+0x08=%#x iop+0x38=%#x | mbox+0x1000=%#x mbox+0x1008=%#x | fender+0x1000=%#x fender+0x2048=%#x\n",
-		 when, iop0, iop8, iop38, mbox0, mbox8, fen0, fen48);
-}
-
+#define APPLE_EP_AGX_INIT	0x20
+#define APPLE_EP_AGX_DOORBELL	0x21
 
 static void apple_t8015_gfx_boot_work(struct work_struct *work)
 {
@@ -733,19 +727,11 @@ static void apple_t8015_gfx_boot_work(struct work_struct *work)
 		container_of(to_delayed_work(work), struct apple_t8015_gfx, work);
 	struct device *dev = gfx->dev;
 	unsigned int i;
+	int ret;
 
 	/*
-	 * Boot #26.  The AGXG10P kext says the A11's GPU is driven through the
-	 * Fender's *config RAM* and that the AGX firmware for the RTBuddy is
-	 * AGXFirmwareKextG10PRTBuddy -- our "GFX IOP" firmware.  The RTBuddy
-	 * firmware is what enables its own mailbox, so if our window copy and
-	 * run bit (A10 PowerVR semantics) never started it, the mailbox page
-	 * stays dead and every AP-side write to it is ignored -- exactly what
-	 * we see.
-	 *
-	 * So watch the firmware's footprint: the IOP status word, the mailbox
-	 * page and the Fender's power/run registers, before the bring-up and
-	 * 1 s / 3 s / 10 s after it.
+	 * Boot #29: the A11 bring-up, in the order the tree's own pvr_apple
+	 * driver uses it, with the mailbox finally addressed correctly.
 	 */
 	apple_t8015_gfx_stage(gfx, "0/12: wait for the PMP to come up");
 	for (i = 0; i < GFX_PMP_READY_WAIT_MS / 500; i++) {
@@ -756,60 +742,61 @@ static void apple_t8015_gfx_boot_work(struct work_struct *work)
 	dev_info(dev, "GFX-DIAG: PMP %s after %d ms\n",
 		 apple_t8015_pmp_up ? "is up" : "never came up", i * 500);
 
-	apple_t8015_gfx_stage(gfx, "1/12: ps_gfx power state (PMGR read)");
-	apple_t8015_gfx_dump_ps(gfx);
-
-	apple_t8015_gfx_stage(gfx, "2/12: ps_gfx off->on (re-send the gate request)");
-	if (!apple_t8015_gfx_retoggle_ps(gfx))
-		dev_warn(dev, "ps_gfx retoggle failed; continuing anyway\n");
-
-	apple_t8015_gfx_stage(gfx, "3/12: before the bring-up");
-	apple_t8015_gfx_watch_firmware(gfx, "pre");
-
-	/* The firmware image was loaded into the window by ->probe(). */
-	apple_t8015_gfx_set_window(gfx);
-
-	apple_t8015_gfx_stage(gfx, "5/12: release the IOP (run bit)");
-	writel(readl(gfx->fender + FENDER_RUN) | FENDER_RUN_ENABLE,
-	       gfx->fender + FENDER_RUN);
-	dev_info(dev, "GFX IOP released; letting the firmware start\n");
-
-	apple_t8015_gfx_stage(gfx, "6/12: one second after the run bit");
-	msleep(1000);
-	apple_t8015_gfx_watch_firmware(gfx, "t+1s");
-
-	apple_t8015_gfx_stage(gfx, "7/12: three seconds after the run bit");
-	msleep(2000);
-	apple_t8015_gfx_watch_firmware(gfx, "t+3s");
-
-	apple_t8015_gfx_stage(gfx, "8/12: ten seconds after the run bit");
-	msleep(7000);
-	apple_t8015_gfx_watch_firmware(gfx, "t+10s");
-
-	apple_t8015_gfx_stage(gfx, "9/12: Fender power request (state 1)");
-	apple_t8015_gfx_fender_power(gfx);
-
-	apple_t8015_gfx_stage(gfx, "10/12: RTKit init on the GFX mailbox");
+	apple_t8015_gfx_stage(gfx, "1/12: RTKit init on the GFX mailbox");
 	gfx->rtk = devm_apple_rtkit_init(dev, gfx, NULL, 0,
 					 &apple_t8015_gfx_rtkit_ops);
 	if (IS_ERR(gfx->rtk)) {
 		dev_err(dev, "RTKit init failed: %ld\n", PTR_ERR(gfx->rtk));
 		gfx->rtk = NULL;
 	} else {
-		dev_info(dev, "GFX-DIAG: RTKit up; waiting for the firmware HELLO\n");
-		for (i = 0; i < 15; i++) {
-			msleep(1000);
-			if (gfx->rtk->version)
-				break;
-		}
-		dev_info(dev, "GFX-DIAG: RTKit version %d after %d s\n",
-			 gfx->rtk->version, i);
+		dev_info(dev, "GFX-DIAG: RTKit up on the GFX mailbox\n");
 	}
 
-	apple_t8015_gfx_stage(gfx, "11/12: mailbox and RGX state");
+	apple_t8015_gfx_stage(gfx, "2/12: ps_gfx power state (PMGR read)");
+	apple_t8015_gfx_dump_ps(gfx);
+
+	apple_t8015_gfx_stage(gfx, "3/12: ps_gfx off->on (re-send the gate request)");
+	if (!apple_t8015_gfx_retoggle_ps(gfx))
+		dev_warn(dev, "ps_gfx retoggle failed; continuing anyway\n");
+
+	apple_t8015_gfx_stage(gfx, "4/12: window copy + release the IOP");
+	apple_t8015_gfx_set_window(gfx);
+	writel(readl(gfx->fender + FENDER_RUN) | FENDER_RUN_ENABLE,
+	       gfx->fender + FENDER_RUN);
+	dev_info(dev, "GFX IOP released; letting the firmware start\n");
+
+	apple_t8015_gfx_stage(gfx, "5/12: RTKit boot (waiting for the firmware HELLO)");
+	if (gfx->rtk) {
+		ret = apple_rtkit_boot(gfx->rtk);
+		dev_info(dev, "GFX-DIAG: apple_rtkit_boot -> %d\n", ret);
+	}
+
+	apple_t8015_gfx_stage(gfx, "6/12: start the AGX endpoints");
+	if (gfx->rtk) {
+		ret = apple_rtkit_start_ep(gfx->rtk, APPLE_EP_AGX_INIT);
+		dev_info(dev, "GFX-DIAG: start_ep(0x%02x) -> %d\n",
+			 APPLE_EP_AGX_INIT, ret);
+		ret = apple_rtkit_start_ep(gfx->rtk, APPLE_EP_AGX_DOORBELL);
+		dev_info(dev, "GFX-DIAG: start_ep(0x%02x) -> %d\n",
+			 APPLE_EP_AGX_DOORBELL, ret);
+	}
+
+	apple_t8015_gfx_stage(gfx, "7/12: wait for the firmware to settle");
+	msleep(5000);
+
+	apple_t8015_gfx_stage(gfx, "8/12: Fender power request (state 1)");
+	apple_t8015_gfx_fender_power(gfx);
+
+	apple_t8015_gfx_stage(gfx, "9/12: the mailbox registers");
 	apple_t8015_gfx_dump_range(gfx, gfx->iop, "iop", 0x00, 0x40);
 	apple_t8015_gfx_dump_range(gfx, gfx->iop, "iop", 0x1000, 0x1040);
+
+	apple_t8015_gfx_stage(gfx, "10/12: RGX identity + CORE_ID/PBVNC");
 	apple_t8015_gfx_probe_rgx(gfx);
+
+	apple_t8015_gfx_stage(gfx, "11/12: the RTKit state");
+	if (gfx->rtk)
+		dev_info(dev, "GFX-DIAG: RTKit version %d\n", gfx->rtk->version);
 
 	apple_t8015_gfx_stage(gfx, "12/12: done");
 }

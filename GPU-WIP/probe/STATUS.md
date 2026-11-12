@@ -2096,3 +2096,43 @@ segments — `AGXG10P__TEXT_EXEC.bin` (404 KiB of code), `AGXG10P__TEXT.bin`
 `writeConfigRAMCommand32(uint16_t offset, uint32_t value, uint8_t flags)` and
 the 256-register config block, and to write boot #29 with the A11's real
 bring-up instead of the A10's.
+
+## Phase 2.2 — boot #29 plan (2026-11-12): follow the tree's own A11 bring-up order
+
+The tree already contains the answer, in `drivers/gpu/drm/imagination/pvr_apple.c`
+(the A11/G10P driver this project wrote earlier).  Its `power_on()` does:
+
+```
+pvr_apple_set_window(apple);                          /* window copy           */
+writel(fender + FENDER_RUN |= FENDER_RUN_ENABLE);      /* release the IOP       */
+apple_rtkit_boot(apple->rtk);                          /* EPMAP + IOP power ACK */
+apple_rtkit_start_ep(apple->rtk, 0x20);                /* APPLE_EP_AGX_INIT     */
+apple_rtkit_start_ep(apple->rtk, 0x21);                /* APPLE_EP_AGX_DOORBELL */
+pvr_apple_request_power_state(apple, 0);               /* reset first           */
+pvr_apple_request_power_state(apple, state);           /* then power up         */
+```
+
+Our diagnostic driver had two of those steps wrong and two missing:
+
+* **the RTKit layer has to be listening *before* the firmware boots** — the
+  firmware initiates the conversation (HELLO, EPMAP), so a late RTKit init
+  misses it; and
+* **the power request comes *after* the RTKit boot**, not before it.
+
+Boot #29 therefore:
+
+| stage | action |
+|---|---|
+| `0/12` | wait for the PMP |
+| `1/12` | **RTKit init on the GFX mailbox** (before anything is released) |
+| `2/12` | `ps_gfx` dump |
+| `3/12` | `ps_gfx` off->on retoggle |
+| `4/12` | window copy + run bit |
+| `5/12` | **`apple_rtkit_boot()`** — wait for the firmware's HELLO/EPMAP and the IOP power ACK, then set the AP power state |
+| `6/12` | **`start_ep(0x20)` (AGX_INIT) and `start_ep(0x21)` (AGX_DOORBELL)** |
+| `7/12` | 5 s settle |
+| `8/12` | Fender power request (state 1) |
+| `9/12` | mailbox registers |
+| `10/12` | RGX identity |
+| `11/12` | the RTKit version the handshake ended on |
+| `12/12` | done |
