@@ -119,11 +119,47 @@ This is what the DRM driver needs to build the GPU's page tables.
 
 ## Still open
 
-The **mailbox** page at IOP `+0x1000` reads zero and ignores writes, while
-the rest of the window is alive — an unclocked page.  Apple's `AppleA7IOP`
-kext says the mailbox registers are `MAILBOX_SET +0x1000`, `MAILBOX_CLR
-+0x1004`, `INBOX_CTRL +0x1008`, TX `+0x1010`, `OUTBOX_CTRL +0x1020`, RX
-`+0x1038`, and that it enables them by writing `0x1111` to `MAILBOX_SET`.
-None of that works here, and the PMP gate message
-(`(cmd << 20) | (dev << 12) | (gate id)`, command 1 = clock gate) draws no
-reply and no effect.
+The **mailbox** is still not found (2026-11-12, after boot #49).  What is
+now known:
+
+* `0x204d04000` is the **read-only G10P device-information page** — not a
+  mailbox.  It answers reads and ignores writes, except that `+0x80` took a
+  write in boot #44.  The values are real: `+0x80 = 40` is the A10's
+  `phys_bus_width`, `+0x84 = 64`, `+0x88 = 40` its
+  `virtual_address_space_bits`.
+* `0x204d24000` (the AppleA7IOP kext's "IOP + 0x4000") is a **dead page**:
+  it reads zero and ignores every write.
+* The **Fender window** holds only that device-info page and a lone
+  `+0x54 = 0x6`; `fender+0x10044` **hangs the SoC**.
+* The **IOP window** holds the firmware window registers, the DART
+  (`+0x8000`), a chip-ID block at `+0x10000` and nothing else.
+* The **core window** (`0x204000000`) only answers at `+0x18` (CORE_ID) and
+  `+0x20`; `+0x00` traps the SoC.
+
+So the mailbox is either dormant (its status registers read zero until the
+host enables it, which is why every read-only sweep was empty) or it lives
+in a part of the address space we cannot read safely.
+
+## The PMGR banks (boot #48/#49)
+
+| bank | contents |
+|---|---|
+| `pmgr0 + 0x80300` | the power-state bank, 8-byte stride: the GFX is psidx 7 = `0x80338` = our `ps_gfx`, decoded `clk 1, pwr 1, actual 0xf, target 0xf` |
+| `pmgr1 + 0x80000` | 33 entries up to `+0x140`; **not** indexed by device id (nothing at 123/148/149 × 8) |
+| `pmgr0 + 0x70000` | the **DVFS/voltage table** (0x4605 = 17925 µV, ten idle entries) |
+| `pmgr0 + 0xa0000` | also a DVFS table (0xbb8ffc05 …) |
+
+The A12's guide puts the GPU's *rail register* at PMGR + 0xa0000 and its
+DVFS table at PMGR + 0x70000 — on the A11 those two offsets are swapped or
+the rail register lives elsewhere entirely.  The GPU's core is alive
+(CORE_ID ✓) while the **GFX-KF** — which owns the mailbox IRQs — is not,
+and it is a `no_ps` device, so its gate is a plain gate register we have
+not found yet.
+
+## The AGX apertures, restated
+
+| window | AP address | size | contents |
+|---|---|---|---|
+| core (RGX) | `0x204000000` | 1 MiB | CORE_ID at +0x18 only; +0x00 traps |
+| gfx-kf region A ("IOP") | `0x204d20000` | 128 KiB | window regs, DART +0x8000, timebase +0x80c, config +0x8130, chip ID +0x10000 |
+| gfx-kf region B ("Fender") | `0x204d00000` | 128 KiB | power state +0x1000, window regs +0x200c, run bit +0x2048, device info +0x4000, +0x54 = 6; +0x10044 traps |

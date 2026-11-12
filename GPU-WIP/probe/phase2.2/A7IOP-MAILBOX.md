@@ -209,3 +209,17 @@ offsets of both layouts.
 `meta-sw-interrupt` = `0x32104020 <- 2`, `0x321040a0 <- 2`, `0x8` — a
 **software interrupt** to the GPU's "meta" processor, i.e. a way to wake the
 coprocessor that does not involve the mailbox at all.
+
+### Where the V4 class lives (for further RE)
+
+| what | address |
+|---|---|
+| the `AppleA7IOPV4GFX` vtable | `__PLK_DATA_CONST` **0xfffffff006ccc660** |
+| the metaclass constructor that stores it | `__PLK_TEXT_EXEC` 0xfffffff00575ad10 |
+| the M3Wrap base class's vtable | `__PLK_DATA_CONST` 0xfffffff006ccb258 |
+| `AppleM3WrapV2::getMailboxBulk()` (reads the five registers) | 0xfffffff00575aab4 |
+| the send/receive helpers (base+0x60 / base+0xa0) | 0xfffffff00575aa0c / 0xfffffff00575a9f8 |
+
+The class's two register maps (`_agxRegisterMap` + `_wrapRegisterMap`) are
+the next thing to find: their data would give the *physical* offsets, and
+`initialize()` would say which of the two apertures is the wrapper's.
