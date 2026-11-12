@@ -811,7 +811,11 @@ static void apple_t8015_gfx_boot_work(struct work_struct *work)
 	}
 
 	apple_t8015_gfx_stage(gfx, "7/12: wait for the firmware to settle");
-	msleep(5000);
+	for (i = 0; i < 5; i++) {
+		msleep(1000);
+		if (gfx->rtk)
+			apple_mbox_poll(gfx->rtk->mbox);
+	}
 	apple_t8015_gfx_mbox_state(gfx);
 
 	apple_t8015_gfx_stage(gfx, "8/12: Fender power request (state 1)");

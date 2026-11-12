@@ -2184,3 +2184,55 @@ the *wrong* address); now it is the *right* address and the same mechanism.
 3. The bring-up order of boot #29 is kept, with the RTKit init moved *after*
    the `ps_gfx` retoggle (the domain must be on before the mailbox is
    touched).
+
+## Phase 2.2 — boots #30…#32: the mailbox is live, stale, and noisy (2026-11-12)
+
+Three boots, one story.  Payloads `6b792318…`, `ac18a695…`, `91e78049…`.
+
+**#30** — `devm_apple_rtkit_init()` on the *live* mailbox → `apple_mbox_start()` →
+`enable_irq()` → the poll loop
+
+```c
+while (!(mbox_ctrl & mbox->hw->control_empty)) { ... }
+```
+
+never ends (the A11 mailbox reports both status bits clear, the invalid state
+Apple's kext asserts on) → the kernel starved → **the phone rebooted**.
+
+**#31** — the poll loop bounded (max 64 messages, stop when the register stops
+changing).  The kernel survived, but the level-triggered interrupt re-fired
+forever: the mailbox keeps asserting "not empty" while the FIFO yields
+nothing, so the handler runs again and again and the log floods with
+
+```
+RTKit: unknown management message: 0x0 (type: 0x00)
+```
+
+(one every ~2 ms — the mailbox's status is *stale*, the FIFO is empty).
+
+**#32** — fixed a bug in the fix: the "no progress" path had been faking the
+*empty* bit, which made the mask logic believe the state was valid and
+**unmask** the interrupt instead of masking it.  With that corrected the
+storm became an unbounded flood of zero messages and the boot still ran to
+completion.
+
+**What we now know about the mailbox block at `0x204d04000`:**
+
+| register | value | note |
+|---|---|---|
+| `+0x00` MAILBOX_SET | `0x01001000` | does **not** accept our mask writes |
+| `+0x04` MAILBOX_CLR | `0x0` | idem |
+| `+0x08` INBOX_CTRL | `0x00010704` | count field `7`, status bit 16 — stale |
+| `+0x10` TX data | `0x00090303` / `0x00020202` | non-zero, unexplained |
+| `+0x20` OUTBOX_CTRL | `0x0` | |
+| `+0x38` RX data | `0x0` | the FIFO really is empty |
+| `+0x40` IDLE_STATUS | `0x0` | |
+
+So the mailbox *block* answers, but its state registers are stale — consistent
+with a mailbox nobody has initialised yet (the RTBuddy firmware is still not
+running).
+
+**Boot #33 (built, needs a go):** mask the receive interrupt at the
+**interrupt controller** instead of at the mailbox, because the mailbox's own
+mask register does not accept writes on this block; unmask it again as soon
+as the state becomes valid, so the firmware's first message is not lost.
