@@ -1239,3 +1239,67 @@ in this order.
 The `0x1111` enable write is applied **only** where the probe at `+0x08`
 already shows Apple's INBOX_CTRL status bits (16..18) — no blind writes — and
 every candidate is re-probed afterwards.
+
+## Phase 2.2 — boot #18 executed: candidates probed, nothing at the old address (2026-11-12)
+
+Payload `5ce2008e…`.  All 12 stages ran, **no reset** — the targeted probes
+were the right call.
+
+```
+probe apple-mbox+1000 @0x204d21000:  all zero
+probe dt-mbox+1000     @0x204d25000:  all zero
+probe dt-mbox           @0x204d24000:  all zero   (our DT's mailbox node)
+probe fender+3000       @0x204d03000:  all zero
+probe fender+4000       @0x204d04000:  01001000 00000000 00010704 00000000
+                                          00090303 00020202 00000080 00000000
+probe iop-head          @0x204d20000:  00000101 00000000 0e100000 00000000
+                                          00000008 00000000 00000000 00000000
+                                          00000000 00000000 00100000 00000000
+                                          00000000 00000000 00000001 00000000
+probe fender+1000       @0x204d01000:  00000001 00000000 00000000 00000000
+                                          00000000 00000002 00000000 00000000
+probe fender+4040       @0x204d04040:  00000000 00000000 0000000f 0000002f
+                                          00000000 00000000 00000000 00000000
+                                          00000002 00000000 00000000 00000000
+probe fender+4080       @0x204d04080:  00000028 00000040 00000028 00000028
+```
+
+### What the probes say
+
+* **The mailbox is not at the DT address.**  `0x204d24000` (our
+  `gpu_mbox` node) and `0x204d25000` (DT + Apple's `0x1000`) are *all zero*,
+  and the `0x1111` write to `0x204d04000` did **not** change that register
+  (`0x01001000 -> 0x01001000`), so `0x204d04000` is not a write-1-to-set
+  mask — it is a read-only status/config register, not `MAILBOX_SET`.
+* **The IOP window head has a register nobody had read: `+0x00 = 0x00000101`.**
+  The rest of the head is the firmware-window registers we wrote
+  (`+0x08` base, `+0x10` upper, `+0x24` size, `+0x38` enable).
+* The `Fender+0x4000` block now has more detail: `+0x4010 = 0x00090303`,
+  `+0x4014 = 0x00020202`, `+0x4018 = 0x80`, `+0x4048 = 0x0f`,
+  `+0x404c = 0x2f`, `+0x4060 = 2`, `+0x4080.. = 0x28 0x40 0x28 0x28`.
+  `0x28` is **40**, the A10's `phys_bus_width`, and `+0x4088`/`+0x408c` are
+  also 40 — so this block looks like the **G10P device-information registers**
+  (bus width, address-space bits, tile/ISP geometry) that the iOS kext reads
+  and that our tree still hardcodes for the A10.  `0x090303`/`0x020202` read
+  as bytes (9, 3, 3) and (2, 2, 2) are plausibly cluster/geometry counts.
+* `Fender+0x1014 = 2` is another status register we never read
+  (`FENDER_STATUS` at `+0x1010` reads 0).
+
+### Still missing
+
+The mailbox register block has not been found *anywhere*: every candidate is
+zero.  Either it is dead until its own power/clock gate is on (Apple's
+`ps-reg-offset` / `pc-sample-offset` DT properties, values not in the ADT), or
+its address is outside everything probed so far.
+
+## Boot #19 plan (not built — needs a go)
+
+1. Keep the proven GPU path.
+2. Apply Apple's **full** enable sequence to each candidate base
+   `0x204d20000`, `0x204d24000`, `0x204d03000`:
+   write `0x1111` to `base+0x1000`, write `1` to `base+0x1004`, write `0x1000`
+   to `base+0x1000`, set bit 0 of `base+0x1020` — logging every read-back.
+3. Re-probe `0x204d21000`, `0x204d24000`, `0x204d25000`, `0x204d20000`,
+   `0x204d03000`, `0x204d04000`.
+4. Sweep the first 4 KiB of the **IOP** window and of the **Fender** window
+   (the ranges that were never read) for any other live block.
