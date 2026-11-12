@@ -206,11 +206,11 @@ static void apple_t8015_gfx_set_window(struct apple_t8015_gfx *gfx)
 	};
 	unsigned int i;
 
-	apple_t8015_gfx_stage(gfx, "3/10: Fender window copy");
+	apple_t8015_gfx_stage(gfx, "3/12: Fender window copy");
 	for (i = 0; i < ARRAY_SIZE(fields); i++)
 		writel(fields[i], gfx->fender + FENDER_WINDOW + 4 * i);
 
-	apple_t8015_gfx_stage(gfx, "4/10: IOP window copy + enable");
+	apple_t8015_gfx_stage(gfx, "4/12: IOP window copy + enable");
 	for (i = 0; i < ARRAY_SIZE(fields); i++)
 		writel(fields[i], gfx->iop + IOP_WINDOW + 8 * i);
 
@@ -485,65 +485,7 @@ static void apple_t8015_gfx_probe_rgx(struct apple_t8015_gfx *gfx)
 
 
 
-/*
- * Diagnostic (Phase 2.2 boot #16): dump the GFX IOP mailbox window, then write
- * the FIFO enable bit to both control registers and dump it again.
- *
- * Boot #15 read 0x204D24000+0x00..0x3c as all zero.  A block that is not
- * enabled reads zero, and apple_mbox_poll_locked() treats a cleared "empty"
- * bit as "there is a message", so boot #14's RTKit init drained phantom 0x0
- * words in IRQ context until the machine wedged.  Enabling the FIFOs and
- * comparing the two dumps separates "wrong layout" from "not clocked".
- */
-static void apple_t8015_gfx_mbox_dump(struct device *dev, void __iomem *mbox,
-				      const char *tag)
-{
-	unsigned int i;
-	u32 v[4];
 
-	dev_info(dev, "  mbox %s:\n", tag);
-	for (i = 0; i < 0x40; i += 16) {
-		v[0] = readl(mbox + i + 0x0);
-		v[1] = readl(mbox + i + 0x4);
-		v[2] = readl(mbox + i + 0x8);
-		v[3] = readl(mbox + i + 0xc);
-		dev_info(dev, "    +%#04x: %08x %08x %08x %08x\n",
-			 i, v[0], v[1], v[2], v[3]);
-	}
-}
-
-static void apple_t8015_gfx_mbox_probe(struct apple_t8015_gfx *gfx)
-{
-	struct device_node *mbox_node;
-	void __iomem *mbox;
-	struct resource res;
-	u32 phandle = 0;
-
-	if (of_property_read_u32(gfx->dev->of_node, "mboxes", &phandle))
-		return;
-	mbox_node = of_find_node_by_phandle(phandle);
-	if (!mbox_node)
-		return;
-	if (of_address_to_resource(mbox_node, 0, &res)) {
-		of_node_put(mbox_node);
-		return;
-	}
-	mbox = devm_ioremap(gfx->dev, res.start, SZ_4K);
-	of_node_put(mbox_node);
-	if (!mbox)
-		return;
-
-	dev_info(gfx->dev, "mbox @%pa:\n", &res.start);
-	apple_t8015_gfx_mbox_dump(gfx->dev, mbox, "before enable");
-	writel(MBOX_CONTROL_ENABLE, mbox + MBOX_A2I_CONTROL);
-	writel(MBOX_CONTROL_ENABLE, mbox + MBOX_I2A_CONTROL);
-	msleep(20);
-	apple_t8015_gfx_mbox_dump(gfx->dev, mbox, "after enable");
-	dev_info(gfx->dev, "mbox control: A2I %08x, I2A %08x, I2A recv %08x\n",
-		 readl(mbox + MBOX_A2I_CONTROL),
-		 readl(mbox + MBOX_I2A_CONTROL),
-		 readl(mbox + MBOX_I2A_RECV));
-}
 
 
 /*
@@ -595,21 +537,125 @@ static void apple_t8015_gfx_fender_power(struct apple_t8015_gfx *gfx)
  * handshake.  Every step is announced and held on the console, because the
  * access that faults resets the phone and takes the display with it.
  */
+/*
+ * Phase 2.2 boot #17: sweep the two gfx-kf windows for live registers.
+ *
+ * The ADT gives the gfx-kf node two 128 KiB windows (0x4d20000 = the IOP
+ * block, 0x4d00000 = the Fender block) and the mailbox interrupts.  Apple's
+ * own AppleA7IOP kext (D21 kernelcache) puts the mailbox registers at
+ * base+0x1000: MAILBOX_SET 0x1000, MAILBOX_CLR 0x1004, INBOX_CTRL 0x1008,
+ * TX data 0x1010, OUTBOX_CTRL 0x1020, RX data 0x1038 -- i.e. all inside one
+ * 64-byte block -- and enables the mailbox by writing 0x1111 to MAILBOX_SET.
+ *
+ * Boot #16 showed 0x204d24000+0x00..0x3c reads back zero and ignores
+ * writes, so either that is the wrong address or the block needs its enable
+ * write first.  This sweep answers it without guessing: read every 64-byte
+ * chunk of both windows, log the ones that are not zero, and then try the
+ * 0x1111 enable on every page that looks alive.
+ */
+#define GFX_SWEEP_CHUNK		0x40
+#define GFX_SWEEP_MAXWIN	0x20000UL
+#define GFX_SWEEP_CHUNKS	(GFX_SWEEP_MAXWIN / GFX_SWEEP_CHUNK)
+#define GFX_SWEEP_PAGE		0x1000UL
+
+struct gfx_sweep {
+	void __iomem *win;
+	const char *tag;
+	unsigned char alive[GFX_SWEEP_CHUNKS / 8];
+};
+
+static bool gfx_sweep_alive(const struct gfx_sweep *sw, unsigned int chunk)
+{
+	return (sw->alive[chunk / 8] >> (chunk % 8)) & 1;
+}
+
+static void gfx_sweep_mark(struct gfx_sweep *sw, unsigned int chunk)
+{
+	sw->alive[chunk / 8] |= 1 << (chunk % 8);
+}
+
+static void apple_t8015_gfx_sweep_scan(struct apple_t8015_gfx *gfx,
+				       struct gfx_sweep *sw)
+{
+	unsigned int off, chunk;
+	u32 v[4];
+	unsigned int shown = 0;
+
+	for (off = 0; off < GFX_SWEEP_MAXWIN; off += GFX_SWEEP_CHUNK) {
+		chunk = off / GFX_SWEEP_CHUNK;
+		v[0] = readl(sw->win + off + 0x0);
+		v[1] = readl(sw->win + off + 0x4);
+		v[2] = readl(sw->win + off + 0x8);
+		v[3] = readl(sw->win + off + 0xc);
+		if (!(v[0] | v[1] | v[2] | v[3]))
+			continue;
+		gfx_sweep_mark(sw, chunk);
+		if (shown++ < 60)
+			dev_info(gfx->dev, "%s sweep +%#06x: %08x %08x %08x %08x\n",
+				 sw->tag, off, v[0], v[1], v[2], v[3]);
+	}
+	dev_info(gfx->dev, "%s sweep: %u non-zero chunks of %u in %#x bytes\n",
+		 sw->tag, shown, (unsigned int)GFX_SWEEP_CHUNKS,
+		 (unsigned int)GFX_SWEEP_MAXWIN);
+}
+
+static void apple_t8015_gfx_sweep_enable(struct apple_t8015_gfx *gfx,
+					 struct gfx_sweep *sw)
+{
+	unsigned int chunk, off, tries = 0;
+	u32 before, after;
+
+	/*
+	 * The mailbox register block sits at page+0x1000, so a live page P
+	 * whose page P+0x1000 is also live is a candidate: the word at
+	 * P+0x1000 is then MAILBOX_SET.
+	 */
+	for (chunk = 0; chunk + GFX_SWEEP_PAGE / GFX_SWEEP_CHUNK <= GFX_SWEEP_CHUNKS;
+	     chunk++) {
+		if (!gfx_sweep_alive(sw, chunk))
+			continue;
+		if (!gfx_sweep_alive(sw, chunk + GFX_SWEEP_PAGE / GFX_SWEEP_CHUNK))
+			continue;
+		off = chunk * GFX_SWEEP_CHUNK + GFX_SWEEP_PAGE;
+		before = readl(sw->win + off);
+		writel(0x1111, sw->win + off);
+		after = readl(sw->win + off);
+		dev_info(gfx->dev, "%s: MAILBOX_SET candidate +%#06x: before %#x, wrote 0x1111, now %#x\n",
+			 sw->tag, off, before, after);
+		dev_info(gfx->dev, "%s: +%#06x block: %08x %08x %08x %08x %08x %08x %08x %08x\n",
+			 sw->tag, off,
+			 readl(sw->win + off + 0x00), readl(sw->win + off + 0x04),
+			 readl(sw->win + off + 0x08), readl(sw->win + off + 0x0c),
+			 readl(sw->win + off + 0x10), readl(sw->win + off + 0x14),
+			 readl(sw->win + off + 0x18), readl(sw->win + off + 0x1c));
+		if (++tries >= 4)
+			break;
+	}
+	if (!tries)
+		dev_info(gfx->dev, "%s: no live page pair found; no enable write\n",
+			 sw->tag);
+}
+
 static void apple_t8015_gfx_boot_work(struct work_struct *work)
 {
 	struct apple_t8015_gfx *gfx =
 		container_of(to_delayed_work(work), struct apple_t8015_gfx, work);
 	struct device *dev = gfx->dev;
+	struct gfx_sweep fen, iop;
 	int i;
 
 	/*
-	 * Boot #16.  Boot #15 proved the GPU path end to end: the Fender window
-	 * copy reads back, the run bit releases the IOP, the power request
-	 * latches state 1 and the RGX answers with CORE_ID = 0x7e1.  That path
-	 * is kept verbatim; the mailbox is the only new experiment and the
-	 * bridge scan that reset the phone is gone.
+	 * Boot #17.  The GPU path is proven (boot #15/#16: window copy reads
+	 * back, the IOP is released, the power request is accepted and the RGX
+	 * answers with CORE_ID 0x7e1), so it runs unchanged.  The new work is a
+	 * sweep of the two gfx-kf windows: Apple's AppleA7IOP kext puts the
+	 * mailbox registers at base+0x1000 inside a 64-byte block and enables
+	 * them by writing 0x1111 to MAILBOX_SET, while boot #16 read
+	 * 0x204d24000+0x00..0x3c as zero and ignored writes.  Either that
+	 * address is wrong or the block wants its enable write first; the
+	 * sweep tells us which.
 	 */
-	apple_t8015_gfx_stage(gfx, "0/10: wait for the PMP to come up");
+	apple_t8015_gfx_stage(gfx, "0/12: wait for the PMP to come up");
 	for (i = 0; i < GFX_PMP_READY_WAIT_MS / 500; i++) {
 		if (apple_t8015_pmp_up)
 			break;
@@ -618,32 +664,45 @@ static void apple_t8015_gfx_boot_work(struct work_struct *work)
 	dev_info(dev, "GFX-DIAG: PMP %s after %d ms\n",
 		 apple_t8015_pmp_up ? "is up" : "never came up", i * 500);
 
-	apple_t8015_gfx_stage(gfx, "1/10: ps_gfx power state (PMGR read)");
+	apple_t8015_gfx_stage(gfx, "1/12: ps_gfx power state (PMGR read)");
 	apple_t8015_gfx_dump_ps(gfx);
 
-	apple_t8015_gfx_stage(gfx, "2/10: ps_gfx off->on (re-send the gate request)");
+	apple_t8015_gfx_stage(gfx, "2/12: ps_gfx off->on (re-send the gate request)");
 	if (!apple_t8015_gfx_retoggle_ps(gfx))
 		dev_warn(dev, "ps_gfx retoggle failed; continuing anyway\n");
 
 	/* The firmware image was loaded into the window by ->probe(). */
 	apple_t8015_gfx_set_window(gfx);
 
-	apple_t8015_gfx_stage(gfx, "5/10: release the IOP (run bit)");
+	apple_t8015_gfx_stage(gfx, "5/12: release the IOP (run bit)");
 	writel(readl(gfx->fender + FENDER_RUN) | FENDER_RUN_ENABLE,
 	       gfx->fender + FENDER_RUN);
 	dev_info(dev, "GFX IOP released; letting the firmware start\n");
 	msleep(1000);
 
-	apple_t8015_gfx_stage(gfx, "6/10: Fender power request (state 1)");
+	apple_t8015_gfx_stage(gfx, "6/12: Fender power request (state 1)");
 	apple_t8015_gfx_fender_power(gfx);
 
-	apple_t8015_gfx_stage(gfx, "7/10: RGX identity + CORE_ID/PBVNC");
+	apple_t8015_gfx_stage(gfx, "7/12: RGX identity + CORE_ID/PBVNC");
 	apple_t8015_gfx_probe_rgx(gfx);
 
-	apple_t8015_gfx_stage(gfx, "8/10: mailbox dump + FIFO enable + re-dump");
-	apple_t8015_gfx_mbox_probe(gfx);
+	memset(&fen, 0, sizeof(fen));
+	fen.win = gfx->fender;
+	fen.tag = "fender";
+	apple_t8015_gfx_stage(gfx, "8/12: sweep the Fender window (0x204d00000)");
+	apple_t8015_gfx_sweep_scan(gfx, &fen);
 
-	apple_t8015_gfx_stage(gfx, "9/10: done");
+	memset(&iop, 0, sizeof(iop));
+	iop.win = gfx->iop;
+	iop.tag = "iop";
+	apple_t8015_gfx_stage(gfx, "9/12: sweep the IOP window (0x204d20000)");
+	apple_t8015_gfx_sweep_scan(gfx, &iop);
+
+	apple_t8015_gfx_stage(gfx, "10/12: mailbox enable attempt (write 0x1111)");
+	apple_t8015_gfx_sweep_enable(gfx, &fen);
+	apple_t8015_gfx_sweep_enable(gfx, &iop);
+
+	apple_t8015_gfx_stage(gfx, "11/12: done");
 }
 
 static int apple_t8015_gfx_probe(struct platform_device *pdev)
@@ -684,7 +743,12 @@ static int apple_t8015_gfx_probe(struct platform_device *pdev)
 	res = platform_get_resource_byname(pdev, IORESOURCE_MEM, "iop");
 	if (!res || resource_size(res) < SZ_4K)
 		return -EINVAL;
-	gfx->iop = devm_ioremap(dev, res->start, SZ_4K);
+	/*
+	 * The ADT gives the gfx-kf node two 128 KiB windows (0x4d20000 and
+	 * 0x4d00000), and the mailbox registers sit inside one of them, so map
+	 * the whole window rather than just the first page.
+	 */
+	gfx->iop = devm_ioremap(dev, res->start, resource_size(res));
 	if (!gfx->iop)
 		return -ENOMEM;
 

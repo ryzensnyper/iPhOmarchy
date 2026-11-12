@@ -1146,3 +1146,35 @@ the enable sequence.
 3. Also worth reading while there: `IOP+0x00..0x3c` (the gfx-kf window answered
    in boot #15/#16, so it is safe), to see whether the IOP reports a running
    state after the run bit.
+
+## Phase 2.2 — boot #17 built (2026-11-12): sweep the gfx-kf windows
+
+Payload `96ab42f3…` (built, **not booted** — needs a go; the phone is still
+running the boot #16 Linux and has to go back to PongoOS).
+
+Before spending the boot, the `AppleA7IOP` kext in the D21 kernelcache was
+disassembled, because boot #16's "the mailbox reads zero" was the only
+remaining explanation and the kext contradicts it:
+
+| Apple's log label | offset |
+|---|---|
+| `MAILBOX_SET` | `+0x1000` (enable write is `0x1111`) |
+| `MAILBOX_CLR` | `+0x1004` |
+| `INBOX_CTRL` | `+0x1008` (status bits 16..18) |
+| TX data | `+0x1010` (64-bit) |
+| `OUTBOX_CTRL` | `+0x1020` (bit 0 = start) |
+| RX data | `+0x1038` (64-bit) |
+| `CPU_CTRL` | `+0x0028` |
+
+The tree's `apple_mbox_a7iop_hw` map (`0x08/0x10/0x20/0x38`) is **exactly this
+map minus `0x1000`** — so boot #16 probed the wrong 64 bytes, and "the block
+is dead" was never established (boot #15 proved writes stick in that region).
+
+The ADT also says the A11 mailbox is **not** a separate device window:
+`/arm-io/gfx-kf` owns `0x4d20000`+`0x4d00000` (128 KiB each) *and* the four
+mailbox IRQs (260, 259, 262, 261).
+
+Boot #17 therefore sweeps both `gfx-kf` windows 64 bytes at a time, logs every
+non-zero chunk, and tries the `0x1111` enable write on every live page.  Full
+write-up: `phase2.2/A7IOP-MAILBOX.md`; extraction tool:
+`GPU-WIP/tools/a7iop-mailbox-re.py`.
