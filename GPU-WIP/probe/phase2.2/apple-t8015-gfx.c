@@ -184,15 +184,14 @@ static void apple_t8015_gfx_set_window(struct apple_t8015_gfx *gfx)
 	};
 	unsigned int i;
 
-	apple_t8015_gfx_stage(gfx, "7/13: Fender window copy");
+	apple_t8015_gfx_stage(gfx, "9/13: Fender window copy");
 	for (i = 0; i < ARRAY_SIZE(fields); i++)
 		writel(fields[i], gfx->fender + FENDER_WINDOW + 4 * i);
 
-	apple_t8015_gfx_stage(gfx, "8/13: IOP window copy");
+	apple_t8015_gfx_stage(gfx, "10/13: IOP window copy + enable");
 	for (i = 0; i < ARRAY_SIZE(fields); i++)
 		writel(fields[i], gfx->iop + IOP_WINDOW + 8 * i);
 
-	apple_t8015_gfx_stage(gfx, "9/13: IOP window enable");
 	writel(1, gfx->iop + IOP_WINDOW_ENABLE);
 }
 
@@ -333,17 +332,18 @@ extern int apple_t8015_pmp_send(u8 ep, u64 msg);
 extern int apple_t8015_pmp_start_ep(u8 ep);
 
 /*
- * DIAG (Phase 2.2 boot #12): the PMGR "bridge" windows.  bridge-reg-index=19
+ * DIAG (Phase 2.2 boot #13): the PMGR "bridge" windows.  bridge-reg-index=19
  * in the ADT means bridge b is pmgr reg[19+b]; GFX is group 8, so the GPU's
  * own power/clock block ("AGX_PMGR" in ApplePMGR's block table) is
- * 0x05000000/0x9000.  ApplePMGR has readGFXClkGenReg/writeGFXClkGenReg, so
- * this window holds the GPU clock generator that nothing in Linux programs.
- * Compare it with the DISP0_BE bridge (group 7, 0x19000000), which is
- * demonstrably clocked and running (simplefb drives the panel).
+ * 0x05000000/0x9000 -- in the *ADT* address space.  Linux reaches every
+ * Apple block through the +0x200000000 AP alias (the PMGR's Linux address
+ * 0x232000000 is the ADT's 0x32000000), so the windows are 0x205000000 and
+ * 0x219000000.  Compare GFX with the DISP0_BE bridge, which is clocked and
+ * running (simplefb drives the panel).
  */
-#define GFX_BRIDGE_ADDR		0x05000000UL
+#define GFX_BRIDGE_ADDR		0x205000000UL
 #define GFX_BRIDGE_SIZE		0x9000UL
-#define DISP0_BRIDGE_ADDR	0x19000000UL
+#define DISP0_BRIDGE_ADDR	0x219000000UL
 #define DISP0_BRIDGE_SIZE	0x9000UL
 
 static void apple_t8015_gfx_dump_bridge(struct apple_t8015_gfx *gfx,
@@ -471,13 +471,45 @@ static bool apple_t8015_gfx_retoggle_ps(struct apple_t8015_gfx *gfx)
  * Diagnostic (Phase 2.2): does the RGX core answer?  The mailbox read that
  * killed boot #5 and #6 is inside the IOP sub-block; reading the core ID of
  * the GPU itself tells a dark power domain from a dark IOP sub-block.
+ *
+ * Boot #13: the window is mapped through the AP alias (0x204000000), and a
+ * powered RGX answers its whole first page, so dump 0x100 bytes instead of
+ * guessing two offsets.
  */
 static void apple_t8015_gfx_probe_rgx(struct apple_t8015_gfx *gfx)
 {
-	u32 id = readl(gfx->rgx + 0x18);
-	u32 rev = readl(gfx->rgx + 0x20);
+	unsigned int i;
+	u32 v[4];
 
-	dev_info(gfx->dev, "rgx: core id %#x revision %#x\n", id, rev);
+	for (i = 0; i < 0x100; i += 16) {
+		v[0] = readl(gfx->rgx + i + 0x0);
+		v[1] = readl(gfx->rgx + i + 0x4);
+		v[2] = readl(gfx->rgx + i + 0x8);
+		v[3] = readl(gfx->rgx + i + 0xc);
+		dev_info(gfx->dev, "rgx +%#04x: %08x %08x %08x %08x\n",
+			 i, v[0], v[1], v[2], v[3]);
+	}
+}
+
+/*
+ * Diagnostic (Phase 2.2 boot #13): Fender's identity page.  Fender's control
+ * registers sit above +0x2000 (the window fields the driver programs are at
+ * +0x200c..+0x2020, the IOP release bit at +0x2048), so a read-only sweep
+ * there shows whether the second GPU window answers at all.
+ */
+static void apple_t8015_gfx_dump_fender(struct apple_t8015_gfx *gfx)
+{
+	unsigned int i;
+	u32 v[4];
+
+	for (i = 0x2000; i < 0x2080; i += 16) {
+		v[0] = readl(gfx->fender + i + 0x0);
+		v[1] = readl(gfx->fender + i + 0x4);
+		v[2] = readl(gfx->fender + i + 0x8);
+		v[3] = readl(gfx->fender + i + 0xc);
+		dev_info(gfx->dev, "fender +%#06x: %08x %08x %08x %08x\n",
+			 i, v[0], v[1], v[2], v[3]);
+	}
 }
 
 /*
@@ -538,24 +570,38 @@ static void apple_t8015_gfx_boot_work(struct work_struct *work)
 	apple_t8015_gfx_dump_ps(gfx);
 
 	/*
-	 * Boot #12: the GPU's own PMGR block (bridge 8 of 13) and the display's
-	 * bridge (group 7) as a known-clocked reference.  Both are read-only;
-	 * when the GPU port is down this window is where that shows.
+	 * Boot #13: every earlier boot read the GPU at 0x04000000, the address
+	 * the *ADT* gives.  Linux reaches Apple blocks through the AP alias
+	 * (+0x200000000: PMGR is 0x232000000, not 0x32000000), and the A10 GPU
+	 * node in this tree is at 0x201000000 for the same reason.  The A11 GPU
+	 * node said 0x04000000, where nothing responds -- every access hung.
+	 * The DT now says 0x204000000; this read is the test of that.
 	 */
-	apple_t8015_gfx_stage(gfx, "2/13: PMGR bridge windows (GFX 0x5000000 / DISP0 0x19000000)");
+	apple_t8015_gfx_stage(gfx, "2/13: RGX identity (0x204000000+0x00..0xff)");
+	apple_t8015_gfx_probe_rgx(gfx);
+
+	apple_t8015_gfx_stage(gfx, "3/13: Fender identity (0x24d00000+0x2000..0x207f)");
+	apple_t8015_gfx_dump_fender(gfx);
+
+	/*
+	 * The GPU's own PMGR block (bridge 8 of 13) and the display's bridge
+	 * (group 7) as a known-clocked reference.  Both are read-only; when the
+	 * GPU port is down this window is where that shows.
+	 */
+	apple_t8015_gfx_stage(gfx, "4/13: PMGR bridge windows (GFX 0x205000000 / DISP0 0x219000000)");
 	apple_t8015_gfx_probe_bridges(gfx);
 
-	apple_t8015_gfx_stage(gfx, "3/13: PMP endpoint 32 STARTEP + candidates");
+	apple_t8015_gfx_stage(gfx, "5/13: PMP endpoint 32 STARTEP + candidates");
 	apple_t8015_gfx_try_pmp_calls(gfx);
 
-	apple_t8015_gfx_stage(gfx, "4/13: ps_gfx off->on (re-send the gate request)");
+	apple_t8015_gfx_stage(gfx, "6/13: ps_gfx off->on (re-send the gate request)");
 	if (!apple_t8015_gfx_retoggle_ps(gfx))
 		return;
 
-	apple_t8015_gfx_stage(gfx, "5/13: mailbox register read (IOP+0x4008)");
+	apple_t8015_gfx_stage(gfx, "7/13: mailbox register read (IOP+0x4008)");
 	apple_t8015_gfx_probe_mailbox(gfx);
 
-	apple_t8015_gfx_stage(gfx, "6/13: mailbox (RTKit) init");
+	apple_t8015_gfx_stage(gfx, "8/13: mailbox (RTKit) init");
 	gfx->rtk = devm_apple_rtkit_init(dev, gfx, NULL, 0,
 					 &apple_t8015_gfx_rtkit_ops);
 	if (IS_ERR(gfx->rtk)) {
@@ -564,7 +610,7 @@ static void apple_t8015_gfx_boot_work(struct work_struct *work)
 	}
 
 	apple_t8015_gfx_set_window(gfx);
-	apple_t8015_gfx_stage(gfx, "10/13: release the IOP (run bit)");
+	apple_t8015_gfx_stage(gfx, "11/13: release the IOP (run bit)");
 	writel(readl(gfx->fender + FENDER_RUN) | FENDER_RUN_ENABLE,
 	       gfx->fender + FENDER_RUN);
 	dev_info(dev, "GFX IOP released; waiting for RTKit HELLO\n");
@@ -589,9 +635,10 @@ static void apple_t8015_gfx_boot_work(struct work_struct *work)
 				 ret);
 	}
 
-	/* Phase 2.3 precursor, last because a dark RGX window hangs the bus. */
-	apple_t8015_gfx_stage(gfx, "11/13: RGX core id read (0x4000000+0x18)");
+	apple_t8015_gfx_stage(gfx, "12/13: RGX re-read after bring-up");
 	apple_t8015_gfx_probe_rgx(gfx);
+
+	apple_t8015_gfx_stage(gfx, "13/13: done");
 }
 
 static int apple_t8015_gfx_probe(struct platform_device *pdev)

@@ -3,6 +3,18 @@
 Status: offline finding (2026-11-12, after boot #11).  Nothing in this file has
 been read from hardware yet; boot #12 is the read-only probe.
 
+> **Correction (2026-11-12, after boot #12 executed).**  Boot #12 died on the
+> very first bridge read: `0x19000000` (DISP0_BE, a block that is demonstrably
+> clocked — `simplefb` scans out of it) does not answer on the AP bus.  The
+> reason is that **the ADT addresses in this table are not AP addresses**: the
+> AP reaches every Apple block at *ADT address + `0x200000000`*.  So the GPU's
+> PMGR block is **`0x205000000`**, the DISP0 bridge **`0x219000000`**, and the
+> GPU itself **`0x204000000`** (RGX), `0x24D00000` (Fender), `0x24D20000`
+> (GFX IOP).  Boots #2–#12 read the raw ADT addresses, where nothing responds —
+> see `probe/STATUS.md`, "the AP alias".  Everything below about *which*
+> bridge is *which* block is still valid; only the addresses move.
+
+
 ## 1. What the ADT says
 
 `/arm-io/pmgr` (raw ADT `dt_raw.bin`, parsed with m1n1's `adt.py`):

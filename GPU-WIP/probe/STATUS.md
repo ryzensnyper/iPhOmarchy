@@ -780,4 +780,95 @@ clock generator/bridge was never configured.
 * `rollback.sh` removes the module, unbinds the node, and confirms the display
   still comes up over `simplefb`.
 * Stage 2 requires the Fender power-request path only
-  (`Fender+0x1000 = 0x11`), plus a RGX identity read at `0x04000018`.
+  (`Fender+0x1000 = 0x11`), plus a RGX identity read at `0x20400018`
+  (the AP alias — see below).
+
+## Phase 2.2 — boot #12 executed: the bridge window hung the bus too (2026-11-12)
+
+Payload `b074b748…`.  Everything up to the bridge dump repeated boot #11
+exactly: `PMP-DIAG 0/4`…`4/4` from 12.8 s, HELLO + EPMAP `0x1f`/`0x1` at
+16.86 s, `RTKit wake returned -62`, forced `SET_AP_PWR_STATE(ON)` at 35.8 s,
+`PMP is up` at 36.3 s, `GFX-STAGE 0/13` at 23.0 s, `PMP is up after 11500 ms`
+at 36.65 s, then `ps_gfx = 0x1f0003ff` and the whole `0x80300` bank at 38.7 s.
+
+`GFX-STAGE 2/13` printed at 38.717 s and **the very first access after it — the
+first `readl()` of the DISP0 bridge window at `0x19000000` — hung the bus**: no
+`bridge disp0 @… +0x00` line, no output at all, phone reset to iOS.
+
+| stage | result |
+|---|---|
+| `0/13` wait for PMP | up, 11.5 s after the GFX work started |
+| `1/13` `ps_gfx` | `0x1f0003ff` (auto 1, was-clk 1, was-pwr 1, actual `0xf`, target `0xf`), bank otherwise unchanged from boot #11 |
+| `2/13` bridge windows | **hung on the first read** of DISP0 `0x19000000` — before the GFX window was ever touched |
+| `3/13`…`13/13` | never reached |
+
+So the bridge model as written is disproved: a window that is *demonstrably
+clocked and in use* (DISP0_BE — `simplefb` scans out of it) does not answer at
+its ADT address either.  The ADT register windows are not addresses the AP can
+reach — which is not a statement about power gating at all.
+
+## Offline (2026-11-12, after boot #12): the AP alias — ADT address + `0x200000000`
+
+The `pmgr` bridge list is not the only thing in the ADT whose address is
+"wrong".  Every Apple block is listed twice: the **ADT** carries the address
+iBoot uses, and Linux reaches the same block at **ADT + `0x200000000`**.
+
+| block | ADT `/arm-io/...` `reg` | D21 DT node (in tree) |
+|---|---|---|
+| i2c0 | `0x2E200000` | `i2c@22e200000` |
+| aic | `0x32100000` | `interrupt-controller@232100000` |
+| pmgr | `0x32000000` | `power-management@232000000` |
+| pmp | `0x32300000` | `pmp@232300000` |
+| pmgr_mini | `0x35200000` | `power-management@235200000` |
+| **gpu (sgx)** | `0x04000000` / `0x04D00000` | **`gpu@4000000` / `mbox@4d24000`** ← raw ADT address |
+
+`/arm-io` declares `#address-cells = <2>`, so those ADT values are literal
+32-bit addresses; the Linux DTs in this tree add the alias, and every one of
+them works (the console, the PMGR PS reads, the PMP RTKit handshake — all at
+`0x2…`).  The **t8010** GPU node in the same tree is at `0x201000000`
+(`fender` `0x201d0000`, `iop` `0x201d2000`, mailbox `0x201d24000`) — the same
+`+0x200000000` — while the t8015 GPU node is the *only* node in
+`t8015.dtsi` still carrying a raw ADT address.
+
+**Consequence:** every GPU/Fender/IOP/mailbox access in boots #2–#12 went to
+`0x04000000` / `0x04D00000` / `0x04D20000` / `0x04D24000`, where nothing on
+the AP bus responds.  "The GPU block is dark" was, in all likelihood, an
+addressing bug: a read of an address with no responder hangs exactly like a
+read of a powered-down block.  The `ps_gfx` "was clock gated" bit was read as
+corroboration all along; it never was.
+
+Correct addresses for this SoC:
+
+| window | address | size |
+|---|---|---|
+| RGX | `0x204000000` | `0x100000` |
+| Fender | `0x24D00000` | `0x20000` |
+| GFX IOP | `0x24D20000` | `0x20000` |
+| IOP mailbox | `0x24D24000` | `0x1000` |
+| GFX bridge / `AGX_PMGR` (bridge 8) | `0x205000000` | `0x9000` |
+| DISP0 bridge (group 7, reference) | `0x219000000` | `0x9000` |
+
+## Boot #13 (built, NOT booted — needs a go)
+
+Two changes only: the DT addresses above, and a reordered diagnostic that puts
+the address test first.
+
+| stage | action |
+|---|---|
+| `0/13` | wait for `apple_t8015_pmp_up` |
+| `1/13` | `ps_gfx` + `0x80300` bank dump |
+| `2/13` | **new**: RGX identity — dump `0x204000000+0x00..0xff` (`ROGUE_CR_CORE_ID` = `+0x18`, config in the low half, id in bits 16-31) |
+| `3/13` | **new**: Fender identity — dump `0x24D00000+0x2000..0x207f` (the window/run page) |
+| `4/13` | bridge windows at the alias (`0x219000000` then `0x205000000`) |
+| `5/13` | `STARTEP(32)` + the six candidate messages |
+| `6/13` | `ps_gfx` off→on retoggle |
+| `7/13` | mailbox read `0x24D24000+0x08` (A2I control) |
+| `8/13`…`13/13` | RTKit init, Fender/IOP window copy, run bit, HELLO, RGX re-read |
+
+| log | meaning |
+|---|---|
+| `rgx +0x0010:` non-zero (or any `rgx +…` line with data) | **the block answers**: Phase 2.3 identity is one read away and the whole "dark GPU" thread collapses to an address bug |
+| boot dies after the `2/13` banner, no `rgx +` line | `0x204000000` does not respond either — the alias is not universal, revisit the address map before any write |
+| `rgx` reads all zero, Fender prints | RGX window responds but is unconfigured/held in reset — Fender/`AGX_PMGR` work is the next step |
+| `mailbox: A2I control @… = …` prints | the IOP sub-block is clocked; Phase 2.2 becomes a firmware question |
+| `GFX firmware is up; RTKit handshake complete` | Phase 2.2 passes |

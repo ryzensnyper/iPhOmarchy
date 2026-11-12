@@ -20,13 +20,20 @@
  * IRQ order is the live ADT's gfx-kf array [260, 259, 262, 261], mapped in
  * that order to the four mailbox names (BOOTCHAIN.md §6).  If RTKit never
  * receives HELLO, this mapping is the first suspect.
+ *
+ * ADDRESSES (boot #13, 2026-11-12): the ADT lists these blocks at
+ * 0x04000000 / 0x04D00000 / 0x04D20000 / 0x04D24000, but the AP reaches
+ * every Apple block at ADT + 0x200000000 (pmgr 0x232000000, pmp 0x232300000,
+ * i2c 0x22e200000, and the t8010 GPU at 0x201000000).  The raw ADT addresses
+ * have no responder: boots #2..#12 read them and hung the bus, which looked
+ * exactly like a powered-down block.  The nodes below use the AP alias.
  */
 
-gpu: gpu@4000000 {
+gpu: gpu@204000000 {
 	compatible = "apple,t8015-gpu";
-	reg = <0x0 0x04000000 0x0 0x100000>,	/* RGX  */
-	      <0x0 0x04d00000 0x0 0x20000>,	/* Fender */
-	      <0x0 0x04d20000 0x0 0x20000>;	/* GFX IOP */
+	reg = <0x2 0x04000000 0x0 0x100000>,	/* RGX  */
+	      <0x2 0x04d00000 0x0 0x20000>,	/* Fender */
+	      <0x2 0x04d20000 0x0 0x20000>;	/* GFX IOP */
 	reg-names = "rgx", "fender", "iop";
 
 	mboxes = <&gpu_mbox>;
@@ -38,9 +45,9 @@ gpu: gpu@4000000 {
 	firmware-name = "apple/gfx-t8015.bin";
 };
 
-gpu_mbox: mbox@4d24000 {
+gpu_mbox: mbox@204d24000 {
 	compatible = "apple,t8010-a7iop-mailbox";	/* in-tree variant, reused */
-	reg = <0x0 0x04d24000 0x0 0x1000>;		/* = IOP + 0x4000 */
+	reg = <0x2 0x04d24000 0x0 0x1000>;		/* = IOP + 0x4000 */
 	interrupt-parent = <&aic>;
 	interrupts = <AIC_IRQ 260 IRQ_TYPE_LEVEL_HIGH>,
 		     <AIC_IRQ 259 IRQ_TYPE_LEVEL_HIGH>,

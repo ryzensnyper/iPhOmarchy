@@ -452,3 +452,59 @@ This boot is **read-only** apart from the existing `ps_gfx` retoggle.
 | `bridge disp0` prints, then boot dies on the GFX window | the GFX bridge itself is not answering — bridge 8 is the suspect, and the fix is a write, not a read |
 | `pmp-call STARTEP(32) -> 0` and PMP syslog lines appear | the PMP service is now really talking to us |
 | `mailbox: A2I control …` prints | **the block is clocked** — Phase 2.2 can proceed |
+
+### Boot #12 verdict (executed 2026-11-12)
+
+Payload `b074b748…`.  PMP up at 36.3 s, `ps_gfx` `0x1f0003ff`, then
+`GFX-STAGE 2/13` at 38.717 s and **the first `readl()` of `0x19000000`
+(DISP0 bridge) hung the bus** — no `bridge disp0` line, phone reset to iOS.
+That is the last row of the table above: the bridge model was wrong.  Full
+write-up and the reason in `probe/STATUS.md` ("the AP alias").
+
+---
+
+# Boot #13 plan (2026-11-12, after boot #12) — the address fix
+
+**One finding, one change.**  The ADT lists Apple blocks at the address
+*iBoot* uses; the AP reaches them at **ADT + `0x200000000`**.  Every node in
+`t8015.dtsi` follows that rule (pmgr `0x232000000`, pmp `0x232300000`, i2c
+`0x22e200000`, …) and works; the GPU node was the only exception, carrying the
+raw ADT address.  The t8010 GPU node in the same tree is at `0x201000000`.
+
+| node | old (ADT) | boot #13 |
+|---|---|---|
+| RGX | `0x04000000` | `0x204000000` |
+| Fender | `0x04D00000` | `0x24D00000` |
+| GFX IOP | `0x04D20000` | `0x24D20000` |
+| IOP mailbox | `0x04D24000` | `0x24D24000` |
+| GFX bridge / `AGX_PMGR` | `0x05000000` | `0x205000000` |
+| DISP0 bridge (reference) | `0x19000000` | `0x219000000` |
+
+Consequence: boots #2–#12 never touched the GPU.  Every "dark block" read went
+to an address with no responder, which hangs the bus exactly like a gated
+block.  The block may well have been powered and clocked since boot #2.
+
+### Stages
+
+| stage | action |
+|---|---|
+| `0/13` | wait for `apple_t8015_pmp_up` |
+| `1/13` | `ps_gfx` + `0x80300` bank dump |
+| `2/13` | **new**: RGX identity, `0x204000000+0x00..0xff` (`ROGUE_CR_CORE_ID` at `+0x18`) |
+| `3/13` | **new**: Fender identity, `0x24D00000+0x2000..0x207f` |
+| `4/13` | bridge windows at `0x219000000` (reference) and `0x205000000` (`AGX_PMGR`) |
+| `5/13` | `STARTEP(32)` + the six candidate messages (unchanged) |
+| `6/13` | `ps_gfx` off→on retoggle |
+| `7/13` | mailbox read `0x24D24000+0x08` |
+| `8/13`…`13/13` | RTKit init, Fender/IOP window copy + enable, run bit, HELLO, RGX re-read |
+
+### Per-outcome interpretation
+
+| log | meaning |
+|---|---|
+| any `rgx +…` line with non-zero data | **the block answers** — the GPU was never dark, and Phase 2.3 identity is one read away |
+| boot dies after `2/13`, no `rgx +` line | `0x204000000` does not answer either; the alias is not universal and the address map needs re-derivation before any write |
+| `rgx` all zero, `fender +…` prints | RGX window answers but is unconfigured/reset — `AGX_PMGR` (`0x205000000`) becomes the next target |
+| `mailbox: A2I control @… = …` | IOP sub-block clocked — Phase 2.2 is a firmware question again |
+| `GFX firmware is up; RTKit handshake complete` | Phase 2.2 passes |
+
