@@ -2785,3 +2785,41 @@ buffer offset}) has offsets 0x20/0x24, 0x48/0x4c, 0x140/0x148,
 A10-pair at 0xc30/0xc34, the very offsets our driver writes ✓.  The A12's
 hwdata B is at +0x640 (the IO maps) / +0x958 (power mode) / +0xa70 (perf
 tables) / +0x16d0 (unit masks) — a newer ABI, but the same idea.
+
+### Boot #48: the core is alive, the Kingfisher is not (payload `66963de6…`)
+
+The PMGR's ps bank decodes (our driver's own decode ✓):
+
+```
+ps_gfx @0x80338 = 0x1f0003ff  (auto 1, clk 1, pwr 1, actual 0xf, target 0xf)
+ps @0x80308    = 0x1f0f00ff  (auto 1, clk 0, pwr 0)
+ps @0x80318    = 0x1400024f  (auto 1, clk 1, pwr 0)
+```
+
+and the retoggle (writing 1 to the GFX's entry ✓) only cleared the "auto"
+bit ✓ — the PMP did not take it back ✓.
+
+So the **GFX device (id 124) is clocked and powered** ✓, and the GPU core
+answers (CORE_ID = 0x7E1 ✓).  What is dead is the **GFX-KF** — the
+Kingfisher, the side that owns the *mailbox IRQs* (259-262 ✓) and the
+IOP/Fender windows ✓.  The GFX-KF is one of the three `no_ps` devices
+(GFX-SGX 148, GFX-KF 149, GFX-BUSY 123 ✓) — it has no power-*state*
+register at all, so its gate is a plain gate register in the
+`pmgr1 + 0x80000` bank ✓, indexed by device id:
+
+| device | id | offset in that bank |
+|---|---|---|
+| GFX-BUSY | 123 | +0x3b8 |
+| GFX-SGX | 148 | +0x4a0 |
+| GFX-KF | 149 | +0x4a8 |
+
+The bank we dumped only showed entries at +0x00…+0x38, because the dump was
+0x40 bytes long ✗ — the GPU's entries are beyond it ✓.
+
+Also dumped `pmgr0 + 0xa0000`: that is the **DVFS/voltage table** on the A11
+(0xbb8ffc05 ✓, 0x380ffc05 ✓ — the A12's guide calls the equivalent table
+"the GPU DVFS table" ✓), not the rail register, so the A11's rail register
+is probably at `pmgr0 + 0x70000` ✓ (the A12's offsets are swapped ✗).
+
+**Boot #49** (payload `7c8722dd…`, built) dumps that bank wide (0x600 bytes ✓)
+plus `pmgr0 + 0x70000` ✓, so the three GPU entries can be read directly.
