@@ -3422,3 +3422,30 @@ the sweep prints its replies inline), then
   reply would be a smoking gun), and a payload-0 control;
 * B: the read sweep across **all 256** device indices; anything not
   returning `0xffffffff` is marked LIVE.
+
+### Boot #62: the read ignores the payload; all 256 pages read all-ones (payload `d87ff1b4…`)
+
+Tree `ba03eead168b` (+ `d457ada24a8e` build fixes).  Clean boot.
+
+* the PMP driver now captures the ep-32 replies (`apple_t8015_pmp_reply_seq()`
+  / `apple_t8015_pmp_reply_wait()`), so the sweep prints replies inline.
+* **phase A**: cmd 3 with the address in the payload — `0x95202`,
+  `0x32080000` and `0` ALL returned `0x40095ffffffff`: the device echoed,
+  the payload **ignored**.  Hypothesis (b) is dead.
+* **phase B**: the read sweep across all 256 device indices — **0 live**,
+  every page reads `0xffffffff`.  Mailbox dark, bank unchanged.
+
+**The firmware-side explanation** (offline, this session): the clg
+handler resolves its target through an **eight-entry registry**
+(`0x01017284`: count 8, then entries; walked by the split helper at
+`0x0100a7a8` and by the transaction dispatcher at `0x0100dce4`, index =
+the handle's **high 16 bits**).  Our device values (123/124/148/149)
+can never be a registry index (0..7) — every request so far failed the
+resolve silently and only echoed.  Also decoded: the mgmt type-3 tbb
+target `0x0100de0b` is a common queueing path (types 3,4,5,6,10,11,14,15)
+that feeds the transaction dispatcher (`0x0100dc60`, types 1..8, its own
+tbb at 0x0100dc96).
+
+**Boot #63** (tree `3400f64a6f76`): sweep registry-sized device values
+0..7 — reads on ep 32 (a mapped page will not read all-ones), writes on
+ep 32, and the device field of the management type-3 clg form.

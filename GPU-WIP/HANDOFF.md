@@ -29,9 +29,12 @@ value (0xffffffff so far), cmd 5 acks 20/20 and changes nothing, and the
 ack echoes the device at bits 32..39 (where ApplePMP's
 `pm_msg_get_device()` reads it).  Drive slowly (~200 ms/message) —
 boot #59's 100 ms cadence outran the PMP's ack pace and messages were
-dropped.  **Boot #61 (tree `29afcad77de1`) sweeps the cmd-3 read across
-all 64 device indices** to map the PMP's own device space; see
-`probe/STATUS.md` boots #59/#60 for the full data.
+dropped.  Boots #61-#62 mapped the read: every device page 0..255 reads
+`0xffffffff` and the payload is ignored — because the clg handler
+resolves its target through an **eight-entry registry** (0x01017284,
+index = the handle's high 16 bits), which our PMGR device ids can never
+index.  **Boot #63 (tree `3400f64a6f76`) sweeps registry-sized device
+values 0..7** on both channels.  See `probe/STATUS.md` boots #59-#62.
 
 (The older plan below is superseded by that; it remains for background.)  The v2 message shape is now decoded from ApplePMP.kext's
 own send path (`ApplePMP::_sendPMCommand`'s construction at
