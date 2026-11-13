@@ -3449,3 +3449,38 @@ tbb at 0x0100dc96).
 **Boot #63** (tree `3400f64a6f76`): sweep registry-sized device values
 0..7 — reads on ep 32 (a mapped page will not read all-ones), writes on
 ep 32, and the device field of the management type-3 clg form.
+
+### Boot #63: registry-sized devices 0..7 — still all-ones; the registry is runtime-populated (payload `c4cc74eb…`)
+
+Tree `3400f64a6f76`.  Clean boot.
+
+* the small-device read sweep (0..7 on ep 32): **0 live**, all
+  `0xffffffff`; the ep-32 writes (dev 0..7) changed nothing; the mailbox
+  stayed dark.
+* **the mgmt sweep was my bug**: I built the messages with
+  `(0x40000003 << 32)` instead of `(3 << 52)` — they went out as type-0
+  garbage.  Boot #57's correct form is `((3ULL << 52) | (dev << 44) |
+  (gate << 32) | payload)`.
+* during the 9d window bank[20] toggled `0x200 -> 0x2ff` and **bank[40]
+  `0x1000230f -> 0x1f0f23ff`** (a shape suspiciously like a ps entry
+  turning on).  Not attributed to a specific message.
+
+**Offline decode (this session)**:
+
+* the mgmt type-3 tbb target `0x0100de0b` is a common *queueing* path
+  (types 3,4,5,6,10,11,14,15) feeding the transaction dispatcher at
+  `0x0100dc60` (types 1..8, tbb at 0x0100dc96), whose type-5 path does
+  the registry lookup with `obj[4]`.
+* the registry at `0x01017284`: count at +0 (8), **entries pointer at
+  +4 = 0x01017264**, and in the firmware image **all 8 entries are
+  ZERO** — the registry is populated at RUNTIME by the firmware's
+  device drivers.  The entries are C++ objects (vtable at obj+8); the
+  getter/invoker helper is at `0x0100a23c`; 13 code sites reference the
+  struct (a cluster at 0x100a210..0x100a878).
+* so the valid handles are `(idx << 16) | id` with idx 0..7, but WHICH
+  devices registered at runtime is not decodable from the image alone.
+
+**Where this leaves the bring-up**: the PMP v2 channel on ep 32 is
+fully live and understood at the message level; the gate write is
+gated on the firmware's runtime registry, which we cannot see from the
+AP.  The ranked next moves are in `HANDOFF.md` §8.
