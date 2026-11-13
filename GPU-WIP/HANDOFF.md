@@ -23,20 +23,49 @@ AP cannot write directly (boot #58).
 So the next session's job is: **get the PMP to ungate the GFX-KF**, or find
 another way to wake the IOP.
 
-**Boot #59/#60 opened the PMP v2 channel.**  Endpoint 32 is ALIVE:
-commands 1/3/5 ack with (cmd+1) at bits 48..51, cmd 3 returns a 32-bit
-value (0xffffffff so far), cmd 5 acks 20/20 and changes nothing, and the
-ack echoes the device at bits 32..39 (where ApplePMP's
-`pm_msg_get_device()` reads it).  Drive slowly (~200 ms/message) —
-boot #59's 100 ms cadence outran the PMP's ack pace and messages were
-dropped.  Boots #61-#62 mapped the read: every device page 0..255 reads
-`0xffffffff` and the payload is ignored — because the clg handler
-resolves its target through an **eight-entry registry** (0x01017284,
-index = the handle's high 16 bits), which our PMGR device ids can never
-index.  **Boot #63 (tree `3400f64a6f76`) sweeps registry-sized device
-values 0..7** on both channels.  See `probe/STATUS.md` boots #59-#62.
+**The PMP v2 channel on endpoint 32 is fully live and understood at the
+message level** (boots #59-#63, tree `3400f64a6f76`):
 
-(The older plan below is superseded by that; it remains for background.)  The v2 message shape is now decoded from ApplePMP.kext's
+```
+msg = (1 << 52) | (cmd << 48) | (domain << 42) | ((arg >> 12) << 16)
+ack = (cmd+1) << 48 | device-echo << 32 | value
+```
+
+cmds 1/3/5 respond; drive at ≥200 ms/message or the queue drops; cmd 3
+is a read (returns a 32-bit value, ignores the payload, echoes the
+device at bits 32..39); cmd 5 acks and changes nothing visible.
+
+**The blocker**: the firmware's clg handler resolves its target through
+an **eight-entry runtime registry** (`0x01017284`: count at +0, entries
+pointer at +4 = 0x01017264; index = the handle's high 16 bits; entries
+are C++ objects, vtable at obj+8; the getter/invoker is 0x0100a23c).
+The registry is **EMPTY in the firmware image** — populated at runtime
+by the PMP's device drivers — so the valid handles (idx 0..7 × id) are
+not decodable from the image, and every gate request so far (device
+values 123/124/148/149, or 0..7) has failed the resolve silently.
+
+**Ranked next moves**:
+
+1. **Offline: decode the registration path.**  13 code sites reference
+   the registry struct (a cluster at 0x100a210..0x100a878); find the
+   one that STORES into the entries array and its callers — they name
+   the devices (FourCC strings) and the ids that go with them.
+2. **Boot #64: the handle form.**  On a fresh boot, right after
+   start_ep(32) (whose `0` reply may itself be a handshake step), send
+   the handle directly in the (arg>>12)<<16 field:
+   `msg = (1<<52)|(3<<48)|((idx<<16)|id)` for idx 0..7 × a few ids —
+   if the read resolves through the same registry it will return the
+   device's register instead of 0xffffffff.  Same for cmd 5.
+3. **Boot #64 also: redo the mgmt type-3 sweep correctly** (boot #63's
+   was broken: `(0x40000003 << 32)` instead of `(3 << 52)`):
+   `((3ULL << 52) | (dev << 44) | (gate << 32) | payload)` for
+   dev 0..7 × gate {0, 1, 149} × payload {0, 1}, watching the mailbox.
+4. **Investigate bank[40]** (`0x1000230f -> 0x1f0f23ff` during boot
+   #63's 9d window — a ps-entry-shaped change we could not attribute).
+5. The older leads (§8.3): the ADT's `meta-sw-interrupt` (never tried),
+   the PMP's mgmt type-6 `SET_IOP_PWR_STATE` with the GFX identity.
+
+See `probe/STATUS.md` boots #59-#63 for the full data.  The v2 message shape is now decoded from ApplePMP.kext's
 own send path (`ApplePMP::_sendPMCommand`'s construction at
 0xfffffff00610b868), which is better evidence than the kext vtables:
 
