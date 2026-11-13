@@ -3484,3 +3484,35 @@ Tree `3400f64a6f76`.  Clean boot.
 fully live and understood at the message level; the gate write is
 gated on the firmware's runtime registry, which we cannot see from the
 AP.  The ranked next moves are in `HANDOFF.md` §8.
+
+### Boot #64: bare-cmd acks reproduced; the bank toggle lives in the mgmt phase (payload `e79f50f3…`)
+
+Tree `ca9c2729edb8`.  Clean boot.
+
+* **A — the bare commands reproduced boot #59 exactly**: on the fresh
+  endpoint, cmds 1/3/5 acked (`0x2000000000000`, `0x40000ffffffff`,
+  `0x6000000000000`), 2/4/6 silent.  On the 9d re-run **nothing acked** —
+  the once-per-boot statefulness is now confirmed: the endpoint answers
+  each bare command exactly once per boot.
+* **B — the registry-handle reads** (idx 0..7 × id {0, 1, 0x95, 0x97}
+  in the (arg>>12) field): **0 live**.
+* **C — the correct mgmt type-3 sweep**: the bank[20]+bank[40] toggle
+  fired **inside the mgmt phase**, cleanly attributed this time:
+  msg `0x0030509500000001` = type 3, **dev 5, gate 149, payload 1** →
+  bank[20] `0x200→0x2ff`, bank[40] `0x1000230f→0x1f0f23ff`; the next
+  message (dev 6, gate 0, payload 0) reverted both.  The mailbox stayed
+  dark.
+* cross-boot pattern: the bank[20]/bank[40] toggle has now appeared in
+  #59, #62, #63 and #64 — and **only during mgmt-message phases** (boot
+  #60's 13 s read-only sweep had none).  Not yet proven causal.
+
+**Next moves** (updated in `HANDOFF.md` §0):
+
+1. offline: what does `AppleA7IOPV4GFX` do around the mailbox besides
+   the register map — the full bring-up (clocks/resets) vs our stages;
+2. offline: who populates the eight registry entries at runtime (the
+   13 reference sites, the store into the entries array);
+3. boot #65: mgmt type 3 with (dev 5, gate 149) and payload as the only
+   variable — is that the magic tuple?  Watch bank[20]/bank[40], the
+   IOP window and the mailbox;
+4. the untried `meta-sw-interrupt` lead.

@@ -44,28 +44,32 @@ by the PMP's device drivers — so the valid handles (idx 0..7 × id) are
 not decodable from the image, and every gate request so far (device
 values 123/124/148/149, or 0..7) has failed the resolve silently.
 
+**Boot #64 (tree `ca9c2729edb8`)**: the bare-cmd acks reproduce exactly
+(cmds 1/3/5 ack once per boot, 2/4/6 never); the registry-handle reads
+(idx 0..7 × id {0,1,0x95,0x97}) read all-ones; and the bank[20]+bank[40]
+toggle fired cleanly inside the mgmt type-3 phase — ON at
+(type 3, dev 5, gate 149, payload 1), OFF at (dev 6, gate 0, payload 0).
+The toggle has appeared in #59/#62/#63/#64 and only during mgmt phases.
+The mailbox stayed dark throughout.
+
 **Ranked next moves**:
 
-1. **Offline: decode the registration path.**  13 code sites reference
-   the registry struct (a cluster at 0x100a210..0x100a878); find the
-   one that STORES into the entries array and its callers — they name
-   the devices (FourCC strings) and the ids that go with them.
-2. **Boot #64: the handle form.**  On a fresh boot, right after
-   start_ep(32) (whose `0` reply may itself be a handshake step), send
-   the handle directly in the (arg>>12)<<16 field:
-   `msg = (1<<52)|(3<<48)|((idx<<16)|id)` for idx 0..7 × a few ids —
-   if the read resolves through the same registry it will return the
-   device's register instead of 0xffffffff.  Same for cmd 5.
-3. **Boot #64 also: redo the mgmt type-3 sweep correctly** (boot #63's
-   was broken: `(0x40000003 << 32)` instead of `(3 << 52)`):
-   `((3ULL << 52) | (dev << 44) | (gate << 32) | payload)` for
-   dev 0..7 × gate {0, 1, 149} × payload {0, 1}, watching the mailbox.
-4. **Investigate bank[40]** (`0x1000230f -> 0x1f0f23ff` during boot
-   #63's 9d window — a ps-entry-shaped change we could not attribute).
-5. The older leads (§8.3): the ADT's `meta-sw-interrupt` (never tried),
-   the PMP's mgmt type-6 `SET_IOP_PWR_STATE` with the GFX identity.
+1. **Offline: what does `AppleA7IOPV4GFX` do around the mailbox besides
+   the register map** — the full bring-up (clocks/resets/prepare)
+   compared against our stages.  The mailbox registers are dead while
+   the Fender device-info page (same window) reads live, so a missing
+   clock/reset step is as likely as a missing gate.
+2. **Offline: who populates the eight registry entries at runtime** (13
+   code sites reference the struct; find the store into the entries
+   array and its callers).
+3. **Boot #65: mgmt type 3 with (dev 5, gate 149) and payload as the
+   only variable** — is (dev 5, gate 149, payload 1) the magic tuple?
+   Watch bank[20]/bank[40], the IOP window and the mailbox.
+4. The untried `meta-sw-interrupt` lead (`/arm-io/sgx`,
+   `0x233104020`/`0x2331040a0`, write 2 then 8).
+5. The PMP's mgmt type-6 `SET_IOP_PWR_STATE` with the GFX identity.
 
-See `probe/STATUS.md` boots #59-#63 for the full data.  The v2 message shape is now decoded from ApplePMP.kext's
+See `probe/STATUS.md` boots #59-#64 for the full data.  The v2 message shape is now decoded from ApplePMP.kext's
 own send path (`ApplePMP::_sendPMCommand`'s construction at
 0xfffffff00610b868), which is better evidence than the kext vtables:
 
