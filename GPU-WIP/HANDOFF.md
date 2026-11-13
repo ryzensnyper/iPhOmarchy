@@ -54,21 +54,22 @@ The mailbox stayed dark throughout.
 
 **Ranked next moves**:
 
-1. **Boot #69 (tree `f439476053cf`, committed, NOT built): dump the PMP's
-   runtime firmware from its SRAM** (`0x232500000`, 128 KiB, AP-readable —
-   proven boot #68), crash once with the isolated shape (cmd 1 + dev 149),
-   then print the SRAM delta.  The runtime code differs from the image
-   file (self-patched at load) — the dump IS the ground truth for the
-   resolver/dispatcher RE.
-2. **Offline: re-derive the registry layout from the runtime dump** (the
-   struct `{8, 0x01017264}` is live at PA `0x232517284`; the "entries"
-   area holds runtime-built objects/code).
-3. **Offline: decode the two crash sites** (`0x010086a2` byte-walk;
-   `0x0100d64c` dispatcher) in the runtime image.
+1. **Boot #70 (tree `70da27210e7f`, committed, NOT built): cmd 1 across
+   the device ids** (0-8, 54, 100, 120-126, 148, 150-152) with the full
+   bank/mailbox watch after each — cmd 1 on live devices was only ever
+   crash-checked, never watched.  Ends with the deliberate
+   (cmd 1, dev 149) crash + recovery for a fresh crashlog.
+2. **Offline: decode the cmd-1 handler's table writer** — the code at
+   `0x10004a8/0x10004b4/0x1006d38/0x1006eb8/0x100d364/0x1010810`
+   (references to the table's page 0x01014000).
+3. **Offline: decode the runtime RAM objects** — the 0xb0bed0ff records
+   at `0x0101728c` (stride 0x18) and the list head `0x0101de70` (the
+   registered device graph — names/ids).
 4. The untried `meta-sw-interrupt` lead (`/arm-io/sgx`,
    `0x233104020`/`0x2331040a0`, write 2 then 8).
 5. The PMP's mgmt type-6 `SET_IOP_PWR_STATE` with the GFX identity.
 
+See `probe/STATUS.md` boots #59-#69 and `probe/phase2.2/PMP-CRASH-LOG.md`
 See `probe/STATUS.md` boots #59-#68 and `probe/phase2.2/PMP-CRASH-LOG.md`
 See `probe/STATUS.md` boots #59-#67 and `probe/phase2.2/PMP-CRASH-LOG.md`
 for the full data.See `probe/STATUS.md` boots #59-#64 for the full data.  The v2 message shape is now decoded from ApplePMP.kext's

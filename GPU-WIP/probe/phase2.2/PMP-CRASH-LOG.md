@@ -159,3 +159,70 @@ builds 15 gate operations and crashes before finishing.  The next step
 is decoding the device list (0x0101de70) and the cmd-1 handler offline,
 then finding a message shape that completes the sequence instead of
 crashing.
+
+## 7. Offline decode session (post boot #69, 2026-11-13)
+
+All offline, no boot.  Code addresses valid in `pmp-t8015.bin` (the code
+pages are identical to the runtime image).
+
+### 7.1 The firmware's C++ vtables
+
+The method-pointer table spans `0x01013100..0x01013400+` (and beyond);
+`0x0100a87d` is the abstract/default stub filling unused slots.  The
+message classifier (`0x0100c02d`) is a vtable entry at `0x010132c4`.
+
+### 7.2 The transaction dispatcher (0x0100dc60) — the type table
+
+`obj[8]` is resolved through the split helper, then
+`ubfx r6, #20, #4` on the resolved word picks the transaction type and a
+`tbb` at `0x0100dc96` dispatches:
+
+| type | target | note |
+|---|---|---|
+| 1 | `0x0100dca0` | `movs r0, #33; bl 0x0100FEDC` then common tail — a reject-ish path |
+| 2 | `0x0100dcb0` | queue-index handling (`lsrs/uxth/strh [r10,#12]`) |
+| 3 | `0x0100dcce` | — |
+| 4 | `0x0100dda8` | — |
+| 5,6,7 | `0x0100ddac` | the registry-lookup family |
+| 8 | `0x0100dce4` | the registry walker |
+
+### 7.3 The crash, fully explained
+
+The `0x010086a2` loop is a **printf emit**: `r8` = the printer object,
+`r2 = [r8]` = its putc, `blx r2` per character, `r11` = the precision
+counter, `r5` = the string pointer.  **CrgA r5 = 0x73 (115)** — the
+firmware called print("%s", 115): an integer passed as a string.  The
+message it tried to log never made it out (no syslog prints ever reached
+us in any boot).  cmd 1 + dev 149 → error path → logging bug → death
+mid-walk, with the 15-op table half-written.
+
+### 7.4 The 15-op table (the Kingfisher bring-up sequence)
+
+Pairs at `0x01014330`, 15 entries: `{0x0095X643, 0x00600000}`,
+X = 0x0..0xe:
+* device **0x95 = 149** at bits [23:16]
+* index at [15:12]
+* value **0x643** at [11:0]
+* `0x00600000` — mode 3 + direction, clg-command-word family
+
+`0x01014000` (the table's page) is referenced from code at
+`0x10004a8, 0x10004b4, 0x1006d38, 0x1006eb8, 0x100d364, 0x1010810` — the
+table writer is among these.  Not fully decoded yet.
+
+### 7.5 The firmware's strings (complete inventory, 285 strings)
+
+The relevant ones: `pm_enqueue_message failed status %u` (0x01012b1c),
+`MBI queue overflow:%s` (0x01012bb6), `Mbox:%s (h=%p %x=%x)`
+(0x01012bde), `!clg: %08x` (0x01012c60), `Not implemented`
+(0x01012c6b), `Invalid AP power: %d`, `RTKit: %s - Client: %s`,
+`pmon-%s-%s`, `stk_fail`.  **No device names in the image** — the names
+live in the runtime-built RAM objects (the 0xb0bed0ff records / the
+0x0101de70 list).
+
+### 7.6 What this means
+
+The PMP *has* a built-in bring-up sequence for the Kingfisher (15 gate
+operations).  cmd 1 asks it to run; it dies on a logging bug part-way.
+The remaining question is what state the handler needs to complete —
+boot #70 sweeps cmd 1 across the device ids with full watching, then
+crashes deliberately for a fresh crashlog.
