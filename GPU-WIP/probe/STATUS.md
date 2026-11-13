@@ -3643,3 +3643,25 @@ CPU_CTRL/status/bank[6]/[20]/[40] for 2 s:
   (b6 `0x1f0000ff`, b20 `0x200`, b40 `0x1000230f`);
 * the "brief KF power-up" hypothesis is dead: the recovered firmware's
   dev-149 path is invisible and inert at millisecond resolution.
+
+### Boot #73: the type-6 replay registers dev 149 and the KF bring-up runs (payload `340bd67f…`)
+
+Tree `98d844251891`.  Replaying the 15 table messages
+(`(6<<52)|0x0095X643`) on mgmt:
+
+* **255-word SRAM delta** on the first replay, including
+  `0x01017260: deadc0de -> b0bed0ff` — **a registry magic record
+  appeared: device 149 got registered**; our message pairs landed in the
+  transaction slots (`0x010166b8`, `0x010166f8` → `00950643 00600000`).
+* The KF attempt (cmd 1 + dev 149) then **ran without crashing**: the
+  firmware overwrote the transaction slot with our own ep-32 message
+  (`00950643 00600000 -> 00950000 00110000`) and set two power-state
+  slots to **0x20 (IOP ON)** (`0x01016680`, `0x01016698`).
+* Second pass (registry already valid): the replay moved the bank —
+  **idx 4 → bank[20] ON (`0x200→0x2ff`), idx 5 → OFF**; the KF attempt
+  set bank[20] ON again; no crash anywhere.
+* The mailbox stayed dark (CPU_CTRL 0 at the sampled instants).
+
+The deadlock is broken: the replayed type-6 transactions register the
+device, after which cmd 1 + dev 149 executes the bring-up.  Next: the
+full 15-op sequence one op at a time with per-op watching.
