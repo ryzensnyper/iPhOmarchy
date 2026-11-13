@@ -3540,3 +3540,27 @@ Tree `ca9c2729edb8`.  Clean boot.
   `rtk_ep_work`.  The bank toggles of #59/#64 are post-crash restart
   artifacts.  Full decode: `probe/phase2.2/PMP-CRASH-LOG.md` — next boot
   uses the crash as an oracle (vary one field, read r0).
+
+### Boot #68: the PMP SRAM is AP-readable; the crash shape is (cmd 1, dev 149); the oracle reboots work (payload `8c7e57e4…`)
+
+Tree `2c6d3501c9ca` + extern fix.  No SError — the SRAM window
+(`0x232500000`, 128 KiB, inside the pmgr0 span) reads live state:
+
+* the registry struct at PA `0x232517284` = `{8, 0x01017264}` — matches
+  the image, so the VA→PA offset (`0x222500000`) is right *there*;
+* but the "entries" at PA `0x232517264` hold Thumb-2 code bytes at
+  runtime (zeros in the image) — **the runtime firmware self-patches**;
+* the crash chain's `0x0101882c` is zeros in the file, live code at
+  runtime — same conclusion.
+
+Oracle sweep (with `apple_rtkit_is_crashed()` + `reinit/boot/start_ep`
+recovery between crashes): **only `cmd 1 + dev 149` crashes** (cmd 0,
+2..15 × dev 149 alive; cmd 1 × dev {148,123,124,54} alive).  The reboot
+recovered the PMP (~16 s) and the 9d re-run found the same shape ALIVE —
+the crash is once per firmware load.  The minimal crash dies at
+`0x010086a2` (`ldrb r0, [r5]`, a byte-walk off the end), NOT #67's
+`0x0100d64c` — two sites for one shape, state-dependent.
+
+Next: boot #69 dumps the whole runtime image from SRAM, crashes once,
+and prints the SRAM delta — the true runtime code plus the crash
+footprint.

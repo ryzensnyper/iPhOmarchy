@@ -54,22 +54,22 @@ The mailbox stayed dark throughout.
 
 **Ranked next moves**:
 
-1. **Boot #68: the crash oracle.**  The PMP firmware crashes on malformed
-   ep-32 messages and leaves a CrgA register dump; the resolver hands the
-   dispatcher `r0 = 4` for our current shape.  Sweep one field at a time
-   (cmd 0..15 × dev {0, 54, 123, 124, 148, 149} × the v2 flag on/off),
-   300 ms apart, each followed by a 700 ms settle; read the crash/no-crash
-   and the r0 value out of the crash log.  Any (cmd, dev) that yields a
-   *pointer* instead of 4 is the shape the firmware expects.
-2. **Offline: decode the resolver** (`0x01002678` → its far call) and the
-   dispatcher (`0x0100d640`, `tst r0, #28` on obj+20) to learn what the
-   r0 values mean (error codes? transaction types?) without more boots.
-3. **Offline: who populates the eight registry entries at runtime** (13
-   code sites reference the struct at 0x01017284).
+1. **Boot #69 (tree `f439476053cf`, committed, NOT built): dump the PMP's
+   runtime firmware from its SRAM** (`0x232500000`, 128 KiB, AP-readable —
+   proven boot #68), crash once with the isolated shape (cmd 1 + dev 149),
+   then print the SRAM delta.  The runtime code differs from the image
+   file (self-patched at load) — the dump IS the ground truth for the
+   resolver/dispatcher RE.
+2. **Offline: re-derive the registry layout from the runtime dump** (the
+   struct `{8, 0x01017264}` is live at PA `0x232517284`; the "entries"
+   area holds runtime-built objects/code).
+3. **Offline: decode the two crash sites** (`0x010086a2` byte-walk;
+   `0x0100d64c` dispatcher) in the runtime image.
 4. The untried `meta-sw-interrupt` lead (`/arm-io/sgx`,
    `0x233104020`/`0x2331040a0`, write 2 then 8).
 5. The PMP's mgmt type-6 `SET_IOP_PWR_STATE` with the GFX identity.
 
+See `probe/STATUS.md` boots #59-#68 and `probe/phase2.2/PMP-CRASH-LOG.md`
 See `probe/STATUS.md` boots #59-#67 and `probe/phase2.2/PMP-CRASH-LOG.md`
 for the full data.See `probe/STATUS.md` boots #59-#64 for the full data.  The v2 message shape is now decoded from ApplePMP.kext's
 own send path (`ApplePMP::_sendPMCommand`'s construction at

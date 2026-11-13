@@ -87,3 +87,34 @@ message fields IS the message format.  Planned sweeps (one boot):
 If some (cmd, dev) makes the resolver produce a *pointer* instead of 4,
 that message shape is the one the firmware expects — send it and watch the
 mailbox.
+
+## 5. Boot #68: the SRAM window and the isolated crash shape
+
+Two results that change the game:
+
+* **The PMP's SRAM is AP-readable.**  `0x232500000` (128 KiB, inside the
+  pmgr0 span) reads fine and holds LIVE firmware state: the registry
+  struct at PA `0x232517284` = `{count 8, entries-ptr 0x01017264}`,
+  exactly as offline.  But the *entries area* (PA `0x232517264`) holds
+  Thumb-2 code bytes at runtime where the image file has zeros — **the
+  runtime firmware differs from `pmp-t8015.bin`** (self-patched or
+  relocated at load).  Crash-chain return address `0x0101882c` is zeros
+  in the file too.  So: dump the SRAM for ground truth (boot #69).
+* **The crash shape is isolated and the oracle is repeatable.**
+  `cmd 1 + dev 149` is the ONLY crashing shape (cmd 0, 2..15 with dev
+  149 alive; cmd 1 with dev 148/123/124/54 alive), it crashes with no
+  preamble, and `apple_rtkit_reinit + boot + start_ep(32)` brings the
+  PMP back (~16 s incl. timeouts) — after which the same message no
+  longer crashes (once per firmware load).
+
+The minimal crash (no preamble) dies at a DIFFERENT site than #67's
+post-preamble crash:
+
+* #68 PC `0x010086a2` = `ldrb r0, [r5]` — a byte-walk running into
+  unmapped memory; chain `0x0101882c <- 0x010187f2 <- 0x01011894 <-
+  0x01010c56 <- 0x010094d8` (Ccst, six deep).
+* #67 PC `0x0100d64c` = `ldr r0, [r0, #20]`, r0 = 4; chain
+  `0x01001852 -> 0x01002678 (translate) -> 0x0100d640`.
+
+Same message, two crash sites, state-dependent — the message triggers a
+fragile path, and which load falls over depends on prior state.
