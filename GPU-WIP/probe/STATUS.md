@@ -3516,3 +3516,27 @@ Tree `ca9c2729edb8`.  Clean boot.
    variable — is that the magic tuple?  Watch bank[20]/bank[40], the
    IOP window and the mailbox;
 4. the untried `meta-sw-interrupt` lead.
+
+### Boots #65-#67: the kext-shaped sends, the pulse hunt, and the PMP crash oracle
+
+* **#65** (payload `6ec2f49b…`, tree `ce13dbfd1a4e`): the kext-shaped
+  cmd-4/6 sends (device at [41:16], payload at [15:0]).  The bank[20]/[40]
+  toggle fired at the two consecutive cmd-4 messages to **dev 148**
+  (ON at payload 0, OFF at payload 1, ~216 ms apart); nothing on dev 149.
+  Mailbox stayed dark.
+* **#66** (payload `af484c49…`, tree `057b75e49276`): the pulse hunter —
+  54 tight polls (2 ms granularity, 180 ms after each send) around cmd-4
+  sends to dev {148,149,123} × payload {0,1,15}, 3× each.  **No mailbox
+  pulse, no bank movement at all.**  (Note: the final watch's
+  `bank[N] 0x0 -> …` lines are an artifact — the rewrite dropped the
+  `bank_prev_last[]` init; fixed in #67's tree.)
+* **#67** (payload `f30b3cc6…`, tree `8b8803ee273e`): replayed boot #59's
+  crashing sequence on purpose.  The PMP died at 49.18 s on the same tail
+  (`cmd 1 + dev 149`) and left a full crash log.  `rtkit-crashlog.c` now
+  parses **CrgA** (32-bit regs) and dumps unknown sections raw.
+  **PC = 0x0100d64c** (`ldr r0, [r0, #20]` with **r0 = 4** — the address
+  resolver handed the transaction dispatcher the integer 4), LR 0x01001856,
+  chain 0x01001852 → 0x01002678 (address translate) → 0x0100d640, thread
+  `rtk_ep_work`.  The bank toggles of #59/#64 are post-crash restart
+  artifacts.  Full decode: `probe/phase2.2/PMP-CRASH-LOG.md` — next boot
+  uses the crash as an oracle (vary one field, read r0).
