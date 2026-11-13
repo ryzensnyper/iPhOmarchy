@@ -528,3 +528,10 @@ bank movement this time, MU dark.  **The window readback is live** (DMA
 address + size read back as written; IOP enable took) — the AP-side bring-up
 mechanism is verified working end to end, so the blocker is the IOP
 reset/clock (PMP gate).  Boot #82: cmd-3 state reads on 149/124/148/123.
+
+## Boot #82 (2026-11-14)
+
+All cmd-3/5 state reads silent.  **`d124 cmd1` pulsed bank[40] ON
+(`0x1000230f → 0x1f0f23ff`) and reverted ~1.2 s later** — the PMP power-request
+path is live.  Boot #83 kicks the Fender power state (Fender+0x1000) BEFORE
+the window copy + run bit, per isPoweredOffWaitingForKicks().

@@ -3772,4 +3772,26 @@ timebase, window remap, run bit); the firmware does not start.  The remaining
 suspect is the IOP's reset/clock held by the PMP (bank[0]).  Boot #82 plan:
 **cmd-3 (read state) on dev 149/124/148/123** — the PMP acks its state
 directly (bare cmd3 acked `0x00040000ffffffff` for device 0xff), giving the
-PMP's view of each GFX device without touching anything.
+PMP's view of each GFX device without touching anything.\n
+## Boot #82 — cmd-3/5/1 state reads (kernel `9733eed6d4c1`, payload `5d749615…`)
+
+**Setup**: bare cmds + registration, then cmd-3 (read state), cmd-5 (query?),
+cmd-1 per device for dev 149/124/148/123 (1 s ack timeout, bank0 + bank40 in
+every ack line).
+
+**Result**:
+- **All state reads silent** — cmd-3/cmd-5 on the GFX devices never ack (only
+  the once-per-boot bare acks; device-specific reads are fire-and-forget).
+- **`d124 cmd1` moved bank[40] ON**: `0x1000230f → 0x1f0f23ff` at 54.86 s,
+  reverted to `0x1000230f` by 56.12 s.  **cmd-1 = power-ON request; the PMP
+  executed it for dev 124 (parent GFX) and then reverted it ~1.2 s later**
+  (timeout path — the device never confirmed).  bank[0] never moved; MU dark;
+  `apple_rtkit_boot` → -62.  Reads changed 47 words (pass 2: 5).
+- bank[40] rest = `0x1000230f`, ON = `0x1f0f23ff` — a PMGR-PS-shaped pair.
+
+**Conclusion**: the PMP power-request path is live and observable.  The kext's
+`isPoweredOffWaitingForKicks()` implies the IOP powers off and waits for
+kicks — and the 12-stage flow only issues the Fender kick at 9/12, *after*
+the failed RTKit boot.  Boot #83: Fender power kick (`Fender+0x1000 =
+state|0x10`, poll ack) at 3b/12, before the window copy and FENDER_RUN, then
+cmd-1 on 149/148 while the kick is fresh.
