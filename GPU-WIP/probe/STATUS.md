@@ -3609,3 +3609,23 @@ Tree `70da27210e7f`.  cmd 1 swept across 21 device ids with full watching:
   `0x220`** (`0x0060000000000220`), plus ep-4 ioreport messages.
   **The 15-op table's second word `0x00600000` is type 6 — the KF
   bring-up is 15 queued SET_IOP_PWR_STATE-family transactions.**
+
+### Boot #71: dependency preambles do not prevent the crash; post-watchdog cmd 1 + dev 149 runs and moves bank[20] (payload `167200a1…`)
+
+Tree `d37e019ba725`.  Three preambles (124, 151, 123+148), each followed
+by the cmd-1/dev-149 attempt:
+
+* fresh firmware: the attempt after 124 **CRASHED** (the preamble did
+  not help); the PMP recovered via its watchdog (~15 s, boot -62);
+* after 151 and after 123+148: no crash, no bank change (the firmware
+  was mid-recovery);
+* **the 9d pass: cmd 1 + dev 149 processed WITHOUT crashing and wrote
+  bank[20] `0x2ff -> 0x200`** — the post-watchdog firmware runs the KF
+  command;
+* the deliberate crash: crashed = 0 (no crash);
+* the mailbox stayed dark at the 400 ms sampling.
+
+So the KF path runs to completion (or further than before) once the
+firmware has crash-recovered once.  Next: tight-poll the mailbox around
+the post-recovery attempt — a brief KF power-up would only show at 2 ms
+granularity.
