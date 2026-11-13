@@ -500,3 +500,22 @@ sed -n "${L},\$p" phone-kmsg.log | \
   (`0x232000000`, `0x235200000`); reading past a window's end takes an
   SError and reboots the phone.
 * One boot per explicit "go"; each rebuild needs approval.
+
+
+## Session 2026-11-14 — kernelcache RE after boot #80 (see `probe/phase2.2/KF-FIRMWARE-RE.md`)
+
+- Boot #80 result: `0x643` is the **only** accepted type-6 domain state (the
+  15-domain x {0x220, 0x20} sweep = 0 words); cmd 1 + dev 149 visibly processed
+  (power-state slots -> 0x20, transaction slot holds the message).  bank0 and
+  the MU stayed dark -> blind PMP poking saturated.
+- Kernelcache RE: independently re-derived the firmware container (AGX kext's
+  `__TEXT,__const` at file `0xbfa99f`; loadable image = `__const[9:9+0x5d320]`,
+  regenerated as `/tmp/opencode/g10p.img`; tool `tools/kf-img-extract.py`).
+  The G10P boot stub is byte-identical to the PMP firmware's.  The AGXG10P
+  kext (47 KB at `0x553ca40`) owns the Fender method table and the
+  `fenderPhys`/`fenderMap`/`startFender` ADT property names; its code is the
+  `__PLK_TEXT_EXEC` cluster `0x6b5abcc..0x6b8d000`.  String xrefs go through
+  dyld chained fixups, not raw pointers.
+- Next: boot #81 per `KF-FIRMWARE-RE.md` section 4 — PMP gate states on dev
+  149 merged with the Fender window copy + `FENDER_RUN` release and an MU poll
+  for RTKit HELLO.
