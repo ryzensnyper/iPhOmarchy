@@ -535,3 +535,12 @@ All cmd-3/5 state reads silent.  **`d124 cmd1` pulsed bank[40] ON
 (`0x1000230f → 0x1f0f23ff`) and reverted ~1.2 s later** — the PMP power-request
 path is live.  Boot #83 kicks the Fender power state (Fender+0x1000) BEFORE
 the window copy + run bit, per isPoweredOffWaitingForKicks().
+
+## Boot #83 (2026-11-14)
+
+The Fender kick is accepted and persists (state register 0x1) but the ACK
+never sets; kick + cmd-1s silent, bank0 unmoved, no HELLO.  **Found a real
+bug**: the IOP window copy was written as 32-bit words at an 8-byte stride,
+leaving +0x0c (high half of the 64-bit window address) never written — the
+boot ROM has only ever seen the truncated address 0x0c100000.  Boot #84
+writes the IOP copy as 64-bit lo/hi pairs.

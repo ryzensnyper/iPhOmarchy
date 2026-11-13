@@ -3795,3 +3795,30 @@ kicks — and the 12-stage flow only issues the Fender kick at 9/12, *after*
 the failed RTKit boot.  Boot #83: Fender power kick (`Fender+0x1000 =
 state|0x10`, poll ack) at 3b/12, before the window copy and FENDER_RUN, then
 cmd-1 on 149/148 while the kick is fresh.
+
+## Boot #83 — Fender power kick before the window/run (kernel `e4069c2e0639`, payload `5672fa21…`)
+
+**Setup**: bare cmd1 + registration, then the Fender kick (`Fender+0x1000`,
+state|0x10, poll ack), then cmd-1 on 124/149/148.  Normal stages follow.
+
+**Result**:
+- **The Fender power-state register is live and persistent**: `state @0x1000
+  = 0x0` → write `0x11` → reads `0x1` after 10 ms (request bit auto-clears,
+  state 1 sticks).  Pass 2 found it *still* `0x1` (the kick survived the
+  first pass).  **The ACK bit (bit 4) never sets; FENDER_STATUS stays 0.**
+- cmd-1s on 124/149/148: silent this boot (bank[40] did not pulse, unlike
+  #82 — the kick may have already consumed the request path).
+- Kick delta: 0 words.  bank0 `0x1f0000ff` throughout; MU dark; window
+  readback live (new DMA `0xc100000`); `apple_rtkit_boot` → -62.
+
+**Conclusion**: the kick is accepted and remembered but never acknowledged —
+consistent with the IOP being unable to confirm power because it never
+starts.  Re-reading the window readback against the code exposed a **real
+bug**: the readback prints `iop+IOP_WINDOW+0x00/+0x04` = **+0x08/+0x0c**, and
++0x0c — the high half of the 64-bit window address — was **never written**:
+the IOP-copy loop wrote 32-bit words at an 8-byte stride (+0x08/+0x10/+0x18),
+so `upper_32_bits(win_dma)` landed at +0x10.  The boot ROM has only ever seen
+the truncated address `0x0c100000`, nowhere near DRAM (`0x8_0e100000`-class)
+— its firmware fetch fails silently, which explains every negative boot.
+Boot #84: write the IOP copy as three 64-bit fields {win_dma, 0, size} as
+lo/hi pairs and read back all six words.
