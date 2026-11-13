@@ -3665,3 +3665,25 @@ Tree `98d844251891`.  Replaying the 15 table messages
 The deadlock is broken: the replayed type-6 transactions register the
 device, after which cmd 1 + dev 149 executes the bring-up.  Next: the
 full 15-op sequence one op at a time with per-op watching.
+
+### Boot #74: op 0 = the whole registration; ops 6-9 walk the rails (payload `db91d870…`)
+
+Tree `ba0094a7d2bd`.  The 15 ops at 500 ms cadence, bank watched after
+each:
+
+* **op 0 alone performs the registration** (~90-word SRAM delta: the
+  b0bed0ff record, the object graph, the queue slots) — the other
+  replay messages only advanced the state machine;
+* **ops 6-9 pulse the rails in sequence**: op 6 → bank[20] ON
+  (`0x200→0x2ff`); op 7 → bank[20] OFF + bank[40] ON
+  (`0x1000230f→0x1f00230f`); op 8 → bank[40] OFF + bank[6] ON
+  (`0x1f0000ff→0x1f0f00ff`); op 9 → bank[6] OFF.  Each op releases the
+  previous rail and acquires the next;
+* ops 10-14 silent; after all ops the SRAM self-cleaned (0 words);
+* the KF attempt: no crash, no SRAM change, no bank change;
+* tight poll after: cpu 0 — the mailbox never woke.
+
+The #73/#74 index discrepancy (bank reacting at idx 4/5 in #73's second
+pass vs 6/7/8/9 here) is explained: the state machine advances per
+message and its position persists across phases — the index value is
+data, the count is the driver.
