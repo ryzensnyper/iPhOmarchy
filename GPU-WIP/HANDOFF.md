@@ -544,3 +544,10 @@ bug**: the IOP window copy was written as 32-bit words at an 8-byte stride,
 leaving +0x0c (high half of the 64-bit window address) never written — the
 boot ROM has only ever seen the truncated address 0x0c100000.  Boot #84
 writes the IOP copy as 64-bit lo/hi pairs.
+
+## Boot #84 (2026-11-14) — reverted
+
+The +0x0c anomaly was an unwritten slot in the 6x32 layout, not a bug; the
+pre-#84 IOP window write was already kext-verbatim (FINDINGS 9e).  #84's
+64-bit-pair form reverted in #85.  New gaps from 9f: the IOP+0xc00 MU block,
++0x4044 bit 4, Fender +0x1010/+0x1014 — boot #85 programs all of them.

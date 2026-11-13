@@ -3822,3 +3822,21 @@ the truncated address `0x0c100000`, nowhere near DRAM (`0x8_0e100000`-class)
 — its firmware fetch fails silently, which explains every negative boot.
 Boot #84: write the IOP copy as three 64-bit fields {win_dma, 0, size} as
 lo/hi pairs and read back all six words.
+
+## Boot #84 — 64-bit IOP window write (kernel `4b8fd25967c3`, payload `5e477fe2…`) — REVERTED
+
+**Result**: the +0x0c high half still reads 0 after being written, while
++0x18 (size) retains — so the IOP copy is not 64-bit fields either.  Re-read
+the KB: FINDINGS 9e (2026-11-06 offline kext RE) documents the exact kext
+window semantics — Fender copy {phys_lo, phys_hi, iopAddr=0, 0, len, 0} at
+4-byte stride; **IOP copy = the same six words at the 8-byte stride, enable
+last** — i.e. the pre-#84 code was already kext-verbatim, and +0x0c is simply
+an unwritten slot in that layout, not a bug.  #84's change deviated from the
+kext; reverted in #85.  The window address in the IOP copy is 32-bit
+per-slot; the GART (no DART for the GPU — PROBE §1) carries the 64-bit AP PA
+in the Fender copy.
+
+**Also learned from 9f**: the kext's mailbox config = two MU blocks
+(IOP+0x4000 and IOP+0xc00), the GFX-specific +0x4044 bit 4, Fender status
++0x1010/+0x1014 — none ever programmed by us.  Boot #85 = the full verbatim
+sequence.
