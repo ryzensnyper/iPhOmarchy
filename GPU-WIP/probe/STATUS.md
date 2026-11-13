@@ -3629,3 +3629,17 @@ So the KF path runs to completion (or further than before) once the
 firmware has crash-recovered once.  Next: tight-poll the mailbox around
 the post-recovery attempt — a brief KF power-up would only show at 2 ms
 granularity.
+
+### Boot #72: no mailbox pulse — the post-recovery KF attempt is a silent no-op (payload `ac009c4a…`)
+
+Tree `8ec946a90f21`.  Three rounds of: crash (fresh state) → wait for the
+watchdog recovery → (cmd 1, dev 149) under a 2 ms poll of
+CPU_CTRL/status/bank[6]/[20]/[40] for 2 s:
+
+* round 0 fresh: crashed = 1; recovery took ~30 s (reboot -62, then the
+  watchdog restored the firmware);
+* **all six tight polls: cpu = 0, nz = 0** — the mailbox never pulsed,
+  not even for 2 ms; the bank stayed pinned at the OFF values
+  (b6 `0x1f0000ff`, b20 `0x200`, b40 `0x1000230f`);
+* the "brief KF power-up" hypothesis is dead: the recovered firmware's
+  dev-149 path is invisible and inert at millisecond resolution.
