@@ -118,3 +118,44 @@ post-preamble crash:
 
 Same message, two crash sites, state-dependent — the message triggers a
 fragile path, and which load falls over depends on prior state.
+
+## 6. Boot #69: the runtime image, and what the crash was doing
+
+`GPU-WIP/tools/extract-sram.py` rebuilds `pmp-runtime.bin` (the whole
+128 KiB of SRAM at the moment of the dump) from the boot log.  Findings:
+
+* **The code pages are byte-identical to the file image.**  All 2333
+  runtime-vs-file diffs live in the data pages (0x14000-0x1e000): BSS,
+  runtime-built tables and objects.  The offline RE of CODE is valid.
+* **The registry is a magic-record list.**  Records starting with the
+  sentinel `0xb0bed0ff` sit at `0x0101728c`, stride `0x18`
+  (`{b0bed0ff, 0, 0x01017290, 0x01016c08, 5, 0x0101e340}`,
+  `{b0bed0ff, 0x0101e1c0, 0xc, ...}`), and the word the struct points
+  at (`0x01017264`) holds **`0x0101de70` at runtime — a list head into
+  RAM**: `{1, 0x01017540, 0x01017480, 0x100, 0x20, 0x0101de20,
+  0x0101de30, 0x0101b9f8, 0x5e50, 0x18, 0x10001, ...}`.
+  Decoding that list = the registered device names/ids, i.e. the valid
+  handles.
+* **The minimal crash (cmd 1 + dev 149) is a strlen walk.**
+  `0x010086a2: ldrb r0, [r5]; cmp r0, #0; bne` — the firmware walks a
+  string (a device name?) whose pointer is garbage.  Chain (Ccst):
+  `0x0101882c <- 0x010187f2 <- 0x01011894 <- 0x01010c56 <- 0x010094d8`
+  (the first two are RAM addresses, not code).
+* **The crash footprint is a gate-transaction table for device 149.**
+  The SRAM delta (716 words) shows 15 pairs written at `0x01014330`:
+  `{0x0095X643, 0x00600000}` for X = 0x0..0xe — device **0x95 = 149** at
+  bits [23:16], an index at [15:12], value **0x643** at [11:0], and
+  `0x00600000` (mode 3 + direction, of the clg command-word family).
+  Plus stack slot `0x0101ee44 = 4` — the phantom pointer boot #67's
+  dispatcher dereferenced.
+* **cmd 1's handler builds a list of 15 gate operations for dev 149**
+  (value 0x643, indices 0-14) and dies mid-walk.  15 operations for the
+  GFX-KF — the firmware's own bring-up sequence for the Kingfisher!
+* The reboot failed this time (`apple_rtkit_boot -> -62`): unlike #68,
+  the PMP stayed dead after the crash.
+
+So cmd 1 + dev 149 makes the PMP TRY to bring the Kingfisher up — it
+builds 15 gate operations and crashes before finishing.  The next step
+is decoding the device list (0x0101de70) and the cmd-1 handler offline,
+then finding a message shape that completes the sequence instead of
+crashing.

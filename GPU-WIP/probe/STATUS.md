@@ -3564,3 +3564,26 @@ the crash is once per firmware load.  The minimal crash dies at
 Next: boot #69 dumps the whole runtime image from SRAM, crashes once,
 and prints the SRAM delta — the true runtime code plus the crash
 footprint.
+
+### Boot #69: the runtime image recovered; the crash was building 15 gate ops for dev 149 (payload `5623169c…`)
+
+Tree `f439476053cf`.  The full 128 KiB SRAM dump completed twice; the
+crash reproduced (`crashed = 1`); the delta printed 716 words.
+`GPU-WIP/tools/extract-sram.py` rebuilds `pmp-runtime.bin` from the log.
+
+* code pages identical to the file image (all diffs are data pages) —
+  the offline RE of code is valid after all;
+* the registry: magic `0xb0bed0ff` records at `0x0101728c` (stride
+  0x18), the struct's pointer target `0x01017264` -> `0x0101de70` at
+  runtime (a list head in RAM);
+* the crash (cmd 1 + dev 149) = a `strlen` walk at `0x010086a2` over a
+  bad string pointer, mid-way through **writing a 15-entry gate
+  transaction table for device 149**: pairs
+  `{0x0095X643, 0x00600000}` (device 149, idx 0..14, value 0x643) at
+  `0x01014330`;
+* stack slot `0x0101ee44 = 4` — the phantom pointer of boot #67;
+* the reboot failed (`-62`): the PMP stayed dead for the rest of #69.
+
+The PMP's cmd-1 handler for dev 149 is the firmware's own Kingfisher
+bring-up sequence.  Full decode in
+`probe/phase2.2/PMP-CRASH-LOG.md` §6.
