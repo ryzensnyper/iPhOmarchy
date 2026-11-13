@@ -3587,3 +3587,25 @@ crash reproduced (`crashed = 1`); the delta printed 716 words.
 The PMP's cmd-1 handler for dev 149 is the firmware's own Kingfisher
 bring-up sequence.  Full decode in
 `probe/phase2.2/PMP-CRASH-LOG.md` §6.
+
+### Boot #70: cmd 1 moves the gate bank per device; dev 151 = ON, 152 = OFF; dev 1 also crashes (payload `11dbb936…`)
+
+Tree `70da27210e7f`.  cmd 1 swept across 21 device ids with full watching:
+
+* **cmd 1 + dev 151** → bank[6] `0x1f0000ff→0x1f0f00ff`, bank[20]
+  `0x200→0x2ff`, bank[40] `0x1000230f→0x1f0023ff` — a triple ON;
+  **cmd 1 + dev 152** → all three reverted.  An ON/OFF pair.
+* **cmd 1 + dev 124** (GFX) → bank[20]+bank[40] ON; **dev 126** →
+  bank[40] to a different on-shape (`0x1f0f23ff`); **dev 148** → OFF.
+* **cmd 1 + dev 1 = CRASH** — byte-identical to boot #67's site
+  (PC `0x0100d64c`, r0 = 4, LR `0x01001857`).  The PMP recovered via its
+  own watchdog ~10 s later (`apple_rtkit_boot` itself timed out -62 but
+  `crashed = 0` afterwards).
+* The dev-149 deliberate crash did NOT crash (crashed = 0) and moved
+  nothing — post-recovery the KF path is a no-op.
+* The mailbox stayed dark throughout (CPU_CTRL 0 in every watch).
+* The dev-1 crashlog's mailbox history shows the PMP's own traffic:
+  mgmt type 11 (`0x00b0…`), type 7 (`0x0070…`), **type 6 with payload
+  `0x220`** (`0x0060000000000220`), plus ep-4 ioreport messages.
+  **The 15-op table's second word `0x00600000` is type 6 — the KF
+  bring-up is 15 queued SET_IOP_PWR_STATE-family transactions.**
