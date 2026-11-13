@@ -519,3 +519,12 @@ sed -n "${L},\$p" phone-kmsg.log | \
 - Next: boot #81 per `KF-FIRMWARE-RE.md` section 4 — PMP gate states on dev
   149 merged with the Fender window copy + `FENDER_RUN` release and an MU poll
   for RTKit HELLO.
+
+
+## Boot #81 (2026-11-14)
+
+cmd-4 sweep 0..31 on dev 149 (78 words changed) and dev 124 (16 words) — no
+bank movement this time, MU dark.  **The window readback is live** (DMA
+address + size read back as written; IOP enable took) — the AP-side bring-up
+mechanism is verified working end to end, so the blocker is the IOP
+reset/clock (PMP gate).  Boot #82: cmd-3 state reads on 149/124/148/123.

@@ -3743,3 +3743,33 @@ apply the kext's exact sequence.
 the next lever is offline RE of the AGX kext's power-kick path in
 `/tmp/opencode/d21ap-kernelcache.macho` (the `GPU is not powered on after power kick!`
 check at 0x110bfec names the exact action whose success the kext verifies).
+
+## Boot #81 — cmd-4 payload sweep 0..31 (kernel `3181411b91f4`, payload `5cb933cc…`)
+
+**Setup**: bare cmds 1/3/5 + registration, then cmd-4 payload 0..31 on dev 149
+(400 ms ack timeout each), then 0..31 on dev 124.  The normal stages 4–12
+(timebase, window copy, FENDER_RUN, RTKit boot) ran after, as always.
+
+**Result**:
+- Init built 1689 words (fresh boot); **dev-149 sweep changed 78 words**,
+  dev-124 sweep 16 words — cmd-4 executes at every payload, no errors.
+- **Zero bank reactions** — bank[0] and bank[40] never moved (payload 4,
+  which turned bank[40] ON in #76, did nothing this time; state-position
+  dependence).  bank0 `0x1f0000ff` throughout; MU dark; `apple_rtkit_boot`
+  never saw HELLO.  Pass 2: all zero.
+- The sweep rebuilt the KF memory-map chains again (`0x0101bc40/bc90/bcb0`
+  with `0x1f8f8`, `0x1060`, `0x1061`) and set the power-state slots to 0x20.
+  The dev-124 sweep wrote a fresh 16-entry table at `0x0101cd00`.
+- **New positive fact**: the window readback is live —
+  `window readback fender: 0e100000 00000008 00000000 00000000 00100000
+  00000000`, `iop: 0e100000 00000000 (enable 1)`.  The DMA window address
+  (`0x8_0e100000`) and the 1 MiB size read back as written in the Fender
+  copy; the IOP enable bit took.  The AP-side window mechanism is REAL and
+  WRITABLE, and FENDER_RUN was released — yet no firmware HELLO.
+
+**Conclusion**: everything AP-side is verified working (MU control pages,
+timebase, window remap, run bit); the firmware does not start.  The remaining
+suspect is the IOP's reset/clock held by the PMP (bank[0]).  Boot #82 plan:
+**cmd-3 (read state) on dev 149/124/148/123** — the PMP acks its state
+directly (bare cmd3 acked `0x00040000ffffffff` for device 0xff), giving the
+PMP's view of each GFX device without touching anything.
