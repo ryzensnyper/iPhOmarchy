@@ -3687,3 +3687,31 @@ The #73/#74 index discrepancy (bank reacting at idx 4/5 in #73's second
 pass vs 6/7/8/9 here) is explained: the state machine advances per
 message and its position persists across phases — the index value is
 data, the count is the driver.
+
+### Boot #75: no pulses; the SGX replay also registers; the KF attempt builds a memory map (payload `7f3c4ecd…`)
+
+Tree `dba7d5c6b85f`.  Continuous 2 ms mailbox polling through every gap:
+
+* **no mailbox pulse anywhere** — phase A (KF ops), phase B (SGX ops
+  for dev 148), the attempt: CPU_CTRL stayed 0 in ~10k samples per
+  phase;
+* the rail walk did NOT fire this boot (fresh pass silent; one bank
+  change in pass 2) — the pulsing is timing/state-dependent;
+* **the SGX (dev 148) replay produced its own 222-word registration**
+  — a second b0bed0ff record appeared (`0x010167d8`) and the queue
+  slots ended holding `00950643 00600000` — the PMP re-queues its own
+  pending dev-149 transaction even while fed dev-148 messages;
+* **the KF attempt changed 19 words**: flags at `0x01017454`/`0x01017478`
+  went 1→0 (set by the SGX replay, cleared by the attempt), `0x01017374:
+  01060000 → 0`, and **the object at `0x0101bc40` was rebuilt with
+  memory-descriptor values: `0x1000, 0xc, 0x01014000, 0xc, 0x0101ef58,
+  0x19b000 / 8, 0x1fffff, 0x60000, 0x1a0000, 0x20`** — the KF's
+  remap/memory-map preparation (2 MiB mask `0x1fffff`);
+* bank[0] (`0x235280000`, the ADT's gate entry for GFX-SGX/KF/BUSY)
+  never moved in any boot — still `0x1f0000ff` (OFF) at every start and
+  done.
+
+Next: offline RE of the ApplePMP kext's Kingfisher bring-up (the AKF
+remap block — "AKF" = Apple KingFisher — is how the PMP's own SRAM gets
+mapped at its reset vector; the KF boot must use the same block), then
+apply the kext's exact sequence.
