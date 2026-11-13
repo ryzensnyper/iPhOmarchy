@@ -115,3 +115,94 @@ Because the PMP's syslog endpoint is started by the RTKit core, the firmware's
 `!clg:` / `Not implemented` prints should appear in the Linux log as
 `RTKit: syslog message: ...` — so a boot can *ask* and read the answer, with
 the IOP mailbox read (`IOP+0x4008`) as the single destructive test at the end.
+
+## 6. The send path, decoded end-to-end (2026-11-13, post boot #64)
+
+Every address below is from the D21 kernelcache (`__PLK_TEXT_EXEC`) unless
+marked FW (the PMP firmware, linked at 0x01000000).
+
+### 6.1 The function side (ApplePMGR)
+
+`ApplePMGRFunctionClockGate::callFunction(this, p1, p2, p3)` — body
+`0xfffffff005671f0c`:
+
+```
+die     = p1[31:28]          (checked against _target->_dieCount at +10852)
+device  = p1[27:0]           (28-bit PMGR device id; 149 = GFX-KF)
+enable  = p2[0]
+arg     = p2[31:1]
+        -> 0xfffffff00566c2a8(this->_target(+40), device, enable, arg, die)
+```
+
+`0xfffffff00566c2a8` re-checks the die, then schedules the real work:
+
+```
+this->[352]->vtable[29](callback = ApplePMGR::_enableDeviceGated,
+                        device, enable, arg, die)
+```
+
+`_enableDeviceGated(this, device28, enable, arg, die)` — body
+`0xfffffff00566c358`:
+
+* the gate STATE is `enable ? 15 : ((arg & 1) << 2)` — **15 = on**,
+  0/4 = off, cached at `pmgr + die*640 + device + 0x1abd0` (skipped if
+  the cached state already matches);
+* parent/dependency gates are enabled first
+  (the walker at `0xfffffff00566c8cc`);
+* then the state machine at `0xfffffff00565ba68` (counters at
+  `pmgr + die*640 + device + 0x19b40/0x1a1d0`) — which ends in the PMP
+  send.
+
+`PowerGate::callFunction` is the sibling at `0xfffffff005672024` region;
+same shape.
+
+### 6.2 The PMP side (ApplePMP)
+
+`ApplePMP::_sendPMCommand` — body `0xfffffff00610b7a8`, construction at
+`0xfffffff00610b868`:
+
+```
+msg  = (cmd & 0xf) << 48 | (domain & 0x3f) << 42
+     | ((devobj->v128() >> 12) << 16) | (1 << 52)
+cmd == 4:  msg |= (payobj->v176() >> 5) & 0xffff      (bits [15:0])
+```
+
+* **only cmd 4 and cmd 6 are ever built** (`orr w8, w20, #2; cmp w8, #6`
+  guards the whole construction);
+* the arg field [41:16] carries the **device id** (v128() = device << 12),
+  *not* a (device<<12)+offset address;
+* the send is `pmp->[440]->vtable[29](&msg, 0, 1)` — RTKit endpoint 32.
+* the AP-side dispatcher feeding it processes actions 0/2/4/6 from a
+  command struct `{domain, obj, x}` (tail calls at `0xfffffff00610b1e8`
+  .. `0xfffffff00610b2c8`; action 6 → `_sendPMCommand`).
+
+### 6.3 The firmware side (pmp-t8015.bin)
+
+* a **cmd classifier** at FW `0x0100c02c` (and a twin at `0x0100bfa0` for
+  a word layout with the nibble at [7:4]): reads a queued message word,
+  takes `cmd = word[19:16]` (= v2 message bits [51:48]), and maps
+  **cmd 4 → class 1 (its own class)**, cmd 0 → class 2, cmd 15 → (1, 3),
+  everything else → class 3 with r0 = cmd.  **cmd 4 is the write/value
+  command; the PMP handles it silently (no ack).**
+* the transaction object's command word at `obj+64` (= the "+0x40 HW
+  command register") is `{enable[0], device[15:8], cmd[19:16]}`
+  (read `0x0100cb4a`, written `0x0100cb72`..`0x0100cb94`).
+
+### 6.4 Why boots #53-#64 could not work
+
+* the mgmt type-3 clg sends (boot #57's form) had the type nibble = 3 =
+  clg-word mode 3 only — and the handler's registry resolve (8 runtime
+  entries) rejects every device id we can name;
+* the ep-32 cmd-4 sends (boots #59-#64) were **bare**: no device in the
+  (arg>>12) field, no payload — the PMP executed no-ops on device 0;
+* cmd 3/5 "acks" are the read/status commands, not the gate path.
+
+### 6.5 The message boot #65 sends
+
+```
+msg = (1 << 52) | (4 or 6) << 48 | (domain << 42) | (device << 16) | payload
+```
+
+with device ∈ {149, 148, 123, 124}, payload ∈ {0, 1, 4, 15, 0x2000}
+(0x2000 = bit 13 of the gate register, set by the firmware when the
+payload is 1; 15/0/4 = the PMGR gate states).
