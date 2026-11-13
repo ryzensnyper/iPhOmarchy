@@ -3715,3 +3715,31 @@ Next: offline RE of the ApplePMP kext's Kingfisher bring-up (the AKF
 remap block — "AKF" = Apple KingFisher — is how the PMP's own SRAM gets
 mapped at its reset vector; the KF boot must use the same block), then
 apply the kext's exact sequence.
+
+## Boot #80 — domain-state sweep (kernel `5e03f6128b1a`, payload `7643779d…`)
+
+**Setup**: bare cmds 1/3/5 → registration `(6<<52)|0x00950643` → domain 5 (GCPU) × states
+`{0x220, 0x20, 0x1, 0x2, 0x643, 0}` → all 15 domains × `{0x220, 0x20}` → cmd 1 + dev 149.
+
+**Result**:
+- Init built 1708 words (table build reproduces every fresh boot).
+- **The 15-domain × {0x220, 0x20} sweep changed 0 words** — those state values are
+  rejected. With #79 (X=0..14 × 0x643 executed, 143 words): **0x643 is the only accepted
+  state value** of the type-6 domain setter, i.e. it *is* the ON state and the init +
+  registration already set domain 5.
+- Domain-5 sweep (11 words) *tore down* a pending-request structure:
+  `0x01017400: 0101e220 → ffffffff`, `0x01017408/1c: cleared` — invalid states
+  invalidate rather than execute. `0x0101b61c/b634` picked up `0x80000001/05` markers
+  (same family as the type-2 delta in #79).
+- **cmd 1 + dev 149 processed visibly**: power-state slots `0x01016680/0x01016698 →
+  0x20` (ON); transaction slot `0x010166b8` now holds the exact cmd-1 message
+  `(1<<52)|(1<<48)|(0x95<<16)`; KF memory descriptor `{0x1fffff, 0x1a0000}` rebuilt;
+  `0x0101ee84: 000f0001 → 000f0101`.
+- bank0 `0x1f0000ff` throughout, mailbox silent, CPU_CTRL 0. Pass 2 (post-recovery):
+  all zero.
+
+**Conclusion**: domains ON, descriptor built, queue processed — yet the GFX gate
+(bank0) never moves and the KF mailbox stays dark. PMP blind-poking is saturated;
+the next lever is offline RE of the AGX kext's power-kick path in
+`/tmp/opencode/d21ap-kernelcache.macho` (the `GPU is not powered on after power kick!`
+check at 0x110bfec names the exact action whose success the kext verifies).
