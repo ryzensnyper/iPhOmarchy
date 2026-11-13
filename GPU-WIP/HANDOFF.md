@@ -54,17 +54,24 @@ The mailbox stayed dark throughout.
 
 **Ranked next moves**:
 
-1. **Offline: what does `AppleA7IOPV4GFX` do around the mailbox besides
-   the register map** — the full bring-up (clocks/resets/prepare)
-   compared against our stages.  The mailbox registers are dead while
-   the Fender device-info page (same window) reads live, so a missing
-   clock/reset step is as likely as a missing gate.
-2. **Offline: who populates the eight registry entries at runtime** (13
+1. **Boot #65 (tree `ce13dbfd1a4e`, committed, NOT built): the kext-shaped
+   gate messages.**  The send path is now decoded end-to-end
+   (`PMP-FUNCTION-CALL.md` §6): `ApplePMP::_sendPMCommand` only ever
+   builds **cmd 4 and 6** with
+   `msg = (1<<52)|(cmd<<48)|(domain<<42)|(device<<16)|payload`,
+   cmd 4 carrying 16 payload bits at [15:0]; the PMP firmware's
+   classifier gives cmd 4 a class of its own (the write; no ack).  Every
+   earlier cmd-4 send was bare (no device, no payload) — a no-op on
+   device 0.  Boot #65 sends dev {149, 148, 123, 124} × cmd {4, 6} ×
+   payload {0, 1, 4, 15, 0x2000} on ep 32, watching the mailbox, ps_gfx
+   and the gate bank.
+2. **Offline: the cmd-4 firmware handler.**  The classifier at
+   `0x0100c02c` routes cmd 4 to class 1 — decode the class-1 handler to
+   learn exactly how {device[15:8], enable[0]} of the transaction word
+   are built from the message, and which payload values mean what.
+3. **Offline: who populates the eight registry entries at runtime** (13
    code sites reference the struct; find the store into the entries
    array and its callers).
-3. **Boot #65: mgmt type 3 with (dev 5, gate 149) and payload as the
-   only variable** — is (dev 5, gate 149, payload 1) the magic tuple?
-   Watch bank[20]/bank[40], the IOP window and the mailbox.
 4. The untried `meta-sw-interrupt` lead (`/arm-io/sgx`,
    `0x233104020`/`0x2331040a0`, write 2 then 8).
 5. The PMP's mgmt type-6 `SET_IOP_PWR_STATE` with the GFX identity.
