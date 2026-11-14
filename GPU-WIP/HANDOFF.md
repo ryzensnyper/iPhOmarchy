@@ -585,3 +585,14 @@ never moved in 45 samples; the #74 rail walk did not fire (it is
 timing-dependent — #73/#74/#75 are the same tree and differ per boot).
 Model: ops stick only inside the PMP's ~110 ms rail-tick windows.
 Boot #91: feedback-driven walk (repeat each rail op until a bank moves).
+
+## Boot #91 + the #92 reframe (2026-11-14)
+
+The feedback walk failed like #90 (tick pulses only, bank[0] never
+moved).  Reframe from the A13 reference + ADT flags: GFX-KF has
+notify_pmp = False — the PMP is not in its power path; bank[0] reads
+{auto, actual f, target f} and differs from ACTIVE ps_gfx only in bits
+8/9; #58 never tried 64-bit writes or setting in-mask bits 10/11/21.
+Boot #92: dump the 8-byte ps entries, then a 64-bit write sweep on
+bank[0] (active shape / bit 21 / bits 10+11 / clear bit 6 / 32-bit),
+watching CPU_CTRL; the mailbox bring-up stages run right after.

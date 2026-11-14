@@ -3920,3 +3920,33 @@ New model (boot #91): the PMP's rail writes stick only inside its
 ~110 ms tick windows (~every 2-4 s); drive each rail op with a feedback
 loop (repeat + 100 ms polling until a watched bank changes), no bare
 cmd1 first (#74's shape).
+
+## Boot #91 — the feedback walk also fails; tick pulses only (kernel `84f38dd02af2`, payload `415179dc…`)
+
+Feedback-driven walk (repeat each rail op with 100 ms polling until a
+watched bank changes, no bare cmd1 first).  Ops 6–11, 13, 14: no effect
+after 60 sends each.  Ops 12 and 6 "MOVED" — but the movement (bank[20]
+0x2ff + bank[40] 0x1f0023ff) reverted 500 ms later: tick pulses caught
+mid-window, not op effects.  bank[0] never moved.  The op-replay road is
+dead: #73/#74/#75/#90/#91 = five boots, zero reproducible op-driven
+bank writes.
+
+### The reframe (boot #92 rationale)
+
+* **A13 reference (Project-Cascadia `a13/docs/research/gpu.md` G4)**: the
+  GPU power story there is host-side — Fender's sequencer stalls at step
+  0x10 waiting for the GPU rail, and the entire fix was one PMGR control
+  bit (VOLMAN channel manual→hardware).  The PMP is not in the A13
+  power path at all.
+* **The ADT says GFX-KF (149) has `notify_pmp = False`** — the PMP is
+  not in the gfx-kf power path on the A11 either.  Five boots of PMP
+  sends were aimed at the wrong agent.
+* ps-regs resolution cleaned up: dev 149 → table entry 0 →
+  `0x235280000` (mask `0x00200C53` ✓); dev 124 "GFX" → entry 4,
+  psidx 7 → `0x232080338` = ps_gfx ✓ (the table has exactly 8 entries).
+* bank[0] = `0x1f0000ff` = {auto 1, actual 0xf, target 0xf} — it differs
+  from ACTIVE ps_gfx (`0x1f0003ff`) only in bits 8/9.  #58 only ever
+  cleared bits 5/6 with 32-bit stores; the entries are 8 bytes
+  ({PS, flags}) and the in-mask bits 10/11/21 were never set.
+* AGX_PMGR (`0x205000000`, the GPU's own PMGR with the ClkGen) has
+  still never been read post-alias-fix.
