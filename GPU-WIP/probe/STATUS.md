@@ -3869,3 +3869,28 @@ cmd-4 d149 payload 4 — but only on the **second** gate_try pass.  On a
 warm PMP in pass 1 the same messages are processed but move nothing.
 Boot #88 = isolate the #70 recipe (crash -> recovery -> d151) and put it
 immediately before FENDER_RUN.
+
+## Boot #88 — the #70 recipe did not reproduce (kernel `2812777856b9`, payload `1de5a2b9…`)
+
+power_on_kf in stage 5/12: cmd 1 + dev 1 at 56.4 s -> **no crash at all**
+(no "co-processor has crashed", no crashlog — unlike #70's dev-1 send,
+which produced both), 21 s wait, d151 at 79.1/80.8 s -> silent, banks
+unmoved at release, `apple_rtkit_boot` -> -62.  The dev-1 crash itself is
+not reliably reproducible.
+
+Offline ADT decode (same session): the ps-reg formula is
+`addr = pmgr[psreg] + offset + psidx*8`; devices 123/148/149 (GFX-BUSY/
+SGX/KF, no_ps, parents [124]) have psreg 0 -> ps-regs[0] = {reg 1,
+0x80000} -> **0x235280000 = the watched bank[0] itself is the ADT's gate
+register for GFX-SGX/KF/BUSY**.  bank[0] = 0x1f0000ff = target 0xf (ON),
+actual 0 (OFF), auto=1 — the rail never powered.  Writable mask
+0x00200C53; AP writes rejected (#58).  The A10 (which reached HELLO with
+no PMP interaction) had ONE power state covering core+gfx-kf; the A11's
+gfx-kf carries its own gate [149] — the structural difference.
+
+Also decoded: the "15-op table" (PMP-CRASH-LOG 7.4) = 15 gate
+transactions on dev 149 (indices 0..14, value 0x643), messages
+(6<<52)|0x0095X643 — the firmware's own KF bring-up; op 0 = the
+registration we've been sending.  #73/#74/#75: the rail walk (ops 6-9)
+fired in pass 1 and went further in pass 2 — the state machine advances
+per pass.  Boot #89 = six full passes.

@@ -567,3 +567,12 @@ watchdog-recovery window, and held.  Boot #88 isolates that recipe in
 power_on_kf() (crash -> 21 s wait -> d151 x2) called in stage 5/12 right
 before FENDER_RUN, so the ON state is ms from the release (#82 revert
 ~1.2 s).
+
+## Boot #88 (2026-11-14) — crash recipe unreproducible; ADT gate decoded
+
+The dev-1 crash + recovery-window d151 did nothing (the crash itself did
+not happen).  Decoded: bank[0] = 0x235280000 IS the ADT's gate register
+for GFX-KF/SGX/BUSY (psreg 0 -> pmgr1+0x80000+psidx*8), target=ON,
+actual=0, auto=1, PMP-writable only.  The 15-op table = the KF bring-up
+((6<<52)|0x0095X643, X=0..14, on dev 149); the rail walk advances per
+pass.  Boot #89: six full passes, then the KF attempt.
