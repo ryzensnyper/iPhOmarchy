@@ -4142,3 +4142,10 @@ Consequences for us:
 **#103** (kernel tree rebuilt, payload `6e0339ee…`): the chunked
 read-only scan of pmgr1 outside the ps files ([0, 0x80000) and
 [0x8c000, 0x100000)) — the dock-FIFO node's own 1 MiB, unexplored.
+
+**#103, attempt 1**: the boot ran (the phone re-enumerated as 4144) but
+the console never came up — the kmsg listener was wedged on boot
+#102's half-open socket (it reads one connection to EOF; a reset
+mid-stream wedges it).  The listener was restarted between boots
+(2026-11-15 00:01); its single-connection design means every mid-boot
+SoC death needs a restart afterwards.  Retrying #103.
