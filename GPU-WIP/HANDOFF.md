@@ -704,3 +704,10 @@ The live bind deadlocked (the diagnostic's .remove = uncancellable).
 #106 = the diagnostic parked (apple,t8015-gfx-diag); powervr probes the
 gpu node natively at boot — the first REAL A10-flow bring-up of the
 G10P driver.
+
+## #106/#107 (2026-11-15) — the Fender state = the GPU clock; the rail = the PMP
+
+powervr probes natively; the -62 = the mailbox dead because the Fender
+sequencer waits for the GPU rail.  #107 = the pvr driver asks the PMP
+for the rails (cmd 4, dev 148+149, payload 0 — the #65-proven silent
+command) before the Fender state request.

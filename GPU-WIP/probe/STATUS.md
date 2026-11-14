@@ -4218,3 +4218,20 @@ PARKED (compatible = apple,t8015-gfx-diag, nothing binds it) —
 flow (genpd ps_gfx → DMA window → the real G10P firmware → the
 apple-mailbox driver → run bit → RTKit → the G10P layout init), no
 sysfs dance needed.
+
+**#106** (payload `24872560…`): powervr probed NATIVELY at boot — the
+whole A10 flow ran (genpd, window, firmware, mailbox, run) and failed
+at the familiar wall: "GFX firmware boot failed: -62" twice, the
+mailbox dead.  The mechanism found: the GPU's performance state =
+requested through **Fender+0x1000** (the same register all along; the
+state nibble = the GPU's power/clock step) — and the pvr driver wrote
+it, the register took state 1... but the Fender's **sequencer waits
+for the GPU rail** (the A13's step 0x10), and on the A11 **the rail =
+the PMP's buck** (the A13's = VOLMAN hardware).  Boot #65 proved
+`cmd 4 + dev 148, payload 0` moves the rail banks — we never combined
+it with the Fender request.
+
+**#107** (kernel `abd38b05bd5c`, payload `6690d98d…`): pvr_apple.c now
+sends the PMP rail requests (`cmd 4, dev 148 and 149, payload 0`, the
+silent class-1 command) before the Fender power-state request, then
+the full flow continues.
