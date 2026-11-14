@@ -697,3 +697,10 @@ The powervr probe executed (the match fix worked) and hit -EBUSY: the
 t8015 gpu node's iop = 0x20000 overlapping gpu_mbox at +0x4000.  The
 A10's shape = iop 0x4000.  #105 = the DT fix; the next bind = the full
 A10 flow.
+
+## #105/#106 (2026-11-15) — the bind wedged on the self-re-arming work; the diagnostic parked
+
+The live bind deadlocked (the diagnostic's .remove = uncancellable).
+#106 = the diagnostic parked (apple,t8015-gfx-diag); powervr probes the
+gpu node natively at boot — the first REAL A10-flow bring-up of the
+G10P driver.

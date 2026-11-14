@@ -4204,3 +4204,17 @@ iop region (0x204d20000/0x20000) overlaps the gpu_mbox node at +0x4000**
 mailbox as a separate node — ours shrunk to match (the window registers
 live in the first 0x4000; nothing lost).  Next boot = the probe
 continues: genpd → window → firmware → mailbox → run.
+
+**#105 continued (the live bind)**: the bind wedged — the diagnostic's
+boot work **re-arms itself**, so `.remove`'s cancel_delayed_work_sync
+never completes (the stack: apple_t8015_gfx_remove →
+cancel_delayed_work_sync), and the bind waits on the device lock
+(bind_store → device_driver_attach → __device_driver_lock).  The phone
+stayed up (pingable, the touch working) but the GPU = wedged.
+
+**#106** (kernel `9d5a05d9fca5`, payload `24872560…`): the diagnostic is
+PARKED (compatible = apple,t8015-gfx-diag, nothing binds it) —
+**powervr now owns the gpu node and probes natively at boot**: the A10
+flow (genpd ps_gfx → DMA window → the real G10P firmware → the
+apple-mailbox driver → run bit → RTKit → the G10P layout init), no
+sysfs dance needed.
