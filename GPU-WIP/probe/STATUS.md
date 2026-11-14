@@ -4274,3 +4274,18 @@ gate.
 **#110**: my dump faulted at `IOP+0x4008` — past the 0x4000 iop
 mapping from #105 — before the ps pokes could run.  **#111** (payload
 `32dda38b…`): the read dropped; the ps-poke sweep runs this boot.
+
+**#111** (payload `32dda38b…`): all 16 ps pokes (both mirrors, 4
+shapes) REJECTED (readback 0); the mailbox dead; the banks unchanged
+except the [40] tick pulse.  The AP-side is exhausted — the wall =
+the PMP's dev-149 handler.
+
+**THE FIRMWARE PATCH**: the PMP firmware is loaded from
+/lib/firmware/apple/pmp-t8015.bin (the root = the persistent NVMe
+install) — replaceable.  The dev-149 crash = a strlen walk on a
+garbage name pointer at 0x010086a2 (`ldrb r0,[r5]; cmp r0,#0; bne`),
+which only runs on the dev-149 path (every registered device skips
+it per the oracle).  Patched `ldrb r0,[r5]` → `movs r0,#0` (2 bytes):
+the walk terminates immediately, the PMP survives, and the state
+machine should proceed to execute the 15-op table it built.  The
+patched firmware = installed on the phone (the md5s match).

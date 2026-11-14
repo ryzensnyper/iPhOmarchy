@@ -736,3 +736,12 @@ powers the domain off) — reboots it is.
 
 #111 = the ps-poke sweep (0x1/0xf/0x11/0x1f on fender+0x1008/+0x1020,
 watching the mailbox CPU_CTRL) runs in the powered window.
+
+## #111 + the PMP firmware patch (2026-11-15)
+
+The AP-side ps pokes are all rejected; the wall = the PMP's dev-149
+handler.  The PMP firmware = patchable (loaded from
+/lib/firmware/apple/pmp-t8015.bin on the persistent root): the strlen
+walk at 0x010086a2 (ldrb r0,[r5] -> movs r0,#0) = neutered, so the
+dev-149 path survives and the 15-op table it builds gets executed.
+The next boot = the patched PMP + the powervr probe.
