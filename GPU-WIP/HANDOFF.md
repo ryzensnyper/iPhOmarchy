@@ -731,3 +731,8 @@ mailbox's own power state = the ps_gfx_kf mirrors at fender+0x1008/
 failure path pokes both mirrors with the ps shapes while the domain is
 powered.  Live-SSH iteration wedges after a failed probe (the genpd
 powers the domain off) — reboots it is.
+
+## #110/#111 (2026-11-15) — the dump faulted past the shrunk iop mapping; fixed
+
+#111 = the ps-poke sweep (0x1/0xf/0x11/0x1f on fender+0x1008/+0x1020,
+watching the mailbox CPU_CTRL) runs in the powered window.

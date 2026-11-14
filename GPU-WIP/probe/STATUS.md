@@ -4270,3 +4270,7 @@ failure path now pokes BOTH mirrors with the ps shapes (0x1/0xf/0x11/
 0x1f) while the domain is still powered, watching the mailbox
 CPU_CTRL (fender+0x110) after each — the live test of the KF power
 gate.
+
+**#110**: my dump faulted at `IOP+0x4008` — past the 0x4000 iop
+mapping from #105 — before the ps pokes could run.  **#111** (payload
+`32dda38b…`): the read dropped; the ps-poke sweep runs this boot.
