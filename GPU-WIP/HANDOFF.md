@@ -690,3 +690,10 @@ but bind = refused by the of_match (t8010 only).  Added the
 apple,t8015-gpu match; the next boot = the A10 flow (genpd → window →
 firmware → apple-mailbox → run → RTKit) on the A11 node, with the
 powervr G10P layout (bbdbdb19353e).
+
+## #105 (2026-11-15) — the probe ran! -EBUSY on the iop/mbox overlap; fixed
+
+The powervr probe executed (the match fix worked) and hit -EBUSY: the
+t8015 gpu node's iop = 0x20000 overlapping gpu_mbox at +0x4000.  The
+A10's shape = iop 0x4000.  #105 = the DT fix; the next bind = the full
+A10 flow.

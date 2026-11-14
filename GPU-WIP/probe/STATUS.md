@@ -4196,3 +4196,11 @@ NFS root = persists it), unbound the diagnostic, modprobed powervr
 apple,t8010-gpu; the D21's node = apple,t8015-gpu).  Fixed with a
 4-line match addition (kernel `1f2da0702708`, payload `a70dc469…`) —
 the next boot binds the A10-flow driver to the A11 node for real.
+
+**#105** (kernel `f8b3a4e669b0`, payload `71ce9d43…`): the live bind
+REACHED THE PROBE (the match fix worked) and failed at **-EBUSY: the
+iop region (0x204d20000/0x20000) overlaps the gpu_mbox node at +0x4000**
+(held by the apple-mailbox driver).  The A10's DT = iop 0x4000 with the
+mailbox as a separate node — ours shrunk to match (the window registers
+live in the first 0x4000; nothing lost).  Next boot = the probe
+continues: genpd → window → firmware → mailbox → run.
