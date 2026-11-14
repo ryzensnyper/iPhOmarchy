@@ -682,3 +682,11 @@ pwrgate/dock block = pmgr1+0x9c000 (head 80040318, bit 31 set,
 static), live counter at +0xb0000, perf at +0xb4000.  Next: the A10
 port (gpu_opp + alias + operating-points-v2 in the t8015 node;
 powervr-apple match + apple,t8015-gpu).
+
+## #104 (2026-11-15) — the live-phone powervr attempt; the match fixed
+
+The powervr module loaded + the firmware in place on the live phone,
+but bind = refused by the of_match (t8010 only).  Added the
+apple,t8015-gpu match; the next boot = the A10 flow (genpd → window →
+firmware → apple-mailbox → run → RTKit) on the A11 node, with the
+powervr G10P layout (bbdbdb19353e).

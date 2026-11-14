@@ -4187,3 +4187,12 @@ yet (the A10 driver is in the kernel but matches only apple,t8010-gpu).
 table) + `operating-points-v2` + the `gpu` alias (the m1n1 pstates
 patch then fills it from the ADT), and the powervr-apple match extended
 to apple,t8015-gpu.
+
+**#104 = the live-phone powervr attempt (no boot)**: the phone stayed
+up; scp'd the G10P firmware to /lib/firmware/apple/gfx-t8015.bin (the
+NFS root = persists it), unbound the diagnostic, modprobed powervr
+(apple_perf_state=1), set driver_override — and the bind failed at
+`bind_store`'s **driver_match_device** (the driver only matched
+apple,t8010-gpu; the D21's node = apple,t8015-gpu).  Fixed with a
+4-line match addition (kernel `1f2da0702708`, payload `a70dc469…`) —
+the next boot binds the A10-flow driver to the A11 node for real.
