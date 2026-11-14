@@ -4044,3 +4044,11 @@ THEN the f→4→f transition with SRAM snapshots around every step and a
 post-cycle dev-149 touch.  Hypothesis: #96/#97's fatal transition and
 the crash oracle are the SAME bug (the resolver's garbage-name walk),
 and a recovered PMP survives the transition and executes the bring-up.
+
+**#98** (kernel `7c98178717e3`, payload `3f5f3f5c…`): the oracle fired
+(crashed = 1 after 500 ms ✓) but the recovery's `boot -> -62` after
+15 s — the PMP watchdog self-reset needs 15–30 s and we tried too
+early; start_ep → -22; the transition then ran on a still-dead PMP →
+silent SoC death.  **#99**: wait 30 s (watchdog), watch the registry
+struct re-initialize, reinit + boot (retry) + start_ep, verify, then
+the transition (kernel `75abf3ae410d`, payload `65aabf98…`).

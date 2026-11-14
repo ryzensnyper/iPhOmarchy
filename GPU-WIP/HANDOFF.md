@@ -632,3 +632,8 @@ the PMP once (cmd-1-dev-149), recover via reinit/boot/start_ep, then
 transition f->4->f on the valid registry.  If the death and the oracle
 are the same resolver bug, the transition should now survive and the
 PMP should execute the 15-op bring-up.
+
+## #98/#99 (2026-11-14) — oracle works; recovery must wait out the watchdog
+
+#98: crash ✓, but boot -> -62 at 15 s (watchdog = 15-30 s).  #99: wait
+30 s + verify the registry re-init, then boot and transition.
