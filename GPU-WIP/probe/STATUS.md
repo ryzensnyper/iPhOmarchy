@@ -4029,3 +4029,18 @@ pulse theory).
 **#97**: a survivable transition — f→4→f (state 4 = on, clock-gated,
 the A13's iOS idle state), PMP ps 0x232080308 + crashed flag watched
 after every step (kernel `8840af23fd37`, payload `7bad36a0…`).
+
+**#97** (kernel `8840af23fd37`, payload `7bad36a0…`): target 4 ALSO
+killed the SoC silently at the first write — ANY accepted GFX
+transition is fatal.  The D22 PMP firmware diff = just a trailing
+container manifest (an IOUserEthernet personality), not device tables
+— not the missing dev-149 knowledge.
+
+**#98** (kernel `7c98178717e3`+brace fix, payload `3f5f3f5c…`): the
+oracle first — cmd-1-dev-149 (the known crash) → `apple_rtkit_reinit +
+boot + start_ep(32)` recovery (the #68 procedure; post-recovery the
+registry is valid and #73/#74 saw banks move exactly in this state) —
+THEN the f→4→f transition with SRAM snapshots around every step and a
+post-cycle dev-149 touch.  Hypothesis: #96/#97's fatal transition and
+the crash oracle are the SAME bug (the resolver's garbage-name walk),
+and a recovered PMP survives the transition and executes the bring-up.

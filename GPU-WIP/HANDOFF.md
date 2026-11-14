@@ -624,3 +624,11 @@ Manual (auto=0) + target 0 = accepted -> silent SoC death (PMP GFX-off
 handler fragile).  #97 steps f->4->f (state 4 = clock-gated idle per
 the A13) with the PMP ps + crashed flag watched.  Display flicker
 self-resolved in iOS (user report).
+
+## #97/#98 (2026-11-14) — any accepted GFX transition is fatal; oracle-then-transition
+
+target 4 (clock-gated idle) also killed the SoC silently.  #98: crash
+the PMP once (cmd-1-dev-149), recover via reinit/boot/start_ep, then
+transition f->4->f on the valid registry.  If the death and the oracle
+are the same resolver bug, the transition should now survive and the
+PMP should execute the 15-op bring-up.
