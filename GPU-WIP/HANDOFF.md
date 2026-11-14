@@ -576,3 +576,12 @@ for GFX-KF/SGX/BUSY (psreg 0 -> pmgr1+0x80000+psidx*8), target=ON,
 actual=0, auto=1, PMP-writable only.  The 15-op table = the KF bring-up
 ((6<<52)|0x0095X643, X=0..14, on dev 149); the rail walk advances per
 pass.  Boot #89: six full passes, then the KF attempt.
+
+## Boots #89/#90 (2026-11-14) — pass replay: one kernel death, no walk
+
+#89: pass 0 completed (tables rebuilt), pass 1 op 4 killed the kernel
+silently.  #90 (3 passes, 5 s settle): survived, all ops silent, bank[0]
+never moved in 45 samples; the #74 rail walk did not fire (it is
+timing-dependent — #73/#74/#75 are the same tree and differ per boot).
+Model: ops stick only inside the PMP's ~110 ms rail-tick windows.
+Boot #91: feedback-driven walk (repeat each rail op until a bank moves).

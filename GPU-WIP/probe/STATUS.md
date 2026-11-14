@@ -3894,3 +3894,29 @@ transactions on dev 149 (indices 0..14, value 0x643), messages
 registration we've been sending.  #73/#74/#75: the rail walk (ops 6-9)
 fired in pass 1 and went further in pass 2 — the state machine advances
 per pass.  Boot #89 = six full passes.
+
+## Boot #89 — kernel death at the second-pass rail toggle (kernel `98ee3a27d49d`, payload `88e170da…`)
+
+Six passes of the 15-op replay.  Pass 0 completed: the PMP rebuilt the
+full 15-op table (0x01014330, all 15 pairs), the type-2 table
+(0x01015018, {0x445, 0x00600002} x6 on devices {142,128,130,132,0,2}),
+the registry objects and queues.  Pass 1's ops 0-3 silent, then the
+kernel **died silently at op 4** (the rail-toggle op that moved bank[20]
+in #73's second pass) — SoC reset back to PongoOS, no panic trace, no
+SError print.
+
+## Boot #90 — hardened loop survives; the walk never fired (kernel `4ff3eb8adfd3`, payload `5b634705…`)
+
+3 passes, 5 s settle, crashed-checks — the boot ran to completion
+(208 s).  All 45 op sends silent; the #74 rail walk (ops 6-9) did NOT
+fire: bank[20] = 0x200 constant, bank[6] constant, **bank[0] never moved
+in any of 45 samples**; bank[40] pulsed 0x1f0023ff sporadically (~every
+5 ops = ~4 s) — matching #59's ~110 ms rail tick, not op-driven.
+`apple_rtkit_boot` -> -62.  #74 vs #90: identical messages, identical
+trees-behavior differences — #73/#74/#75 are the SAME tree and differ
+boot to boot, so the walk is state/timing-dependent.
+
+New model (boot #91): the PMP's rail writes stick only inside its
+~110 ms tick windows (~every 2-4 s); drive each rail op with a feedback
+loop (repeat + 100 ms polling until a watched bank changes), no bare
+cmd1 first (#74's shape).
