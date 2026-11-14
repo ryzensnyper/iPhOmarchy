@@ -4014,3 +4014,18 @@ entries is not an address).  gfx-kf: `clock-gates = [149]`,
 `pmp-sw-interrupt = 1`.  #92's retoggle never created a transition
 (before 0x1f0003ff → after 0x0f0003ff = only the auto bit).  #96: a
 real off→on cycle, fully observed, SRAM snapshotted first.
+
+**#96** (kernel `27393f49b7bd`, payload `209837d3f0…`): the real cycle's
+FIRST target-0 write in manual mode killed the SoC silently (no SError,
+reset to recovery) — while the stage-2 retoggle (target-0 with auto=1
+still set) survived.  Conclusion: with auto=1 the ps target write is
+IGNORED (that is why 95 boots of retoggle never did anything); with
+auto=0 the write is ACCEPTED, the transition reaches the PMP (the dock
+FIFO is real), and the PMP's GFX-off handler kills the SoC — the same
+signature as #89.  USER REPORT: the display flicker resolved by itself
+back in iOS (transient disturbance, consistent with the trigger-bit
+pulse theory).
+
+**#97**: a survivable transition — f→4→f (state 4 = on, clock-gated,
+the A13's iOS idle state), PMP ps 0x232080308 + crashed flag watched
+after every step (kernel `8840af23fd37`, payload `7bad36a0…`).

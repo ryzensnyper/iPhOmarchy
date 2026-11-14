@@ -616,3 +616,11 @@ no_ps VIRTUAL devices (no register); the pmgr = the PMP's dock-FIFO
 agent (channel 3); gfx-kf's gates = itself (bank[0] via the 149 entry
 decode was misleading).  #96 = a real observed ps_gfx cycle (SRAM
 snapshot first) to hand the PMP the transition.
+
+## #96/#97 (2026-11-14) — manual-mode transitions reach the PMP; f->0 kills
+
+The retoggle never worked: with auto=1 the target write is ignored.
+Manual (auto=0) + target 0 = accepted -> silent SoC death (PMP GFX-off
+handler fragile).  #97 steps f->4->f (state 4 = clock-gated idle per
+the A13) with the PMP ps + crashed flag watched.  Display flicker
+self-resolved in iOS (user report).
