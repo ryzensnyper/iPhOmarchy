@@ -650,3 +650,11 @@ The PMP does not self-recover from the dev-149 crash and raw mailbox
 sends are not taken (0 words differ).  New lead: the PMP's registry is
 EMPTY at boot and iOS registers devices via the dock FIFO (channel 3).
 #101 = dump the PMP control block (0x232400000) live, read-only.
+
+## #101/#102 (2026-11-14) — the pwrgate bank is the new lead
+
+The PMP control block = empty/traps at 0x4c00.  The ADT power-gates
+lists = pwrgate ENTRY indices (PMP [54,55], gfx-kf [149] at +0x950);
+the A13 pwrgate bank = pmgr+0x9c000, 16-byte entries, head word
+0x80000000 on iOS (AP-writable).  #102 = read 0x2329c000 (head + the
+GPU/PMP entries) + the head-word write test.

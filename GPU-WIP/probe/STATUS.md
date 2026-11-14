@@ -4079,3 +4079,20 @@ through the dock FIFO (the pmgr = its agent, channel 3; the PMP's own
 tags include DOCK).  The control block (0x232400000, 0x10000) = the
 likely FIFO home, never dumped.  Read-only chunked scan on a LIVE PMP
 (kernel `19fd8eb55c6f`, payload `8a97bfa0…`).
+
+**#101** (kernel `19fd8eb55c6f`, payload `8a97bfa0…`): the PMP control
+block (0x232400000) = +0x0 = 1 (our own start write) and zeros to
+~+0x4c00, then it traps — no dock FIFO visible from the AP.
+
+**The pwrgate decode (from the A13 reference + the decompressed ADT)**:
+the pmgr reg list = pmgr0 is only **1 MiB** (0x32000000/0x100000);
+the A13's pwrgate bank = pmgr+0x9c000, **16-byte entries**; the ADT
+`power-gates` lists are ENTRY INDICES — the PMP = [54, 55]
+(+0x360/+0x370), gfx-kf = [149] (**+0x950**), sgx = [148, 123]; and the
+A13's head word = 0x80000000 on iOS vs 0 under iBoot, AP-writable
+("takes 0x80000000").  0x2329c000 = never probed on our A11 (#94 died
+on +0xa0000 — the A13-only VOLMAN offset — before reaching it).
+
+**#102**: read the pwrgate head + entries {0,1,2,3,54,55,90,113,123,
+126,148,149,154,194}, then the head-word write test (kernel
+`56d06516ce49`, payload `bd15c088…`).
