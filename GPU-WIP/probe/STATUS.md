@@ -4235,3 +4235,12 @@ it with the Fender request.
 sends the PMP rail requests (`cmd 4, dev 148 and 149, payload 0`, the
 silent class-1 command) before the Fender power-state request, then
 the full flow continues.
+
+**#107** (kernel `abd38b05bd5c`, payload `6690d98d…`): the rail-request
+prints never appeared — my patch sat AFTER `apple_rtkit_boot`, whose
+-62 stops the flow first.  The A10's boot-first order works because its
+mailbox is alive from iBoot; the A11's = dead until powered.
+
+**#108** (kernel `aca71d8fe433`, payload `abbdf811…`): the order
+inverted — the window + run bit, the PMP rail requests (cmd 4, dev
+148/149, payload 0), the Fender power state, THEN the RTKit boot.

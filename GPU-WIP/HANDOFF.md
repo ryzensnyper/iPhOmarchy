@@ -711,3 +711,8 @@ powervr probes natively; the -62 = the mailbox dead because the Fender
 sequencer waits for the GPU rail.  #107 = the pvr driver asks the PMP
 for the rails (cmd 4, dev 148+149, payload 0 — the #65-proven silent
 command) before the Fender state request.
+
+## #107/#108 (2026-11-15) — the boot-first order inverted
+
+#107's rail requests sat after the RTKit boot (-62 stopped first).
+#108: rails -> Fender power state -> the RTKit boot.
