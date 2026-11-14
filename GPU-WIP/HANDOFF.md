@@ -716,3 +716,9 @@ command) before the Fender state request.
 
 #107's rail requests sat after the RTKit boot (-62 stopped first).
 #108: rails -> Fender power state -> the RTKit boot.
+
+## #108/#109 (2026-11-15) — the rails requested, still -62; the failure dump
+
+#108: the rail requests + the Fender state went out, the mailbox = dead
+still.  #109 = the powervr driver dumps the Fender ack/seq + the
+mailbox + the rail banks at the boot failure.

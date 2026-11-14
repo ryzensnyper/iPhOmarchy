@@ -4244,3 +4244,13 @@ mailbox is alive from iBoot; the A11's = dead until powered.
 **#108** (kernel `aca71d8fe433`, payload `abbdf811…`): the order
 inverted — the window + run bit, the PMP rail requests (cmd 4, dev
 148/149, payload 0), the Fender power state, THEN the RTKit boot.
+
+**#108** (payload `abbdf811…`): the rail requests SENT (dev 148 -> 0,
+dev 149 -> 0) and the Fender state requested — the RTKit boot = -62
+anyway, and cmd-4's silence leaves no proof the PMP acted.
+
+**#109** (kernel `7f5b247e2df1`+fix, payload `647b38fc…`): at the boot
+failure the driver now dumps Fender {+0x1000 state, +0x1010 ack,
++0x1014 status, +0x1018 seq}, the mailbox CPU_CTRL (fender+0x110, the
+V4GFX offsets; IOP+0x4008 as the alternative), and the rail banks
+[0]/[6]/[20]/[40] — the next boot shows exactly where the chain stalls.
