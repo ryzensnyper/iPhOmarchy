@@ -551,3 +551,10 @@ The +0x0c anomaly was an unwritten slot in the 6x32 layout, not a bug; the
 pre-#84 IOP window write was already kext-verbatim (FINDINGS 9e).  #84's
 64-bit-pair form reverted in #85.  New gaps from 9f: the IOP+0xc00 MU block,
 +0x4044 bit 4, Fender +0x1010/+0x1014 — boot #85 programs all of them.
+
+## Boot #86 (2026-11-14) — clg ON path dead end
+
+The clg type-6 messages (mode 3, val 0xfff, ep 0) are silent and move no
+banks.  The proven gate-ON path is cmd 1 + dev 151 (boot #70: triple ON).
+Boot #87 sends cmd 1 + dev 151 and holds the gates ON through
+timebase/window/FENDER_RUN/RTKit.

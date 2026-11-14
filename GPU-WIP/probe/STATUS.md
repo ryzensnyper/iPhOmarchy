@@ -3840,3 +3840,14 @@ in the Fender copy.
 (IOP+0x4000 and IOP+0xc00), the GFX-specific +0x4044 bit 4, Fender status
 +0x1010/+0x1014 — none ever programmed by us.  Boot #85 = the full verbatim
 sequence.
+
+## Boot #86 — clg gates held ON; silent, bank[6] unmoved (kernel `bc38fce7248a`, payload `8767ca3a…`)
+
+gate_try = bare cmd1 + register op0, then the three clg type-6 messages
+(6<<52)|{mode3, dev, 0xfff} on ep 0 for 149/148/123 — the #77 encoding.
+Result: **all three silent, bank[6] read 0x1f0000ff before and after every
+send**, bank[0]/bank[40] unmoved, mailbox dark, `apple_rtkit_boot` -> -62.
+Re-checking #70: bank[6] ON (`0x1f0f00ff`) came from **cmd 1 + dev 151**
+(the 151/152 ON/OFF pair, triple ON with bank[20]+bank[40]), not from any
+clg message — the clg path was never observed to move a bank on device
+traffic.  Boot #87 = cmd 1 + dev 151 held ON through the firmware start.
