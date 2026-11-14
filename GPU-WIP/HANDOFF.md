@@ -672,3 +672,13 @@ driver (G9P → G10P), keep the mailbox bring-up the A10 way.  The PMP
 hunt (#89-#102) = parked; #102's 0x2329c000 read also killed the SoC
 (the A13 offsets do not exist here).  #103 = the pmgr1 dock-FIFO scan
 (one unknown per boot), then the A10 port begins.
+
+## #103 (2026-11-15) — the new kernel boots to userspace; the pmgr1 map; SSH
+
+Post-rebase boot = full Arch Linux ARM userspace; SSH root@172.16.42.1
+(password "alarm"; the kmsg TCP stream is gone — console = ttyGS0
+serial, logs via SSH dmesg).  pmgr1's live blocks mapped: the
+pwrgate/dock block = pmgr1+0x9c000 (head 80040318, bit 31 set,
+static), live counter at +0xb0000, perf at +0xb4000.  Next: the A10
+port (gpu_opp + alias + operating-points-v2 in the t8015 node;
+powervr-apple match + apple,t8015-gpu).

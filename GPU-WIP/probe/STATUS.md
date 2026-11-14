@@ -4149,3 +4149,41 @@ the console never came up — the kmsg listener was wedged on boot
 mid-stream wedges it).  The listener was restarted between boots
 (2026-11-15 00:01); its single-connection design means every mid-boot
 SoC death needs a restart afterwards.  Retrying #103.
+
+**#103** (kernel `3faf46cafd13`+restores, payload `6e0339ee…`): the
+first post-rebase boot — the NEW kernel (206 upstream commits incl. the
+A10 GPU stack) **booted all the way to a full Arch Linux ARM userspace**
+(SSH at 172.16.42.1, root/alarm; the kmsg TCP stream is gone from the
+new payload — the console is ttyGS0/USB-serial and SSH instead).
+
+The pmgr1 scan completed — the unexplored 900 KB is mapped and the
+live blocks are:
+
+| block | head | notes |
+|---|---|---|
+| +0x0000, +0x1000 | 81000000 | config pairs (+0x4 = 0xbb80/0x8340 timers?) |
+| +0x40000 | 81100011 | |
+| **+0x7c000** | **fffffe11** | +0x4 = 3 — a mask/config record |
+| **+0x9c000** | **80040318** | **the pwrgate/dock block — on pmgr1, not pmgr0!** bit 31 already set (iOS-style); 2-3 records {80040318, 00440002, 180c0c0c…}, {b0040303, 00120001, 010c0c0c…}, {80040301, 000b0000…}; static between scans |
+| +0xa8000 | 00000001 | |
+| +0xac000 | 2ad5ad6a | magic-ish |
+| +0xb0000 | ca7f1b0a → 14ab56e9 | **changes between scans — live data** |
+| +0xb4000 | 00030000 | the perf/DVFS block |
+| +0xb9000 | fefffbfb | |
+| +0xbc000 | 00010207 | |
+| +0xc4000 | 00000001 | |
+| +0xd4000 | b6104661 | |
+| +0xd8000 | f8000092 | |
+| +0xe8000 | 00000002 | |
+
+The A13's pwrgate offset lands on **pmgr1** here, with the head word
+already enabled — the A13's head-word fix is a non-issue.  The block is
+static config (2-3 records), not an indexed per-device array.  The
+diagnostic completed all 12 stages on the new kernel; the mailbox
+remains dead (CPU_CTRL 0 everywhere); no powervr/devfreq/opp binding
+yet (the A10 driver is in the kernel but matches only apple,t8010-gpu).
+
+**THE NEXT BOOT = the A10-port prep**: t8015 gpu node + gpu_opp (empty
+table) + `operating-points-v2` + the `gpu` alias (the m1n1 pstates
+patch then fills it from the ADT), and the powervr-apple match extended
+to apple,t8015-gpu.
