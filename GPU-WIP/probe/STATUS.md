@@ -3983,3 +3983,10 @@ power request).  ps_gfx = 0x1f0003ff; PMS_SRAM slot (0x80310) =
 **#94**: same dump minus +0x14000 (kernel `32b13f860d41`, payload
 `4ad62ef8…`) — AGX_PMGR (0x205000000) chunked read, the IOP +0x44
 run-bit analog, pmgr0 +0xa0000 (VOLMAN analog) / +0x9c000 (pwrgate).
+
+**#94** (kernel `32b13f860d41`, payload `4ad62ef8…`): Fender pristine
+all-zero except +0x54 = 6 (confirmed twice); IOP +0x3c = 1 (a second
+window-enable bit); chip ID +0x10030 = 06567c9a.  Died on the FIRST
+pmgr0 +0xa0000 read (VOLMAN offset) — SError, not readable on the A11.
+**#95**: AGX_PMGR chunked scan only — one unknown block per boot from
+here on (kernel `af1b0328dcad`, payload `2cf3debe…`).
