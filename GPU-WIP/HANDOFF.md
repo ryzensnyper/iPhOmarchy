@@ -722,3 +722,12 @@ command) before the Fender state request.
 #108: the rail requests + the Fender state went out, the mailbox = dead
 still.  #109 = the powervr driver dumps the Fender ack/seq + the
 mailbox + the rail banks at the boot failure.
+
+## #109/#110 (2026-11-15) — the Fender never applies power; the mailbox's own ps mirror
+
+Fender: state 1 accepted, ack never sets, sequencer never steps.  The
+mailbox's own power state = the ps_gfx_kf mirrors at fender+0x1008/
+0x1020 = 0 (the PMP's virtual dev-149 domain).  #110 = the powervr
+failure path pokes both mirrors with the ps shapes while the domain is
+powered.  Live-SSH iteration wedges after a failed probe (the genpd
+powers the domain off) — reboots it is.

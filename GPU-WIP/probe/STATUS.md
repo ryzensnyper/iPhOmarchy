@@ -4254,3 +4254,19 @@ failure the driver now dumps Fender {+0x1000 state, +0x1010 ack,
 +0x1014 status, +0x1018 seq}, the mailbox CPU_CTRL (fender+0x110, the
 V4GFX offsets; IOP+0x4008 as the alternative), and the rail banks
 [0]/[6]/[20]/[40] — the next boot shows exactly where the chain stalls.
+
+**#109** (payload `647b38fc…`): the failure dump landed before an
+ioremap bug of mine (the banks read faulted; harmless): **Fender state
+= 1 accepted, ack (+0x1010) = 0, sequencer (+0x1018) = 0 — the Fender
+never applies the power**.  The mailbox's own power-state mirrors
+(fender+0x1008/+0x1020 = **ps_gfx_kf**, the virtual dev-149 domain the
+PMP owns) = 0 in every boot = the KF = never powered = the mailbox
+dead.  A failed powervr probe powers the whole GPU domain OFF via the
+genpd (the IOP reads trap afterwards; the live-SSH iteration wedged and
+a reboot = needed).
+
+**#110** (kernel `54e5b36fc849`, payload `7a64fdcc…`): the powervr
+failure path now pokes BOTH mirrors with the ps shapes (0x1/0xf/0x11/
+0x1f) while the domain is still powered, watching the mailbox
+CPU_CTRL (fender+0x110) after each — the live test of the KF power
+gate.
