@@ -637,3 +637,9 @@ PMP should execute the 15-op bring-up.
 
 #98: crash ✓, but boot -> -62 at 15 s (watchdog = 15-30 s).  #99: wait
 30 s + verify the registry re-init, then boot and transition.
+
+## #99/#100 (2026-11-14) — the host RTKit boot never revives the PMP; go raw
+
+#99: boot -> -62 twice after the watchdog window.  #100: 35 s wait +
+reinit (crashed flag only) + raw mailbox STARTEP/d149 via
+apple_mbox_send, then the transition.

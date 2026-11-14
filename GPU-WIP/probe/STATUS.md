@@ -4052,3 +4052,13 @@ early; start_ep → -22; the transition then ran on a still-dead PMP →
 silent SoC death.  **#99**: wait 30 s (watchdog), watch the registry
 struct re-initialize, reinit + boot (retry) + start_ep, verify, then
 the transition (kernel `75abf3ae410d`, payload `65aabf98…`).
+
+**#99** (kernel `75abf3ae410d`, payload `65aabf98…`): the 30 s watchdog
+wait did not help — `boot -> -62` twice, `start_ep -> -22`, the
+registry probe word useless (8 before and after), the transition
+(killed the SoC as before).  The host-side RTKit state machine cannot
+revive the PMP.  **#100**: trust the watchdog — wait 35 s, reinit only
+(clears the crashed flag), then talk to the mailbox DIRECTLY via
+`apple_mbox_send`: raw STARTEP(32) on the mgmt endpoint + a d149 touch,
+SRAM diff to prove the PMP took them; then the transition (kernel
+`b190c7ddd889`, payload `05a99e9b…`).
