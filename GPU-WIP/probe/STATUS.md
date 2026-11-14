@@ -4289,3 +4289,24 @@ it per the oracle).  Patched `ldrb r0,[r5]` → `movs r0,#0` (2 bytes):
 the walk terminates immediately, the PMP survives, and the state
 machine should proceed to execute the 15-op table it built.  The
 patched firmware = installed on the phone (the md5s match).
+
+**#112** (the unpatched delivery): the PMP up in 0.65 s (the kernel's
+BUILT-IN firmware — the probe runs before the root mounts, so
+/lib/firmware/apple/pmp-t8015.bin never gets read). The oracle module
+over SSH: cmd-1-dev-149 → crashed = 1, the Ccst PC = 0x010086a2 =
+the unpatched ldrb. The phone stayed UP (the crash = contained now —
+the pmp driver handles it).
+
+**#113**: CONFIG_EXTRA_FIRMWARE wired (the patched firmware + the dir
+in the tree at gfxfw/apple/); two build-cache lessons: the component
+cache = keyed on the kernel-TREE content only (the orchard-side config
+edits do NOT bust it — a source marker commit did), and the rebuilt
+Image was byte-identical — the EXTRA_FIRMWARE bake did not land (the
+verdict: check the fw_gen step in the build container). The oracle
+module (oracle.ko, built out-of-tree via podman, insmod over SSH) =
+THE test tool: sends cmd-1-dev-149 on the live phone, reports the
+PMP's crashed flag + the banks + the 15-op table.
+
+**STATE AT THE COMPACTION**: the full picture + the next steps =
+GPU-WIP/HANDOFF.md (rewritten 2026-11-15). The blocker = delivering
+the patched PMP firmware to the PMP (the built-in copy wins at probe).
