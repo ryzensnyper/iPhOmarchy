@@ -558,3 +558,12 @@ The clg type-6 messages (mode 3, val 0xfff, ep 0) are silent and move no
 banks.  The proven gate-ON path is cmd 1 + dev 151 (boot #70: triple ON).
 Boot #87 sends cmd 1 + dev 151 and holds the gates ON through
 timebase/window/FENDER_RUN/RTKit.
+
+## Boot #87 (2026-11-14) — d151 works only in the crash-recovery window
+
+cmd 1 + dev 151 on a warm PMP is processed (SRAM slots) but moves no
+banks.  #70's triple ON happened ~22 s after a dev-1 crash, in the PMP's
+watchdog-recovery window, and held.  Boot #88 isolates that recipe in
+power_on_kf() (crash -> 21 s wait -> d151 x2) called in stage 5/12 right
+before FENDER_RUN, so the ON state is ms from the release (#82 revert
+~1.2 s).

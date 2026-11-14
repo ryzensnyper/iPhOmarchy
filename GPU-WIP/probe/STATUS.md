@@ -3851,3 +3851,21 @@ Re-checking #70: bank[6] ON (`0x1f0f00ff`) came from **cmd 1 + dev 151**
 (the 151/152 ON/OFF pair, triple ON with bank[20]+bank[40]), not from any
 clg message — the clg path was never observed to move a bank on device
 traffic.  Boot #87 = cmd 1 + dev 151 held ON through the firmware start.
+
+## Boot #87 — cmd 1 + dev 151 on a warm PMP: processed, no banks (kernel `3c468fda1ca8`, payload `0cd7ac4c…`)
+
+gate_try = bare cmd1 (acked) + register op0, then cmd 1 + dev 151
+(`0x0011000000970000`, the #70 message word verbatim).  Result: silent,
+**no bank movement** — but the PMP *did* process it: the transaction slot
+`0x010166b8` holds the d151 message, the power-state slots
+`0x01016680/98` went `0 -> 0x20` (ON), and flags at `0x01017400/08/1c`,
+`0x0101b61c/b634` changed.  Mailbox dark, `apple_rtkit_boot` -> -62.
+
+Forensics on why #70 moved banks: the #70 dev-151 send happened **~22 s
+after the dev-1 crash, in the PMP's watchdog-recovery window** (bank moves
+at 68.25 s; crash 45.9 s; "Endpoint 0x20 is not running" spam until
+68.0 s), and the ON state held.  #76 (no crash) also moved bank[40] via
+cmd-4 d149 payload 4 — but only on the **second** gate_try pass.  On a
+warm PMP in pass 1 the same messages are processed but move nothing.
+Boot #88 = isolate the #70 recipe (crash -> recovery -> d151) and put it
+immediately before FENDER_RUN.
