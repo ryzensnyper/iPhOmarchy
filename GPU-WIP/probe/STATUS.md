@@ -4062,3 +4062,20 @@ revive the PMP.  **#100**: trust the watchdog — wait 35 s, reinit only
 `apple_mbox_send`: raw STARTEP(32) on the mgmt endpoint + a d149 touch,
 SRAM diff to prove the PMP took them; then the transition (kernel
 `b190c7ddd889`, payload `05a99e9b…`).
+
+**#100** (kernel `b190c7ddd889`, payload `05a99e9b…`): the raw mailbox
+STARTEP + d149 sends went out (ret 0) but **"0 words differ"** — the
+PMP did not take them; no watchdog re-initialization in 35 s (the
+RTKSTACK fill unchanged).  The crashlog = the #68 strlen chain again
+(Ccst: 0x0100845c ← 0x0101882c ← 0x010187f2 ← 0x01011894 ← 0x01010c56
+← 0x010094d8), and the crash footprint builds BOTH the 15-op table
+(0x01014330) and the type-2 table (0x01015018, {0x445, 0x00600002} on
+devices 142/128/130/132) before dying.  Conclusion: "post-recovery the
+same message no longer crashes" = the PMP was simply DEAD; #87's
+post-crash processing followed a dev-1 crash, not dev-149.
+
+**#101**: the PMP boots with an EMPTY registry — iOS registers devices
+through the dock FIFO (the pmgr = its agent, channel 3; the PMP's own
+tags include DOCK).  The control block (0x232400000, 0x10000) = the
+likely FIFO home, never dumped.  Read-only chunked scan on a LIVE PMP
+(kernel `19fd8eb55c6f`, payload `8a97bfa0…`).

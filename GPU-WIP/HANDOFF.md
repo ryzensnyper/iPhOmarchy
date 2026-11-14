@@ -643,3 +643,10 @@ PMP should execute the 15-op bring-up.
 #99: boot -> -62 twice after the watchdog window.  #100: 35 s wait +
 reinit (crashed flag only) + raw mailbox STARTEP/d149 via
 apple_mbox_send, then the transition.
+
+## #100/#101 (2026-11-14) — the PMP is unrevivable; the registry is the lead
+
+The PMP does not self-recover from the dev-149 crash and raw mailbox
+sends are not taken (0 words differ).  New lead: the PMP's registry is
+EMPTY at boot and iOS registers devices via the dock FIFO (channel 3).
+#101 = dump the PMP control block (0x232400000) live, read-only.
