@@ -658,3 +658,17 @@ lists = pwrgate ENTRY indices (PMP [54,55], gfx-kf [149] at +0x950);
 the A13 pwrgate bank = pmgr+0x9c000, 16-byte entries, head word
 0x80000000 on iOS (AP-writable).  #102 = read 0x2329c000 (head + the
 GPU/PMP entries) + the head-word write test.
+
+## The pivot (2026-11-14): the working A10 GPU in upstream orchard
+
+Upstream has the A10 GPU WORKING (drm/imagination + Mesa G9P, Hyprland
+60 fps) on the same boot chain as ours: ps → window → mailbox → run,
+clock via an OPP table the m1n1 payload fills from the ADT sgx
+perf-states (the patch is explicitly A7-A11).  No PMP anywhere.
+
+The new main line: port it to the A11 — add gpu_opp + the gpu alias +
+operating-points-v2 to the t8015 gpu node, adapt the powervr-apple
+driver (G9P → G10P), keep the mailbox bring-up the A10 way.  The PMP
+hunt (#89-#102) = parked; #102's 0x2329c000 read also killed the SoC
+(the A13 offsets do not exist here).  #103 = the pmgr1 dock-FIFO scan
+(one unknown per boot), then the A10 port begins.

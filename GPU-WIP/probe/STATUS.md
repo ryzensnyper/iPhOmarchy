@@ -4096,3 +4096,49 @@ on +0xa0000 — the A13-only VOLMAN offset — before reaching it).
 **#102**: read the pwrgate head + entries {0,1,2,3,54,55,90,113,123,
 126,148,149,154,194}, then the head-word write test (kernel
 `56d06516ce49`, payload `bd15c088…`).
+
+**#102** (kernel `56d06516ce49`, payload `bd15c088…`): the first read of
+0x2329c000 (the A13's pwrgate offset) killed the SoC — the A13 offsets
+(+0xa0000, +0x9c000) simply do not exist on T8015's 1-MiB pmgr0.
+
+## THE ORCHARD UPSTREAM DISCOVERY (2026-11-14, after rebasing local onto origin/main)
+
+The upstream orchard repo (206 commits ahead of our last pull) carries a
+**WORKING A10 GPU**: `b5e3769 kernel: the A10 GPU in drm/imagination,
+its clock from m1n1` — the iPad 6's Rogue core behind the same
+Fender/gfx-kf/RTBuddy architecture, as a POWERVR-driver variant
+(CONFIG_DRM_POWERVR_APPLE), running Hyprland at 60 fps with Firefox and
+WebGL on top, **booted through the same checkm8→PongoOS→payload path
+we use**.
+
+What the working A10 stack looks like:
+
+* `boot/m1n1/patches/orchard/0011-kboot-Fill-the-A7-A11-GPU-s-performance-states-from-.patch`
+  — the boot payload fills the GPU's OPP table from the ADT's sgx
+  perf-states; "opp-level = the state number the GPU's power controller
+  takes"; the patch is explicitly for **A7–A11** and runs for any GPU
+  node whose OPP table the DT leaves empty.
+* the DT node = ours PLUS `operating-points-v2 = <&gpu_opp>` and the
+  `gpu` alias the bootloader looks for; the mailbox = the same
+  apple,t8010-a7iop-mailbox binding; NO PMP interaction anywhere.
+* the GPU's clock = devfreq over the OPP table; "a missing ADT table
+  only leaves the GPU at its boot clock".
+
+Consequences for us:
+
+1. The kernel-tree rebase = done; the payload now carries the pstates
+   patch. Our t8015 gpu node lacks `operating-points-v2` and the alias,
+   so the patch currently no-ops on D21.
+2. The A10's flow = ps → window → mailbox → run with the MAILBOX ALIVE —
+   on the same boot chain where ours is dead. The remaining A11
+   structural difference = the gfx-kf virtual gate (the PMP's job), and
+   whatever makes the A10's mailbox live (the pstate/clock channel the
+   OPP mechanism drives).
+3. The realistic path to HELLO = port the working A10 stack: add
+   `gpu_opp` + the alias + `operating-points-v2` to our t8015 gpu node,
+   then adapt the powervr-apple driver (G9P → G10P). This replaces the
+   PMP hunt as the main line.
+
+**#103** (kernel tree rebuilt, payload `6e0339ee…`): the chunked
+read-only scan of pmgr1 outside the ps files ([0, 0x80000) and
+[0x8c000, 0x100000)) — the dock-FIFO node's own 1 MiB, unexplored.
