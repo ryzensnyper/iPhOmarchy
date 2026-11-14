@@ -605,3 +605,14 @@ agent all along.  #92: bank[0] bit 10 AP-writable/self-clearing.
 #93: died on the Fender +0x14000 read (SError; A13 warns Fender reads
 need GFX on).  #94: same dump minus +0x14000; AGX_PMGR chunked read
 (the KF clock candidate) is the goal.
+
+## #95/#96 (2026-11-14) — AGX_PMGR = a bridge port; display flicker; dock-FIFO theory
+
+AGX_PMGR (0x205000000) = the GPU bridge-port registers only (readable
+extent 0x7c00, +0x7c00 SError'd).  USER REPORTED display flicker after
+#92-#95: bank[0] is shared with the display (DISP0_* map there) — all
+AP bank writes disabled from #96 on.  The ADT decode: 123/148/149 are
+no_ps VIRTUAL devices (no register); the pmgr = the PMP's dock-FIFO
+agent (channel 3); gfx-kf's gates = itself (bank[0] via the 149 entry
+decode was misleading).  #96 = a real observed ps_gfx cycle (SRAM
+snapshot first) to hand the PMP the transition.

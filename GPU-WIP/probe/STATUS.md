@@ -3990,3 +3990,27 @@ window-enable bit); chip ID +0x10030 = 06567c9a.  Died on the FIRST
 pmgr0 +0xa0000 read (VOLMAN offset) — SError, not readable on the A11.
 **#95**: AGX_PMGR chunked scan only — one unknown block per boot from
 here on (kernel `af1b0328dcad`, payload `2cf3debe…`).
+
+**#95** (kernel `af1b0328dcad`, payload `2cf3debe…`): the AGX_PMGR
+chunked scan — page 0 = the BRIDGE PORT registers {0xf, 0x00480048,
+0x00100010, 0x80050005, 0x00008f04 (same +0x10 shape as the DISP0
+bridge), 0x000100ff, 0x00010001, 0xff, 0xff}; every page to +0x7b00
+zero; **SError at +0x7c00** (the readable extent).  AGX_PMGR on the A11
+= a bridge port, NOT a ClkGen — the A11's GPU clocks are elsewhere.
+
+**USER REPORT: display flicker after the #92–#95 series.**  bank[0] is
+SHARED with the display path (DISP0_GP/DISP0_DART/DISP0_HILO/DP/
+DISP-FB-ACTIVE/DISP-CPM-PG all = psreg 0 psidx 0 = 0x235280000) — #92's
+trigger-bit writes (bit 10 self-clearing, bits 10+11) pulsed a gate the
+display depends on.  All AP writes to the bank are DISABLED from #96 on
+(the stage-9c ungate walk is read-only).  AGX_PMGR capped at 0x7c00.
+
+**The dock-FIFO theory** (PMP-POWER-MODEL.md §2 + the gfx-kf ADT node):
+the pmgr node = `pmgr-dock-fifo-agent`, channel 3 — ps transitions
+forward to the PMP, which services the virtual GFX gates (123/148/149
+are no_ps VIRTUAL devices with NO register: the psreg0/psidx0 in their
+entries is not an address).  gfx-kf: `clock-gates = [149]`,
+`power-gates = [149]` (self); sgx: `clock-gates = [148, 123]`,
+`pmp-sw-interrupt = 1`.  #92's retoggle never created a transition
+(before 0x1f0003ff → after 0x0f0003ff = only the auto bit).  #96: a
+real off→on cycle, fully observed, SRAM snapshotted first.
