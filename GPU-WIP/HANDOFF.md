@@ -659,89 +659,159 @@ the A13 pwrgate bank = pmgr+0x9c000, 16-byte entries, head word
 0x80000000 on iOS (AP-writable).  #102 = read 0x2329c000 (head + the
 GPU/PMP entries) + the head-word write test.
 
-## The pivot (2026-11-14): the working A10 GPU in upstream orchard
+# A11 G10P GPU BRING-UP — HANDOFF (rewritten 2026-11-15, boot #113)
 
-Upstream has the A10 GPU WORKING (drm/imagination + Mesa G9P, Hyprland
-60 fps) on the same boot chain as ours: ps → window → mailbox → run,
-clock via an OPP table the m1n1 payload fills from the ADT sgx
-perf-states (the patch is explicitly A7-A11).  No PMP anywhere.
+Read this file first. Everything essential from boots #1–#113 is here;
+the per-boot details live in probe/STATUS.md and the KB files.
 
-The new main line: port it to the A11 — add gpu_opp + the gpu alias +
-operating-points-v2 to the t8015 gpu node, adapt the powervr-apple
-driver (G9P → G10P), keep the mailbox bring-up the A10 way.  The PMP
-hunt (#89-#102) = parked; #102's 0x2329c000 read also killed the SoC
-(the A13 offsets do not exist here).  #103 = the pmgr1 dock-FIFO scan
-(one unknown per boot), then the A10 port begins.
+## WHERE WE ARE (one paragraph)
 
-## #103 (2026-11-15) — the new kernel boots to userspace; the pmgr1 map; SSH
+The A11 (T8015) GPU bring-up now runs the **A10-proven code path**: the
+upstream orchard powervr driver (drm/imagination, `CONFIG_DRM_POWERVR_APPLE`,
+G10P layout in pvr_apple_layout.c) binds the `apple,t8015-gpu` DT node
+natively at boot and runs the A10 flow (genpd ps_gfx → DMA window → the
+real G10P firmware → the apple-mailbox driver → Fender run bit → RTKit).
+The probe consistently fails with `GFX firmware boot failed: -62` because
+**the GFX mailbox is dead until the Kingfisher IOP is powered, and the
+Kingfisher's power is owned by the PMP (virtual device 149, ps_gfx_kf)**.
+Every AP-side way to move it has been tried and rejected. The current
+frontier: **a patched PMP firmware** (the dev-149 strlen crash neutered,
+2 bytes at 0x010086a2) — built and verified correct, but not yet delivered
+to the PMP (see "THE BLOCKER" below).
 
-Post-rebase boot = full Arch Linux ARM userspace; SSH root@172.16.42.1
-(password "alarm"; the kmsg TCP stream is gone — console = ttyGS0
-serial, logs via SSH dmesg).  pmgr1's live blocks mapped: the
-pwrgate/dock block = pmgr1+0x9c000 (head 80040318, bit 31 set,
-static), live counter at +0xb0000, perf at +0xb4000.  Next: the A10
-port (gpu_opp + alias + operating-points-v2 in the t8015 node;
-powervr-apple match + apple,t8015-gpu).
+## THE CHAIN (what the bring-up needs, in order)
 
-## #104 (2026-11-15) — the live-phone powervr attempt; the match fixed
+1. **The PMP raises the GPU rails** — cmd-4 to dev 148/149 on ep 32
+   (silent, safe; boot #65 proved the rails = bank[20]/bank[40] toggle).
+   The powervr driver now sends these before the Fender state request.
+2. **The Fender power state** — `fender+0x1000 = 0x11` (state 1 +
+   request). The register accepts it (state reads back 1) but **the ack
+   (+0x1010) never sets and the sequencer (+0x1018) never steps** —
+   power is never applied.
+3. **The mailbox wakes** — CPU_CTRL at fender+0x110 (V4GFX offsets) or
+   IOP+0x4000 (V2 style) — both read 0 in every boot. Its own power
+   state mirrors at **fender+0x1008/+0x1020 (= ps_gfx_kf)** read 0 and
+   reject every ps poke (0x1/0xf/0x11/0x1f, both registers).
+4. RTKit boot → HELLO → the G10P layout init (pvr_apple_layout.c).
 
-The powervr module loaded + the firmware in place on the live phone,
-but bind = refused by the of_match (t8010 only).  Added the
-apple,t8015-gpu match; the next boot = the A10 flow (genpd → window →
-firmware → apple-mailbox → run → RTKit) on the A11 node, with the
-powervr G10P layout (bbdbdb19353e).
+## THE BLOCKER: delivering the patched PMP firmware
 
-## #105 (2026-11-15) — the probe ran! -EBUSY on the iop/mbox overlap; fixed
+The PMP driver (built-in) probes at ~0.65 s, before the root is
+mounted, so `request_firmware("apple/pmp-t8015.bin")` falls back to the
+kernel's BUILT-IN copy (the Ccst chain at 0x010086a2 proves the stock
+firmware still runs — the crash site = the unpatched ldrb).
 
-The powervr probe executed (the match fix worked) and hit -EBUSY: the
-t8015 gpu node's iop = 0x20000 overlapping gpu_mbox at +0x4000.  The
-A10's shape = iop 0x4000.  #105 = the DT fix; the next bind = the full
-A10 flow.
+Options, in order of preference:
+1. **Bake it as CONFIG_EXTRA_FIRMWARE** — config lines added to
+   /home/doug/orchard/kernel/configs/apple-16k/config:
+   `CONFIG_EXTRA_FIRMWARE="apple/pmp-t8015.bin"` +
+   `CONFIG_EXTRA_FIRMWARE_DIR="/src/gfxfw"`, file at
+   trees/d21-touchgood/gfxfw/apple/pmp-t8015.bin. The build ran but the
+   Image was byte-identical (the bake did not land — diagnose: verify
+   the fw_gen step / the .config in the build container).
+2. **The initramfs route** — the orchard initramfs bakes the device
+   recipe's firmware (the dfrmtfw files are in it). Add the patched
+   pmp-t8015.bin via the recipe (the recipe supports additional
+   hash-checked inputs — see INPUT_PARAMETERS in src/orchard/recipe.py).
+3. **The pmp driver as a module** — loads after the root mounts, finds
+   the patched file at /lib/firmware/apple/pmp-t8015.bin (already
+   installed there and persisted).
 
-## #105/#106 (2026-11-15) — the bind wedged on the self-re-arming work; the diagnostic parked
+## THE PATCHED PMP FIRMWARE (the artifact)
 
-The live bind deadlocked (the diagnostic's .remove = uncancellable).
-#106 = the diagnostic parked (apple,t8015-gfx-diag); powervr probes the
-gpu node natively at boot — the first REAL A10-flow bring-up of the
-G10P driver.
+- /tmp/opencode/pmp-t8015-patched.bin (md5 4f6d1f26bf1c82c6eaaaa31d11da0424)
+- = pmp-t8015.bin with ONE 2-byte change at file offset 0x86a2:
+  `ldrb r0,[r5]` (28 78) → `movs r0,#0` (00 20).
+- Why: cmd-1-dev-149 (the only crashing message shape) makes the PMP's
+  dev-149 resolver strlen-walk a garbage name pointer. The patch ends
+  the walk immediately; the PMP survives and its state machine proceeds
+  (it had already built the 15-op gate table before crashing).
+- The original = /tmp/opencode/pmp-t8015-orig-backup.bin.
+- boot #112 (unpatched delivery): the PMP came up in 0.65 s (the built-in
+  firmware) and the oracle module crashed it at exactly 0x010086a2 —
+  the proof the built-in copy runs.
+- The oracle module = /tmp/oracle.ko (the source =
+  .orchard-out/apple-16k/output/gfxprobe/oracle.c): sends cmd-1-dev-149
+  on the live phone via SSH and reports the PMP's crashed flag + the
+  banks + the 15-op table. THE test tool for the patch.
 
-## #106/#107 (2026-11-15) — the Fender state = the GPU clock; the rail = the PMP
+## THE WORKING BOOT/ITERATION SETUP
 
-powervr probes natively; the -62 = the mailbox dead because the Fender
-sequencer waits for the GPU rail.  #107 = the pvr driver asks the PMP
-for the rails (cmd 4, dev 148+149, payload 0 — the #65-proven silent
-command) before the Fender state request.
+- Build: `cd /home/doug/orchard && ./bin/orchard build
+  /home/doug/omarchy-iphone/d21-desktop-boot --device d21 --kernel-tree
+  /home/doug/projects/OrchardLinux/trees/d21-touchgood --pongo
+  "/home/doug/Known Good State/loaders/Pongo.bin"`
+- Boot: `./bin/orchard run ... --no-build -y` (the phone in PongoOS =
+  05ac:4141; a payload boot = re-enumerates as 05ac:4144).
+- The new kernel boots to a FULL Arch Linux ARM userspace: **SSH
+  root@172.16.42.1, password "alarm"** (the USB network enp13s0f3u3 =
+  172.16.42.2/30). dmesg over SSH replaces the old kmsg TCP stream (the
+  listener at /tmp/opencode/kmsg-host.log wedges on mid-boot deaths —
+  restart it if needed).
+- The kernel tree = d21-touchgood (branch gpu/phase2.2); the orchard =
+  rebased onto origin/main (the A10 GPU stack is IN). The component
+  cache = keyed on the kernel-TREE content only — the orchard-side
+  config changes do NOT bust it (touch a source file).
+- Out-of-tree modules build via podman (the tree ro at /src, the output
+  rw at /out): see the gfxprobe/oracle Makefile pattern in
+  .orchard-out/apple-16k/output/gfxprobe/.
 
-## #107/#108 (2026-11-15) — the boot-first order inverted
+## THE KEY FACTS (verified this session)
 
-#107's rail requests sat after the RTKit boot (-62 stopped first).
-#108: rails -> Fender power state -> the RTKit boot.
+- **ps_gfx (0x232080338, dev 124)** = 0x1f0003ff = ON (the A13 semantics:
+  0x1f0000ff IS the on value; bits 8/9 = auto-PM history). The GFX domain
+  is UP — Fender/RGX answer reads.
+- **GFX-SGX/KF/BUSY (123/148/149) are no_ps VIRTUAL devices** — no
+  register; the PMP must move their gates. gfx-kf's ADT node:
+  power-gates = [149], clock-gates = [149]; sgx: [148, 123];
+  pmp-sw-interrupt = 1. notify_pmp = False on all GPU devices.
+- **The Fender state = the GPU clock/power step** (the pvr driver's
+  request_power_state writes FENDER_POWER_REQUEST|state to +0x1000).
+  State 1 accepted; ack/sequencer dead.
+- **The PMP's registry is empty at boot** — iOS registers devices via
+  the dock FIFO (the pmgr = its agent, channel 3). The FIFO is not
+  AP-visible (the control block traps at +0x4c00; pmgr1 = mapped, the
+  live blocks = +0x0/+0x1000 (config), +0x40000, +0x7c000 (fffffe11),
+  **+0x9c000 (80040318 — the pwrgate/dock block, bit 31 set)**, +0xb4000
+  (the perf block), +0xb9000 (changes = live)).
+- **pmgr0 = 1 MiB only** (0x232000000-0x2320fffff); the A13 offsets
+  (+0x9c000, +0xa0000) trap on T8015.
+- bank[0] = 0x235280000 shared with the DISPLAY path (DISP0_* map there)
+  — **never write it from the AP** (the user reported display flicker
+  after #92's writes; all AP bank writes are disabled since #96).
+- The AGX_PMGR (0x205000000) = a bridge port, not a ClkGen (readable
+  extent 0x7c00).
+- The powervr probe failure powers the GPU domain off (the genpd) —
+  the IOP registers trap afterwards; only the Fender window stays
+  readable.
 
-## #108/#109 (2026-11-15) — the rails requested, still -62; the failure dump
+## THE FILES THAT MATTER
 
-#108: the rail requests + the Fender state went out, the mailbox = dead
-still.  #109 = the powervr driver dumps the Fender ack/seq + the
-mailbox + the rail banks at the boot failure.
+- drivers/gpu/drm/imagination/pvr_apple.c — the A10 flow + the G10P
+  additions (the rail requests before the power state, the failure dump
+  with the ps pokes). The match = apple,t8015-gpu (pvr_drv.c).
+- drivers/gpu/drm/imagination/pvr_apple_layout.c — the G10P firmware
+  layout (Henrik's port; compile-validated only).
+- arch/arm64/boot/dts/apple/t8015.dtsi — the gpu node (iop = 0x4000 now;
+  NO operating-points-v2 yet — the ADT's sgx perf-states are zeroed so
+  the m1n1 pstates patch leaves the OPP empty).
+- drivers/soc/apple/apple-t8015-gfx.c — the OLD diagnostic, PARKED
+  (compatible = apple,t8015-gfx-diag; its self-re-arming work made
+  .remove uncancellable — never re-enable without fixing that).
+- drivers/soc/apple/pmp_t8015_v1.c — the PMP driver (the firmware load
+  = request_firmware; the AKF remap; control=1 start).
+- GPU-WIP/kb/A11-GPU-FINDINGS.md, probe/STATUS.md — the history.
+- /tmp/opencode/bootNNN.log — the boot extracts (the old kmsg era);
+  the new era = SSH dmesg (boot103-full-dmesg.log = the last full one).
 
-## #109/#110 (2026-11-15) — the Fender never applies power; the mailbox's own ps mirror
+## THE NEXT STEPS (concrete)
 
-Fender: state 1 accepted, ack never sets, sequencer never steps.  The
-mailbox's own power state = the ps_gfx_kf mirrors at fender+0x1008/
-0x1020 = 0 (the PMP's virtual dev-149 domain).  #110 = the powervr
-failure path pokes both mirrors with the ps shapes while the domain is
-powered.  Live-SSH iteration wedges after a failed probe (the genpd
-powers the domain off) — reboots it is.
+1. Deliver the patched PMP firmware (THE BLOCKER above, option 1-3).
+2. Verify with the oracle module over SSH: cmd-1-dev-149 → crashed = 0.
+3. If the PMP survives: the 15-op table executes on the transitions;
+   watch the banks + the Fender ack + the mailbox over SSH, then
+   rebind powervr (echo 204000000.gpu >
+   /sys/bus/platform/drivers/powervr/bind) for the RTKit boot.
+4. If HELLO: the G10P layout init runs; then Mesa G10P (the ds.g10p
+   ISA work in GPU-WIP/kb/A11-GPU-G10P-ISA.md) is the userspace side.
 
-## #110/#111 (2026-11-15) — the dump faulted past the shrunk iop mapping; fixed
-
-#111 = the ps-poke sweep (0x1/0xf/0x11/0x1f on fender+0x1008/+0x1020,
-watching the mailbox CPU_CTRL) runs in the powered window.
-
-## #111 + the PMP firmware patch (2026-11-15)
-
-The AP-side ps pokes are all rejected; the wall = the PMP's dev-149
-handler.  The PMP firmware = patchable (loaded from
-/lib/firmware/apple/pmp-t8015.bin on the persistent root): the strlen
-walk at 0x010086a2 (ldrb r0,[r5] -> movs r0,#0) = neutered, so the
-dev-149 path survives and the 15-op table it builds gets executed.
-The next boot = the patched PMP + the powervr probe.
