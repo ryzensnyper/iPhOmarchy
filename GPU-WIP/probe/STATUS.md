@@ -3950,3 +3950,36 @@ bank writes.
   ({PS, flags}) and the in-mask bits 10/11/21 were never set.
 * AGX_PMGR (`0x205000000`, the GPU's own PMGR with the ClkGen) has
   still never been read post-alias-fix.
+
+## Boots #92/#93/#94 — the reframe lands; Fender +0x14000 is a trap (2026-11-14)
+
+**#92** (kernel `5b5f0449b255`, payload `1c49bfa4…`): the 64-bit write
+sweep on bank[0].  Bit 10 (0x400) is AP-writable and **self-clears**
+(gone by the next readback) — a reset/trigger bit; every other shape
+rejected; flags words (+4) all zero; CPU_CTRL dead.  ps_gfx entry
+resolved: dev 124 → entry 4, psidx 7 → 0x232080338 ✓; dev 149 → entry 0
+→ 0x235280000 ✓ (the ADT table has 11 entries).
+
+**The reframe**: per the A13 reference (Cascadia gpu.md G4), bank value
+0x1f0000ff IS the "on" value (bits 8/9 = auto-PM history, set when the
+domain acts); m1n1 writes exactly that on the A13 and the GPU domain is
+up.  And the ADT says GFX-KF (149) has **notify_pmp = False** — the PMP
+is not in the gfx-kf power path; the A13's whole fix was one host-side
+control bit.  bank[0] is shared by ~35 media/fabric devices (ECPU,
+PCPU, the DARTs…); bank[6] = SMC_FABRIC; bank[40] = SMC_CPU (mask 0x40,
+bit 6 only); bank[20] has no ADT owner.  The A10 recipe (FENDER.md 4.4)
+needs only ps + window + mailbox + run for HELLO — all done — so the
+missing piece is the KF's clock (AGX_PMGR, never read) or the Fender
+step state.
+
+**#93** (kernel `29fe745d1051`, payload `234a2210…`): the read-only deep
+dump died on the FIRST Fender **+0x14000** read — SError on CPU3, SoC
+reset to DFU.  That is exactly the A13 doc's warning ("Fender is read
+only while GFX is on").  Pristine Fender before the death: everything
+zero except +0x54 = 6; +0x200 = 0 pristine (0x80000000 only after our
+power request).  ps_gfx = 0x1f0003ff; PMS_SRAM slot (0x80310) =
+0x1f0003ff; PMP slot (0x80308) = 0x1f0f00ff.
+
+**#94**: same dump minus +0x14000 (kernel `32b13f860d41`, payload
+`4ad62ef8…`) — AGX_PMGR (0x205000000) chunked read, the IOP +0x44
+run-bit analog, pmgr0 +0xa0000 (VOLMAN analog) / +0x9c000 (pwrgate).

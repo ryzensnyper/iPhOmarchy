@@ -596,3 +596,12 @@ notify_pmp = False — the PMP is not in its power path; bank[0] reads
 Boot #92: dump the 8-byte ps entries, then a 64-bit write sweep on
 bank[0] (active shape / bit 21 / bits 10+11 / clear bit 6 / 32-bit),
 watching CPU_CTRL; the mailbox bring-up stages run right after.
+
+## Boots #92-#94 (2026-11-14) — notify_pmp=False; the A13 reframe; +0x14000 trap
+
+bank[0] = 0x1f0000ff is already the ON shape (A13 semantics; bits 8/9
+are auto-PM history); GFX-KF notify_pmp=False — the PMP was the wrong
+agent all along.  #92: bank[0] bit 10 AP-writable/self-clearing.
+#93: died on the Fender +0x14000 read (SError; A13 warns Fender reads
+need GFX on).  #94: same dump minus +0x14000; AGX_PMGR chunked read
+(the KF clock candidate) is the goal.
