@@ -4764,3 +4764,16 @@ DECISIVE NEGATIVE:
   state-sets, which our driver never sends.  **#130**: register only
   {123, 124} + the state-set walk (4,123,{0x643,0x1643,0x2643,0x3643}),
   each acked, NO 148/149 traffic at all.
+
+**#130 CORRECTED** (2026-11-16): the "all-unacked, ops rebound to 0x7c"
+result was NOT a timeout/state mystery — the #129 matrix was still in the
+kernel sending (1,148), which parked the resolver.  So the cmd-2 at
+0.8792 = the ack to the matrix's (1,124); the probe's registers +
+state-sets at 2.09-3.9 queued behind the parked (1,148) = zero acks; the
+ops = 0x7c = the matrix's (1,124) was the last processed registration.
+Lesson: never leave an unknown-device send in the tree.
+**#131** (commit 8e638e5c467a): 148/149 removed; the whole sequence runs
+in the PMP driver boot right after STARTEP — register {123,124}, then
+state-set cmd-4s for the bound device (124), dumping the op table + walk
+after every step via the mapped SRAM (op table = sram_base + 0x14330).
+Goal: see exactly which message advances the walk (currently 1 of 4).
