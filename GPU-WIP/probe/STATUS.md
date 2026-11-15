@@ -4672,3 +4672,21 @@ localizes the real cause:
   val 0, and the bare terminator.  Any ack with low 16 != 0xffff = an
   accepted entry; the terminator closes the stream (iOS's zeroed
   w21/w22 path in the A10 cmd-2 handler).
+
+**#125 RESULTS** (2026-11-15): the 0x33 ENCODING MATRIX — decisive:
+- pm-form {d1,dev123,0} -> ack 00040001ffffffff; d0 -> 00040000ffff;
+  d2 -> 00040002ffff; the raw {123<<32} -> 0004007bffff; dev148/149 ->
+  00040001ffff; the bare terminator -> 00040000ffff.  cmd 3 = rejected
+  (0xffff) in EVERY encoding, but the echo follows our bits 32-47
+  exactly = the payload is parsed, then refused.
+- cmd 1 (0x31, now with the real buffer payload) and cmd 5 (0x35 in
+  #122) ack ALL-ZERO = accepted.  The firmware's cmd-5 RX handler
+  broadcasts the message to the graph object + self->76 = the real
+  service path; cmd-4 = the same via self->72.
+- The pm path jammed identically (10th send = -110).  Fender -62.
+- Synthesis: pre-STARTEP (#121) type-1 messages never reached svcA and
+  the resolver processed everything; post-STARTEP our 0x31 triggers the
+  cmd-1/3 SETUP which re-initialises the shared-region objects and
+  re-runs on every cmd-1.  **#126**: STARTEP ep 32, log the cmd-0, DO
+  NOT reply — the setup never runs, the PM path should behave like #121
+  (or finally ack).
