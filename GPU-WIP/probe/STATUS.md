@@ -4620,3 +4620,36 @@ localizes the real cause:
 - **#124**: reply to cmd-0 with the RTKit buffer-reply shape
   (3<<52)|(1<<48)|(pages<<44)|iova of a real 16 KiB dma_alloc_coherent
   work area (commit 8f63cf4f9c9c in the kernel tree... see git log).
+
+**FIRMWARE RE (between #123 and #124)** — the svcA dispatcher decoded
+(pmp-full-dis.txt):
+- svcA vtable[0] @0x010112dc = the CMD dispatcher (r1 = cmd, 1..8):
+  cmds 1&3 -> 0x0101131c (the memory/registry SETUP handler), cmd 4 ->
+  0x0101144e (forwards the message to the registered handler self->72,
+  then notifies the globals with event 4), cmd 5 -> 0x010114ae (notify
+  event 5 + self->76), cmd 2 -> 0x0101178c, cmds 6/7 -> an error path,
+  cmd 8 -> 0x0101151c.
+- The cmd-1/3 handler IGNORES the message payload: it looks up a
+  firmware resource by 4CC tag (the tag table near 0x01017e28: _COS,
+  RCOS...), takes a 0x20000 = 128 KiB base (matches the DT's
+  iop-pmp-nub region-size = 131072), carves sub-objects {base+0x10000,
+  ep 32}, {base+0x4000}, {base+0x8000}, and calls init fns.  THE
+  SETUP = what wipes the resolver's bindings (op-table dev fields = 0)
+  — it runs on OUR 0x31 (cmd 1!) and re-runs on every cmd-1/3.
+- The three #122 acks map perfectly: 0x31 (cmd 1) -> setup -> ack
+  cmd-2; 0x33 (cmd 3) -> setup -> ack cmd-4 (0xffffffff = the
+  payload-0 entry rejected); 0x35 (cmd 5) -> the cmd-5 handler -> ack
+  cmd-6 (accepted).  The pm commands (type 1) do NOT go through svcA —
+  a separate resolver path, which is why they get no svcA acks.
+- The A10 client code re-decoded: the 0x33 send has TWO paths —
+  per-entry with w21/w22 preserved ({param<<32 | value}) and a zeroed
+  bare terminator.  THE REGISTRY UPLOAD IS REAL.
+- Registry walk code: get-entry-by-index @0x0100a0a8 (bounds vs 28),
+  the op walk @0x0100db48+ (posts message 22 to entry objects).
+- **#124 design** (commit 2f590f33000c): keep the cmd-0 -> 0x31 reply
+  (now with a real 16 KiB DMA buffer payload), then upload candidate
+  registry entries via 0x33: {123, 0x643/0x1643/0x2643/0x3643},
+  {124, 0x643}, {148, 0x643}, {149, 0x643}, logging each cmd-4 ack.
+  The wire tells us which {param, value} encodings the firmware
+  accepts; valid entries should re-bind the resolver and unjam the pm
+  path (the GPU probe's cmd-1/cmd-4 acks = the end metric).
