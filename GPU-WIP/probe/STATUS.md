@@ -4653,3 +4653,22 @@ localizes the real cause:
   The wire tells us which {param, value} encodings the firmware
   accepts; valid entries should re-bind the resolver and unjam the pm
   path (the GPU probe's cmd-1/cmd-4 acks = the end metric).
+
+**#124 RESULTS** (2026-11-15): the 0x33 payload IS parsed — big step:
+- The cmd-0 memory request now gets the buffer-reply 0x31
+  (pages=4 iova=0x08050c4000); acked cmd-2 as before.
+- All 7 candidate entries {dev<<32 | val} ({123,0x643..0x3643},
+  {124},{148},{149}) were REJECTED: every ack = (cmd 4 | our-dev at
+  16-31 | 0xffffffff).  The ack ECHOES our bits 32-47 value into the
+  ack's device field — the PMP parses the 0x33 with the PM-COMMAND
+  field layout, where bits 32-47 = the DOMAIN (A10 RE: slot = bits
+  32-47, slot 1 = the live device-graph object).  Our "dev" sat in the
+  domain slot and the low bits (0x643 = 1603) were read as the device.
+- The pm commands stayed unacked; the PMP jammed at the same place
+  (the rebind's dev-149 rail = the 10th send = -110, the 8-deep FIFO
+  full).  Fender unchanged (-62, ack 0, seq 0).
+- **#125** (commit, see kernel tree): the 0x33 ENCODING MATRIX —
+  pm-form {d1,d0,d2} x dev123, d1 x dev148/149, the #124 form with
+  val 0, and the bare terminator.  Any ack with low 16 != 0xffff = an
+  accepted entry; the terminator closes the stream (iOS's zeroed
+  w21/w22 path in the A10 cmd-2 handler).
