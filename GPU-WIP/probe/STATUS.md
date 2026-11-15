@@ -4690,3 +4690,23 @@ localizes the real cause:
   re-runs on every cmd-1.  **#126**: STARTEP ep 32, log the cmd-0, DO
   NOT reply — the setup never runs, the PM path should behave like #121
   (or finally ack).
+
+**#126 RESULTS** (2026-11-15): ***THE BREAKTHROUGH*** — first PM wire
+ack + first jam-free boot:
+- STARTEP ep 32; the PMP sent the cmd-0 memory request; we LEFT IT
+  UNANSWERED (no svcA setup ever ran).
+- pm cmd-1 (1,0x7b) TX 1.0177 -> **RX ACK 0002000000000000 at 1.0221
+  (4.4 ms, payload 0 = success)** — the first pm-command ack EVER.
+- **ZERO -110s**: all 10 sends drained (incl. the rebind's dev-149 rail
+  = 0).  The PMP stayed alive the whole boot.
+- Only 0x7b was acked: GFX-BUSY = in the firmware's own op table.
+  0x94/0x95 (GFX-SGX/KF) = not in the registry = unresolved = unacked
+  BUT SILENTLY (no jam) — the resolver drops unknown devices.
+- Fender unchanged (-62 / ack 0 / seq 0) — expected; the pm acks are
+  the prerequisite layer.
+- Model: the STARTEP activated the txn/ack machinery; the unanswered
+  cmd-0 kept the setup from wiping the resolver; the resolver acks
+  devices it can resolve.  **#127**: upload registry entries for
+  148/149 via cmd 5 (0x35 — its handler delivers the message to the
+  graph object + self->76) and cmd 7 (never tried), cmd-3 probes last
+  (poison re-test in the no-0x31 state).
