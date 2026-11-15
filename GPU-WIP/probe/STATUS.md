@@ -4310,3 +4310,31 @@ PMP's crashed flag + the banks + the 15-op table.
 **STATE AT THE COMPACTION**: the full picture + the next steps =
 GPU-WIP/HANDOFF.md (rewritten 2026-11-15). The blocker = delivering
 the patched PMP firmware to the PMP (the built-in copy wins at probe).
+
+**#114** (2026-11-15): THE DELIVERY FIX — the initramfs already contained
+`lib/firmware/apple/pmp-t8015.bin` (the ORIGINAL, staged from the boot
+project's `rootfs/` dir); the PMP probe at 0.65 s reads it there and never
+sees the NVMe-root copy. Swapped the rootfs-staged file for the patched one
+(backup: `rootfs/lib/firmware/apple/pmp-t8015.orig.bin`; the NVMe root's
+copy is patched too). CONFIG_EXTRA_FIRMWARE reverted (never landed; the
+component cache keys on kernel-tree content only).
+Result: the PMP ran the PATCHED firmware — the Ccst PC moved
+0x010086a2 → **0x01008664** (same caller chain). The patched site = a
+strtol-style NAME PARSER inside the dev resolver; the crash moved past the
+neutered r5 walk. oracle2 (read-only SRAM dump, no boot needed): the
+registry = 8 slots at 0x01017284 (count=8, entries ptr=0x01017264,
+{deadc0de, 0x0101de70, 0×6} — ONE live object = the device-graph head);
+the C++ dispatch chain = txn-object init 0x01011894 → dispatcher blx
+0x01010c56 → thunk blx 0x010094d8 → the parser; a "not set" string lives
+in the graph region; runtime SRAM code = file-identical in all dumped
+code regions (the upper Ccst "frames" point into zeroed SRAM — not code).
+**Firmware v2**: the parser's remaining garbage walks also neutered
+(0x0100866c + 0x010086e2 `ldrb r0,[r2]` → `movs r0,#0`; md5
+d21fc51d05bfcfae7e52514563cbe185) so every walk exits into the parser's
+designed error tail (sentinel 0x7FFFFFFF). Risk taken: valid names may
+parse wrong — oracle3 tests cmd-1-dev-151 (the #70 known-good gate-ON
+device) right after the dev-149 oracle to detect that.
+
+**#115 staged**: firmware v2 in the initramfs (verified md5) + oracle3.ko
+(battery: cmd-1-dev-149 → cmd-1-dev-151 → cmd-4 rails, banks + 15-op table
++ txn slot watched after every step). Waiting for a go.
