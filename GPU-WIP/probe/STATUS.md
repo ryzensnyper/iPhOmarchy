@@ -4710,3 +4710,24 @@ ack + first jam-free boot:
   148/149 via cmd 5 (0x35 — its handler delivers the message to the
   graph object + self->76) and cmd 7 (never tried), cmd-3 probes last
   (poison re-test in the no-0x31 state).
+
+**#127 RESULTS** (2026-11-15): the cmd-5/cmd-7 upload matrix:
+- All 4 x 0x35 (cmd 5) ACCEPTED: ack cmd-6 payload 0, incl. the pm-form
+  {d1,dev123/148/149,0} and the raw {123<<32|0x643}.  But they did NOT
+  make 148/149 resolvable: the pm cmd-1 (1,0x94) at 1.7306 and
+  (1,0x95) at 1.7396 = STILL unacked, while (1,0x7b) at 1.7129 ->
+  acked at 1.7199 (repeatable!).  The 0x35 = generic "received".
+- cmd 7 = silent (no ack, no error).  cmd 3 = STILL 0xffffffff even in
+  the no-setup state = closed: the registry does not ride cmd 3.
+- ZERO jams again.  Fender unchanged.
+- **LIVE ORACLE DUMP = THE STATE CRACKED**: op0-3 = {007b0643, 007b1643,
+  007b2643, 007b3643} with walk = 1 — ALL FOUR GFX-BUSY OPS BOUND AND
+  EXECUTED (vs wiped {00000643}, walk 0 in #122/#123); the txn = parked
+  on (1,0x94) = the resolver processed the queue and WAITS on the
+  GFX-SGX registration.
+- Reconciliation: the setup handler parses the AP-provided cmd-0 memory
+  AS THE REGISTRY.  Empty buffer (#123-125) = starved parse = jam; no
+  setup (#126/#127) = alive on the firmware's built-in registry (0x7b
+  only).  **#128**: embed the D21 iOS DT /arm-io/pmgr 'devices' prop
+  (142 x 48 bytes) in the 16 KiB work area + restore the
+  0x31 (pages<<44|iova) reply — the parser finally eats real data.
