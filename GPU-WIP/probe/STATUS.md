@@ -4472,3 +4472,86 @@ MBOX RAW TX/RX lines, full 2-word forms). Results:
 - Build note: orchard build REQUIRES --kernel-tree for our tree; the
   patch-based (no-tree) path currently fails on another agent's
   in-flight apple_z2.c conflict in the drivers/input layer.
+
+**#120/#121** (2026-11-15): full PMP handshake capture (the ratelimit fix
++ the log filter to PMP 232308000 + GFX 204d24000 only — the SMC's key
+reads flooded the ring before). Results:
+- **The PMP boots a completely healthy standard RTKit at 0.654 s**:
+  SET_IOP_PWR_STATE(0x220) -> HELLO -> HELLO_REPLY -> EPMAP (0x1f = eps
+  0-4, chunk 1 = ep 32) -> STARTEP x4 (eps 1-4) -> buffer exchanges on
+  eps 1/2/4 (syslog/crashlog/ioreport) -> IOP-PWR-ACK 0x20 -> AP-PWR-ACK
+  0x20. ZERO kernel rtkit warnings. "PMP is up."
+- **Zero RX on ep 32 ever** — 8 probe TX (cmd-1 x3, cmd-4 x2, + 5 on
+  rebind), no replies, ever. The ep-32 service was never STARTEP'ed.
+- The ep-4 type-8/0xc ping-pong = the IOREPORTING heartbeat (the echo =
+  the correct ack); ep-1/ep-2 = the standard crashlog/syslog buffer
+  setups; the GFX "unknown management message 0x0" = the GFX rtkit's
+  cold word. All normal — the ONLY open issue was ep 32.
+- oracle15 (live): dumped the RTKit shmem buffers via the exported
+  apple_t8015_pmp_rtk: syslog EMPTY (the PMP logs nothing), ioreport
+  ALIVE (bROI + the full IOReport channel schema: Duty cycle, Power,
+  Sleep/Wake counts, Power state, heap, Energy Counters), crashlog all
+  0xef (never crashed). These buffers = a free state oracle.
+- oracle16 (live): cmd-1 (1,0x95) = PROCESSED (txn 0x166b8 echoes the
+  exact message; graph words 0x167a0/a4/b8/bc change; Thumb ptr
+  0x0100d7b9 installed); cmd-3/cmd-4(0x95) = silently dropped. The boot
+  queue was processed only through cmd-4(0x94) (the txn baseline = its
+  echo). Op table = for dev 0x7b {0x007bX643, 0x00600001}, walk = 1.
+- oracle17 (live): resolver entries[0] = 0x0101de70 (the device graph),
+  entries[1..7] = 0. Valid RX cmds = {1, 5, 7} (all echo in the txn);
+  cmd-7 resets the graph words to {7, 0x0101bf80, 0x0101bf80, 7}.
+  cmds 0/2/3/6 ignored; no wire acks under any cmd.
+- **oracle18 (live) = THE STARTEP TEST**: apple_t8015_pmp_start_ep(32)
+  (exported, never called by pvr_apple.c — the smoking gun) -> the PMP
+  **REPLIED ON EP 32 FOR THE FIRST TIME EVER**
+  (RX recv0=0002000000000000 recv1=...0020 = cmd 2 ack) AND re-announced
+  its crashlog buffer (ep-1 type-1). The kernel's crashlog_rx misread
+  the repeat as CRASHLOG_CRASH (type 1 = the same value) -> false
+  crashed=true -> all further sends -EINVAL. False crash; PMP fine.
+- oracle19 (live): cleared rtk->crashed, re-probed cmds 1/3/4 — sends go
+  out, ZERO replies, no txn/op movement. STARTEP alone insufficient.
+- oracle20 (live): post-STARTEP full cmd sweep — aborted by MY unaligned
+  readl bug (0x14332; the op-walk word = 0x14334), then a second oops in
+  finit_module (the kernel state degraded). Phone needs the reboot
+  anyway. No data lost — the sweep was pre-empted by the better RE lead.
+
+**THE A10 KERNELCACHE RE BREAKTHROUGH (ApplePMPv2, the authoritative
+client):** the message space = {type bits 59:52, cmd bits 51:48, payload
+48} — the RX dispatch = ubfx x8, x1, #48, #4 (0x656ae84, 6-entry table):
+- **cmd 5 = THE ACK HANDLER** (stores the reply value into the pending
+  txn completion at self+320, clears it, completes) — matches the assert
+  pm_msg_get_cmd(ack_msg) == (command + 1): cmd 4 = the pm write, the
+  ack = cmd 5.
+- **cmd 0 = THE MEMORY-REQUEST HANDSHAKE**: the PMP sends cmd 0 (the
+  buffer spec in the low 48), the driver allocates (self+216/224), looks
+  up the registry entry (self+152/176), stores {ptr, size} at
+  self+232/240, and REPLIES 0x31 = (3<<52)|(1<<48) WITH A DESCRIPTOR.
+- **cmd 2 = a registry-entry handler GATED ON self+232 (the cmd-0
+  buffer!)** — the PMP's post-STARTEP cmd-2 ack was ignored by our
+  driver, and the service was probably waiting for the memory handshake.
+- cmds 1/3 as RX = "Unknown message" + trap (send-only there).
+- **type 3 = the memory/registry class**: the iOS driver also sends
+  (3<<52)|(3<<48) and (3<<52)|(5<<48) (0x33/0x35) — the
+  _sendEHubNodeCommand family (ehub_msg_get_cmd(ack) == command+1).
+- The pm command send = (1<<52)|(cmd<<48)|payload48, sent via the
+  mailbox-port vtable+232 (x1=&msg, w3=1 = with-wait), the reply read
+  from the same buffer, the pending txn at self+320 = EXACTLY the
+  firmware's parked-txn mechanism seen from the IOP side.
+- The handler names: _readyMessageHandler, _pmonMessageHandler,
+  _pBattMessageHandler, _initMemoryAckHandler; states
+  kStateWaitingForReady / kStateMemoryInit gate the sends.
+- Tooling: the kernelcache segments are __PRELINK_TEXT (the kexts'
+  __TEXT) + __PLK_TEXT_EXEC (the kexts' code); file = VA - 0x4974000 for
+  all prelink segments (validated). The ApplePMP slice = file 0xcde840
+  (cstrings, VA 0x5652840) + __TEXT_EXEC vm 0x656a000 = file 0x1bf6000.
+  The labeled listing = omarchy-iphone/tools/kernelcache-re/
+  a10pmp-disasm.txt.
+
+**THE NEXT-BOOT PLAN (#122):** the driver must (1) call
+apple_t8015_pmp_start_ep(32) right after the PMP rtkit boot completes,
+(2) service ep-32 RX: reply to the cmd-0 memory request with a real
+buffer (the 0x31 form) and handle cmd 2, (3) only then send the
+register/rail pm commands and expect cmd-5 acks. The false-crash flag
+(after a crashlog re-announce) must be cleared by the ep-32 service
+path. The live oracle series (#118-#121 phones) + the full transcripts
+= in .orchard-out/apple-16k/output/gfxprobe/oracle1*.c.
