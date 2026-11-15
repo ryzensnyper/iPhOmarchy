@@ -4446,3 +4446,29 @@ frozen (op1 = 0x00600001, static over 30 s — oracle10).
 4. The genpd-ON transition reaches the PMP (ps_gfx cycled to 0x0f000300
    on the probe failure = the OFF transition processed) — but ON with
    registered devices = still nothing. The dock-FIFO ON path = decode.
+
+**#119** (2026-11-15): the raw mailbox transcript diagnostic (mailbox.c:
+MBOX RAW TX/RX lines, full 2-word forms). Results:
+- The protocol decoded from the SMC transcript (236808000): standard
+  RTKit -- HELLO=1, HELLO_REPLY=2, STARTEP=5, SET_IOP_PWR_STATE=6/ACK=7,
+  EPMAP=8, SET_AP_PWR_STATE=11/ACK. Endpoint = msg1 bits 31:0 (the
+  driver is correct). recv1 bits 32-63 = a per-peer tag/sequence counter
+  (~0x00100100, +0x1100 per message) -- the crashlog "Mailbox history"
+  entries {0x4, 0x8000000000000000} = msg0=0x4 + the tag field with
+  bit63 set, ep 0 (mgmt).
+- The GFX mailbox (204d24000, a7iop 1-word form): one RX word=0
+  ctrl=0 at 0.81 s = the "neither empty nor full" uninitialised state
+  (boot #29's finding) -- the GPU IOP mailbox is cold, as expected.
+- **THE PMP MAILBOX IS TX-ONLY**: 5 TX during the probe (3x cmd-1,
+  2x cmd-4, all ep 32), ZERO RX ever; the rebind repeated it (3 TX,
+  0 RX). The PMP accepts app-ep messages (the parked txns prove it)
+  but never replies on the wire -- not even an error ack.
+- The PMP's own rtkit boot (0.6 s) DID complete in past boots (the
+  epmap was received), so the PMP talks at boot; its early messages
+  were eaten by the ratelimit this boot (the SMC's 20-message
+  handshake consumed the 10-per-5-s window).
+- Fix staged for #120: ratelimit removed. Boot #120 captures the full
+  PMP handshake + the probe-time wire.
+- Build note: orchard build REQUIRES --kernel-tree for our tree; the
+  patch-based (no-tree) path currently fails on another agent's
+  in-flight apple_z2.c conflict in the drivers/input layer.
