@@ -4338,3 +4338,31 @@ device) right after the dev-149 oracle to detect that.
 **#115 staged**: firmware v2 in the initramfs (verified md5) + oracle3.ko
 (battery: cmd-1-dev-149 → cmd-1-dev-151 → cmd-4 rails, banks + 15-op table
 + txn slot watched after every step). Waiting for a go.
+
+**#115** (2026-11-15): firmware v2 ran (all three patch bytes verified LIVE
+in SRAM via oracle4 post-crash) and cmd-1-dev-149 STILL killed the PMP —
+Ccst leaf back at 0x010086a2, which under v2 = `movs r0,#0` and cannot
+fault. The crashlog's register state (the "TACK" section) gave the truth:
+**r11 = 0x7FFFFFFF, SP ≈ 0x0101c8xx** — and the "parser" is not a strtol:
+it is a **printf-FORMAT interpreter** ('%' at 0x01008278, the space-
+padding loop at 0x010086b0 with r11 = the width — 0x7FFFFFFF = an infinite
+padding loop). The PMP was vsnprintf-ing a GARBAGE format string.
+
+**THE ROOT CAUSE (found, ours not theirs)**: oracle5's dump decoded the
+registry: entries[] at 0x01017264 = {0xdeadc0de, 0x0101de70, 0×6} and the
+graph = a linked list of (slot,arg) HANDLES — nodes (1,1), (1,0x45),
+(1,0x46), (1,0x47), (1,0x48), (4,0)..(4,3); the handle = msg bits 16-47
+(slot = bits 32-47, arg = bits 16-31; "index = the handle's high 16
+bits"). EVERY message we ever sent had 0 at bits 32-47 → idx 0 →
+**entries[0] = 0xdeadc0de (the poisoned slot)** → a garbage object → its
+"method" = garbage → the printf hang. The driver's rail requests
+(cmd-4 dev 148/149) went into the poison slot too and were silently
+dropped — which is why the rails never moved in the powervr probe.
+
+**The fix = one bit: slot 1** (the live entry) — e.g. cmd-1 on the KF =
+`0x0011000100950000`. oracle6 staged: the battery tests (0) the old dev-54
+shape, (1-3) the GPU devices 0x95/0x94/0x7b via slot 1, (4) the registered
+graph handle (1,0x45), (5) cmd-3 read via slot 1, (6) THE RAILS cmd-4 via
+slot 1 on 0x94/0x95, (7) the old poison LAST for the record. Banks +
+15-op table + txn queue after every step. The payload needs no rebuild
+(the initramfs = the same v2 firmware; the module is scp'd post-boot).
