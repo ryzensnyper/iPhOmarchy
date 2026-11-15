@@ -4570,3 +4570,30 @@ path. The live oracle series (#118-#121 phones) + the full transcripts
   service is up, its txn/acks should finally move.
 Expected wire: possible 0x31-related acks, type-3 replies, and (the
 real prize) type-1 cmd-5 acks to the powevr's cmd-4s on ep 32.
+
+**#122 RESULTS** (2026-11-15): the ep-32 service is ALIVE and interactive:
+- STARTEP(32) at "PMP is up" (0.6567) -> the PMP sent a cmd-0 (type 0,
+  payload 0) memory request at 0.6578; our bare 0x31 reply was ACKED
+  (cmd-2, payload 0) at 0.6633.  The cmd+1 ack rule = CONFIRMED LIVE.
+- Our out-of-protocol 0x33/0x35 got acked cmd-4 (payload 0xffffffff =
+  rejected) and cmd-6 (payload 0) — iOS sends these as per-entry REPLIES
+  inside the cmd-2 RX handler, never spontaneously.  Mistake.
+- The pm commands: the worker parked the txn on cmd-1 (1,0x7b) (the
+  graph words moved: 0x167a0=0x01017650, 0x167a4=0xc0310000,
+  0x167b8=0x00020002, 0x167bc=0x01017240) but then JAMMED — the op table
+  rebuilt UNBOUND (op0 = 0x00000643, walk 0 vs #121's 0x007b0643/1) and
+  every later send returned -110 (the RX FIFO never drained again; the
+  GPU probe's dev-149 rail request was the first -110 victim).
+- The device table from the iOS DeviceTree (extracted from the restore
+  ipsw, lzfse): device 124 'GFX' = the real GPU power device (perf=True,
+  psidx 7, psreg 4, group 2), 148 'GFX-SGX' and 149 'GFX-KF' = its
+  no_ps children (parents=[124]), 123 'GFX-BUSY' = parentless.  The
+  pmgr also has pmgr-dock-fifo-agent=1 / channel=3 (standing lead #3)
+  and function-pmp_control.  /arm-io/sgx: power-gates=[148,123],
+  has-kf=1, meta-sw-interrupt blob.
+- Conclusion: the pm commands flow through the resolver (graph moves)
+  but the ACKS + the op walk need the registry the PMP's cmd-0/registry
+  stream implies; our bare 0x33 = "empty registry finalize" and it
+  wedged the walk.  Next: serve ONLY the cmd-0 -> 0x31 handshake and
+  watch what the PMP streams (its registry entries) — do NOT send
+  0x33/0x35 unless replying to a PMP cmd-2.
