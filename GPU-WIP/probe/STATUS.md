@@ -4748,3 +4748,19 @@ DECISIVE NEGATIVE:
   and park — the resolver won't register a device whose parent is
   unknown.  **#129**: register (1,124) then (1,148) then (1,149) before
   the probe, cmd-0 still unanswered.
+
+**#129 RESULTS** (2026-11-15): the parent-chain test:
+- (1,124) GFX = **ACKED** (cmd-2, payload 0, ~13 ms) — the firmware's
+  registry knows BOTH {123, 124}.
+- (1,148)/(1,149) = still unacked EVEN with the parent registered.
+- **THE PARKED TXN BLOCKS THE QUEUE**: after our (1,148) parked at
+  0.9126, the probe's (1,0x7b) at 1.7736 went UNACKED (it acked in
+  #126/#127 when it came first).  The resolver = serial; one unknown
+  device = everything behind it unprocessed.
+- The jam = the usual 10th-send FIFO fill; the Fender unchanged.
+- Conclusions: (a) never send 148/149 to the PMP — the unknown devices
+  are queue poison; (b) the op walk (stuck at 1 of 4, ops = {0x7b ->
+  0x643/0x1643/0x2643/0x3643}) is advanced by VALUE-CARRYING cmd-4
+  state-sets, which our driver never sends.  **#130**: register only
+  {123, 124} + the state-set walk (4,123,{0x643,0x1643,0x2643,0x3643}),
+  each acked, NO 148/149 traffic at all.
