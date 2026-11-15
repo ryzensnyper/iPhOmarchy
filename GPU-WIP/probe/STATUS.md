@@ -4731,3 +4731,20 @@ ack + first jam-free boot:
   only).  **#128**: embed the D21 iOS DT /arm-io/pmgr 'devices' prop
   (142 x 48 bytes) in the 16 KiB work area + restore the
   0x31 (pages<<44|iova) reply — the parser finally eats real data.
+
+**#128 RESULTS** (2026-11-15): the registry-blob-in-memory experiment =
+DECISIVE NEGATIVE:
+- The 0x31 with the loaded blob (6816 bytes at iova 0x08048e4000) ran,
+  the handshake acked (cmd-2 at 0.6652) — and then THE 0x7b ACK
+  VANISHED: zero ep-32 RX after the boot ack, the pm cmd-1 (1,0x7b) at
+  1.0713 = unacked, the 10th-send jam returned (the rebind dev-149 =
+  -110).  The setup handler kills the resolver EVEN WITH the pmgr
+  devices blob loaded — the blob is not what the parser wants (the A10
+  parsed records were >=88 bytes, not 48).
+- Consolidated state: no-setup = resolver alive, 0x7b acked, ops bound +
+  walk 1, 0x94/0x95 parked; setup = resolver dead (empty OR blob).
+- NEW HYPOTHESIS (fits the ack pattern perfectly): 0x7b = PARENTLESS in
+  the DeviceTree and is acked; 148/149 are no_ps children of 124 'GFX'
+  and park — the resolver won't register a device whose parent is
+  unknown.  **#129**: register (1,124) then (1,148) then (1,149) before
+  the probe, cmd-0 still unanswered.
