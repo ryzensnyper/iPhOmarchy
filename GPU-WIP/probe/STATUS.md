@@ -4597,3 +4597,26 @@ real prize) type-1 cmd-5 acks to the powevr's cmd-4s on ep 32.
   wedged the walk.  Next: serve ONLY the cmd-0 -> 0x31 handshake and
   watch what the PMP streams (its registry entries) — do NOT send
   0x33/0x35 unless replying to a PMP cmd-2.
+
+**#123 RESULTS** (2026-11-15): the handshake ran clean (cmd-0 -> bare
+0x31 -> ack cmd-2), no 0x33/0x35 — and the bare-registry-init is cleared
+as the *only* jam trigger, but the PMP wedged anyway, and this boot
+localizes the real cause:
+- The worker processed exactly ONE pm message: cmd-1 (1,0x7b) — txn
+  parked on it (007b0000/00110001), graph words moved (0x167a0=
+  0x01017650, 0x167a4=0xc0310000, 0x167b8=0x00020002, 0x167bc=
+  0x01017240) — then stopped draining its RX FIFO entirely.  The A2I
+  FIFO is ~8 deep: 9 queued sends filled it and the 10th (dev-149 rail
+  request on the rebind, 17.87 s) returned -110 (ETIMEDOUT from
+  apple_mbox_send's poll on control_full).  oracle21 confirms all later
+  sends -110, op table UNBOUND (op0 = 0x00000643, walk 0) — the same
+  state as #122, so the op-table wipe is NOT caused by the bare 0x33.
+- Contrast with #121 (no STARTEP, service dormant): the resolver
+  fallback processed MANY messages silently.  With the service active,
+  the pm path blocks after one registration -> the service's own pm
+  handling is waiting on something; prime suspect = the real memory our
+  bare 0x31 promised but never delivered (iOS backs the reply with
+  _memory/_memoryMap objects).
+- **#124**: reply to cmd-0 with the RTKit buffer-reply shape
+  (3<<52)|(1<<48)|(pages<<44)|iova of a real 16 KiB dma_alloc_coherent
+  work area (commit 8f63cf4f9c9c in the kernel tree... see git log).
