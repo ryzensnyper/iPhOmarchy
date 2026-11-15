@@ -4555,3 +4555,18 @@ register/rail pm commands and expect cmd-5 acks. The false-crash flag
 (after a crashlog re-announce) must be cleared by the ep-32 service
 path. The live oracle series (#118-#121 phones) + the full transcripts
 = in .orchard-out/apple-16k/output/gfxprobe/oracle1*.c.
+
+**#122 PREP** (2026-11-15, built, awaiting the go): the kernel tree commit
+5eb1ce4351dc (branch gpu/phase2.2, on top of 37e3dd968000):
+- rtkit.c: the crashlog echo fix — after an app-ep STARTEP the PMP echoes
+  the AP's buffer reply verbatim ((1<<52)|(size<<44)|iova, decoded from
+  the #121 wire); upstream misreads it as CRASHLOG_CRASH and dead-flags
+  the PMP.  The echo now detected by the exact size+IOVA form, ignored.
+- pmp_t8015_v1.c: STARTEP ep 32 at "PMP is up" (0.65 s, before the GPU
+  probe), every ep-32 RX logged, the cmd-0 memory request served with
+  the bare 0x31 reply (the A10 RE's iOS-faithful form), then the
+  registry-init 0x33 and 0x35 (type 3, cmd 3/5) sent blind 0.2 s/0.7 s
+  after the STARTEP.  The powevr cmd-1/cmd-4 flow unchanged — if the
+  service is up, its txn/acks should finally move.
+Expected wire: possible 0x31-related acks, type-3 replies, and (the
+real prize) type-1 cmd-5 acks to the powevr's cmd-4s on ep 32.
