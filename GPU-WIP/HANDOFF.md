@@ -666,18 +666,18 @@ the per-boot details live in probe/STATUS.md and the KB files.
 
 ## WHERE WE ARE (one paragraph)
 
-The A11 (T8015) GPU bring-up now runs the **A10-proven code path**: the
-upstream orchard powervr driver (drm/imagination, `CONFIG_DRM_POWERVR_APPLE`,
-G10P layout in pvr_apple_layout.c) binds the `apple,t8015-gpu` DT node
-natively at boot and runs the A10 flow (genpd ps_gfx → DMA window → the
-real G10P firmware → the apple-mailbox driver → Fender run bit → RTKit).
-The probe consistently fails with `GFX firmware boot failed: -62` because
-**the GFX mailbox is dead until the Kingfisher IOP is powered, and the
-Kingfisher's power is owned by the PMP (virtual device 149, ps_gfx_kf)**.
-Every AP-side way to move it has been tried and rejected. The current
-frontier: **a patched PMP firmware** (the dev-149 strlen crash neutered,
-2 bytes at 0x010086a2) — built and verified correct, but not yet delivered
-to the PMP (see "THE BLOCKER" below).
+The bring-up runs the A10-proven powervr path end to end, and the PMP
+war is WON at the protocol level: the "dev-149 crash" = our messages
+carrying handle **slot 0** (msg bits 32-47) = the poisoned registry entry
+(0xdeadc0de), making the PMP's resolver vsnprintf a garbage format
+string. With **slot 1** (the live device-graph object) every message
+processes cleanly, cmd-1 (1,dev) REGISTERS the device, the KF bring-up
+op plan (15 ops) builds, and op 0 executes. The driver now registers
+123/148/149 + sends the rails via slot 1 at probe (#118). What still
+fails: ops 1-14 never execute, the banks never move, the Fender ack
+never sets, the mailbox stays dark. THE TOP LEAD = the PMP is sending
+2-word AKF management messages ({0x4, 0x8000000000000000}) that our
+1-word rtkit driver misreads and drops unanswered.
 
 ## THE CHAIN (what the bring-up needs, in order)
 
@@ -694,28 +694,15 @@ to the PMP (see "THE BLOCKER" below).
    reject every ps poke (0x1/0xf/0x11/0x1f, both registers).
 4. RTKit boot → HELLO → the G10P layout init (pvr_apple_layout.c).
 
-## THE BLOCKER: delivering the patched PMP firmware
+## THE CURRENT FRONTIER (was: the firmware delivery — SOLVED)
 
-The PMP driver (built-in) probes at ~0.65 s, before the root is
-mounted, so `request_firmware("apple/pmp-t8015.bin")` falls back to the
-kernel's BUILT-IN copy (the Ccst chain at 0x010086a2 proves the stock
-firmware still runs — the crash site = the unpatched ldrb).
-
-Options, in order of preference:
-1. **Bake it as CONFIG_EXTRA_FIRMWARE** — config lines added to
-   /home/doug/orchard/kernel/configs/apple-16k/config:
-   `CONFIG_EXTRA_FIRMWARE="apple/pmp-t8015.bin"` +
-   `CONFIG_EXTRA_FIRMWARE_DIR="/src/gfxfw"`, file at
-   trees/d21-touchgood/gfxfw/apple/pmp-t8015.bin. The build ran but the
-   Image was byte-identical (the bake did not land — diagnose: verify
-   the fw_gen step / the .config in the build container).
-2. **The initramfs route** — the orchard initramfs bakes the device
-   recipe's firmware (the dfrmtfw files are in it). Add the patched
-   pmp-t8015.bin via the recipe (the recipe supports additional
-   hash-checked inputs — see INPUT_PARAMETERS in src/orchard/recipe.py).
-3. **The pmp driver as a module** — loads after the root mounts, finds
-   the patched file at /lib/firmware/apple/pmp-t8015.bin (already
-   installed there and persisted).
+The patched PMP firmware now ships in the **initramfs** (the orchard
+stages `rootfs/lib/firmware/apple/*` into it; the PMP probe at 0.65 s
+reads it there — the NVMe-root copy never mattered). Firmware v2 = the
+three neutered parser walks (0x86a2/0x866c/0x86e2, md5
+d21fc51d05bfcfae7e52514563cbe185); NOTE: with slot-1 handles the patches
+are probably unnecessary (the crash = the poison slot, not the parser) —
+keep them anyway, they are verified live in SRAM.
 
 ## THE PATCHED PMP FIRMWARE (the artifact)
 
@@ -806,12 +793,24 @@ Options, in order of preference:
 
 ## THE NEXT STEPS (concrete)
 
-1. Deliver the patched PMP firmware (THE BLOCKER above, option 1-3).
-2. Verify with the oracle module over SSH: cmd-1-dev-149 → crashed = 0.
-3. If the PMP survives: the 15-op table executes on the transitions;
-   watch the banks + the Fender ack + the mailbox over SSH, then
-   rebind powervr (echo 204000000.gpu >
-   /sys/bus/platform/drivers/powervr/bind) for the RTKit boot.
-4. If HELLO: the G10P layout init runs; then Mesa G10P (the ds.g10p
-   ISA work in GPU-WIP/kb/A11-GPU-G10P-ISA.md) is the userspace side.
+1. **Answer the PMP's messages** (the top lead): the crashlog's
+   "Mailbox history" = {0x4, 0x8000000000000000} ×3 — the PMP's ep-0
+   2-word AKF messages, unanswered. Decode type 4 in the firmware (the
+   mgmt tbb @0x0100dde8) + fix the driver's rtkit recv for the 2-word
+   protocol, then reply.
+2. **The op executor**: grep the firmware for 0x01014330 (the op
+   table); the walker's precondition = why op 1 never runs.
+3. **The dock FIFO** (channel 3): the parked txn slot (0x010166b8),
+   the PMP control block 0x232400000 (traps past 0x4c00).
+4. If the mailbox wakes: the RTKit boot → HELLO → the G10P layout init
+   (pvr_apple_layout.c) → Mesa G10P (GPU-WIP/kb/A11-GPU-G10P-ISA.md).
 
+## THE HARD RULES (learned the hard way)
+
+- NEVER read the Fender window from a module after the probe failed
+  (the genpd powers the domain off; the reads = SError; #117's death).
+- The powervr probe failure leaves the phone UP (SSH works) — the
+  PMP too. All live-phone experiments happen over SSH, no boots.
+- oracle*.ko sources = .orchard-out/apple-16k/output/gfxprobe/;
+  build = the podman toolchain container (see probe/STATUS.md).
+- The phone = root@172.16.42.1, password "alarm"; one boot per "go".
