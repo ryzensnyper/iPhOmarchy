@@ -4405,3 +4405,44 @@ cmd-1 (slot 1) registers GFX-BUSY(123)/GFX-SGX(148)/GFX-KF(149), then
 cmd-4 (slot 1) requests the rails (the old slot-0 rails were silently
 dropped), then the Fender state + the RTKit boot as before. Commit
 37e3dd968000; payload 3b49019efcfe547d.
+
+**#118** (2026-11-15): the driver's new flow ran clean — register
+123/148/149 (slot 1) at 0.80 s, the slot-1 rails at 1.0 s, then the same
+-62: the Fender ack dead, the mailbox dead. The op walk = ONE op then
+frozen (op1 = 0x00600001, static over 30 s — oracle10).
+
+**The live-phone negative battery** (oracle11-14, no boots):
+- oracle11: the 15 ops sent as mgmt type-6 (6<<52)|0x0095X643 — only
+  X=0 (state 0x643, the #80-proven one) is taken (the txn = op 0);
+  0x1643-0xe643 = rejected. No banks move.
+- oracle12: the #65 type-3 gate replays ((3<<52)|(5<<44)|(149<<32)|1),
+  the slot-1 variant, and cmd-4 (1,dev) with payloads 1 and 0x20 — all
+  processed, ALL SILENT. The banks are immovable from the AP/PMP
+  message path as far as we can drive it.
+- oracle13: the ADT's meta-sw-interrupt (write 2 to 0x232104020 /
+  0x2321040a0, trailing 8) — the block is GATED: reads = 0, writes
+  dropped. Dead while the domain is down. (First attempt Oopsed on MY
+  mapping-size bug — 0x2000 bytes mapped, read at +0x4020; fixed.)
+- oracle14: 15 × cmd-1 (1,0x95) "passes" — no-ops (already registered),
+  the op table static.
+- The powervr rebind re-ran the whole flow with the devices already
+  registered from #118 — the genpd-ON transition with a registered PMP
+  still triggers nothing.
+
+**THE STANDING LEADS (ranked):**
+1. **The PMP is sending messages we ignore.** Every crashlog's "Mailbox
+   history" shows the PMP's ep-0 traffic: entries {0x4, 0x8000000000000000}
+   ×3 — a 2-word AKF message, type 4. The driver's rtkit = 1-word and
+   logs "unknown management message 0x0 (type 0x00)" — it is likely
+   MISREADING the 2-word protocol and dropping the PMP's notifications/
+   queries unanswered. Decode the PMP's type-4 in the firmware (the mgmt
+   tbb @0x0100dde8) and ANSWER it.
+2. **The op executor**: find what walks the 15-op table (@0x01014330) —
+   search the firmware for the references to 0x01014330; the walker's
+   precondition = the answer to why op 1 never runs.
+3. **The dock FIFO** (channel 3, the pmgr = the agent): the parked
+   transaction slot (0x010166b8) = maybe the FIFO's head; the FIFO's
+   control = in the PMP control block 0x232400000 (traps past 0x4c00).
+4. The genpd-ON transition reaches the PMP (ps_gfx cycled to 0x0f000300
+   on the probe failure = the OFF transition processed) — but ON with
+   registered devices = still nothing. The dock-FIFO ON path = decode.
