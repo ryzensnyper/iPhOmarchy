@@ -4777,3 +4777,15 @@ in the PMP driver boot right after STARTEP — register {123,124}, then
 state-set cmd-4s for the bound device (124), dumping the op table + walk
 after every step via the mapped SRAM (op table = sram_base + 0x14330).
 Goal: see exactly which message advances the walk (currently 1 of 4).
+
+**#131 RESULTS** (2026-11-16): the per-step op dump worked beautifully:
+- (1,123) register -> ACKED (cmd-2); ops = {007b0643/00600001,
+  007b1643/00600001, 007b2643/00600001, 007b3643/00600001} = bound to
+  0x7b (123), walk = 1 of 4.
+- (1,124) register -> NOT acked; ops unchanged.  ONLY THE FIRST
+  REGISTRATION TAKES; anything after parks the queue.
+- (4,124,...) state-sets -> not acked, ops unchanged: WRONG DEVICE — the
+  ops are bound to 123, not 124.
+- **#132**: register ONLY 123, then (4,123,0x1643/0x2643/0x3643), op
+  table dumped per step.  If the walk advances, the state-set cmd-4 IS
+  the op-walk trigger and the Fender should follow.
