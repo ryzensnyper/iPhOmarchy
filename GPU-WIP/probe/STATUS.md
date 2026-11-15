@@ -4366,3 +4366,22 @@ graph handle (1,0x45), (5) cmd-3 read via slot 1, (6) THE RAILS cmd-4 via
 slot 1 on 0x94/0x95, (7) the old poison LAST for the record. Banks +
 15-op table + txn queue after every step. The payload needs no rebuild
 (the initramfs = the same v2 firmware; the module is scp'd post-boot).
+
+**#116** (2026-11-15): the battery's step-0 control — the OLD dev-54 shape
+(slot 0) — **crashed the PMP too**, with the 15-op table built for 0x36
+and the identical printf-hang Ccst. So EVERY cmd-1 we ever sent was a
+poison-slot message; the #59-#64 "acks" were misattributed. The battery
+bailed at step 0 (slot 1 untested). Post-crash SRAM recon (oracle7):
+the 0x178xx strings = the PMP's telemetry keys backwards (RTDutyCl,
+RTSlpCnt, RTWakCnt, RTHPFree, RTHPAll, RTHPeak, RTNumCPU, DRAMNRG) —
+not device names; the only name-ish string = "not set". The node chain
+decodes fully: (1,0x46)->handler 0x0100be6d, (4,3)->0x0100be91,
+(1,0x47)->0x0100be9d (thunks loading fn ptrs 0x01012bd5/0x01012bf3 from
+literal pools), (1,0x48)->0x0100b095; owners = the device objects
+0x01017480/0x01017540. ADT: devices 69-72 = PWM0/I2C0/I2C1/I2C2 (the
+PMP's own dock peripherals — they registered themselves); 151 = DPA (so
+#70's "dev-151 triple ON" = the DPA domain, not the GPU); the GPU
+devices 123/148/149 = unregistered (the PMP-side GPU manager never ran
+here). oracle8 staged = the battery with slot-1 tests FIRST (registered
+handle control (1,0x45), then the GPU 0x95/0x94/0x7b via slot 1, cmd-3
+read, cmd-4 rails, the poison LAST).
