@@ -4385,3 +4385,23 @@ devices 123/148/149 = unregistered (the PMP-side GPU manager never ran
 here). oracle8 staged = the battery with slot-1 tests FIRST (registered
 handle control (1,0x45), then the GPU 0x95/0x94/0x7b via slot 1, cmd-3
 read, cmd-4 rails, the poison LAST).
+
+**#117 (2026-11-15) — THE BREAKTHROUGH**: oracle8's battery — the PMP
+survived ALL EIGHT steps, including the poison-shape cmd-1-dev-149 at
+step 7. cmd-1 (slot 1, arg 0x95) processed and **the 15-op table's word
+advanced 0x00600000 -> 0x00600001** (the KF bring-up op walk moved for
+the first time in 117 boots). The registration PERSISTED: after step 1
+every later message processed, and the step-7 poison parked without
+crashing (slot-0 messages park but do not process). bank[0]/[20] static;
+bank[40] = the known ~4 s tick pulse at base.
+
+**Cost of the boot**: oracle9 (my fault) ioremapped the Fender window
+0x204d00000 and read it AFTER the probe had genpd-off'd the GPU domain —
+SError, silent kernel death, the phone fell back to iOS (05ac:12a8).
+RULE: never touch the Fender window from a module post-probe-failure.
+
+**#118 staged**: the driver now does the whole PMP flow itself —
+cmd-1 (slot 1) registers GFX-BUSY(123)/GFX-SGX(148)/GFX-KF(149), then
+cmd-4 (slot 1) requests the rails (the old slot-0 rails were silently
+dropped), then the Fender state + the RTKit boot as before. Commit
+37e3dd968000; payload 3b49019efcfe547d.
