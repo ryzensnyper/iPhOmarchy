@@ -4902,3 +4902,47 @@ works and is understood; the gate dependency graph is now known; but the
 command that makes the PMP actually EXECUTE a device sequence is still
 unknown, so the Kingfisher IOP stays unpowered and powevr still reports
 "GFX firmware boot failed: -62" with fender +0x1000=1 / +0x1014=2.
+
+**#142–#145: the ApplePMP client, fully decoded — and where it stops matching.**
+
+Reverse-engineered ApplePMP out of the D21 kernelcache with correct
+addresses (llvm-objdump needs the section VM range; the kext __text is
+inside the 0x5580000 section).  Findings:
+
+* `_sendPMCommand` @ 0xfffffff00610b7b0.  Argument range check is
+  `command | 2 == 6`, i.e. **command must be 4 or 6** — not 0 and not 1.
+  ack cmd = command + 1 (5 / 7).  Packet:
+      msg  = bit52 (type 1) | (cmd & 0xf) << 48
+             | (arg2 & 0x3f) << 42          <- 6-bit field
+             | ((devObj->vt[0x80]()>>12) & 0x3ffffff) << 16   <- PFN
+             | (cmd==4 ? ((arg3->vt[0xb0]()>>5) & 0xffff) : 0)
+  cmd 6 returns the state in the low 16 bits of the reply.
+* `_readyMessageHandler` handler for the firmware's type-0 message builds
+  `bit52 | (self->b8 << 56)` where `b8 = [rtk_endpoint_obj + 0x88]`
+  (bfi #0x38,#8).  **It does not send the buffer address in bits 47:0.**
+* The 0xE400 buffer is bzeroed at start, then one 0x80-byte device
+  registration record is copied to **buffer+0x2000** (kc 0xab78) and a
+  per-device handle array is filled at **+0xE008**.  The record is an
+  *input*; the firmware is never expected to write the buffer.
+
+Boots:
+
+* #142 planted the GFX-KF record (gate 149, registry record 121) at
+  +0x2000 as a canary.  Survives unchanged to +2.5 s.
+* #143 cmd 4 (states 1/2/3/0xf, PFN = record): queued, **never acked**,
+  no op-table or buffer change.
+* #144 cmd 6 (getter) with PFN = record *and* PFN = 0: identical, no ack
+  at all (latency = the full 661 ms window).  So the PFN is not even
+  looked at; state encoding and record addressing are both dead.
+* #145 tagged the ready reply (and a cmd-4 repeat) with `32 << 56`; the
+  reply went out as 201000080e080000 and was acked exactly like the
+  untagged one, with no new RX traffic (no type-3/type-5 messages).
+  Bits 63:56 are not the endpoint tag — the transport already carries
+  the endpoint out of band (`msg.msg1 = ep` in rtkit.c).
+
+Structural conclusion: the PMP parses our frames (cmd 1 provably mutates
+firmware state and builds the 6-entry device table) but only ever
+*answers* cmd 0.  cmd 4 and cmd 6 are dropped silently even in Apple's
+exact format.  Either the drop is a precondition inside the firmware's
+cmd-4 path, or the device record must be in PMP-private memory rather
+than AP DRAM.  Everything else about the protocol is now known.
