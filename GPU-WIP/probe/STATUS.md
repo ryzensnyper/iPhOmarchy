@@ -4818,3 +4818,41 @@ entries but never run them -> the stuck walk.
 **#133** (commit 2307062fea8f): allocate a zeroed 0xE400 DMA buffer,
 reply type-1/cmd-0 with its dma address right after STARTEP, log the
 ready message and the ack, then run the register + state sequence.
+
+**#133 RESULTS**: PMP's first message seen 2 ms after STARTEP, but it is
+`type 0 cmd 0 msg 0000000000000000`, NOT type-1/cmd-0, so the ready was
+never matched.  The 0xE400 reply was sent 2 s later from the boot thread
+-> no ack.  Then `(1,123)` was acked `type0/cmd2 payload 0` and the
+state-sets were ignored.  Fender unchanged (+0x1000=1, +0x1014=2, boot
+-62).
+
+**#134**: answer the PMP's first ep32 message from the RX path instead of
+2 s later, and log every app endpoint.  Memory init now goes out 2 ms
+after the PMP's message.  The `cmd2` reply arrives ~60 ms later -- so the
+memory init IS answered, we had simply stopped waiting at 300 ms.
+CONFIRMED: cmd 1 is the only command the firmware acts on in one boot.
+
+**#135**: try to register the Kingfisher IOP's gate.  The iOS D21
+DeviceTree is decisive here:
+  /arm-io/sgx      power-gates = [148, 123]  clock-gates = [148, 123]
+  /arm-io/gfx-kf   power-gates = [149]       clock-gates = [149]
+i.e. 148/123 are the GPU's own gates and **149 is the Kingfisher IOP's**.
+Sequence 123 -> 149 -> 148: only the FIRST command after the memory init
+is processed; 149 and 148 were 2nd/3rd and silently dropped.  Op table
+still showed 0x7b (123).
+
+**#136**: dump the op table BEFORE sending anything, then send 149 only.
+  ops[baseline]        all zero
+  ops[after STARTEP]   all zero
+  ops[after mem-init]  all zero
+  ops[after 149]       00950643 00600001  00951643 00600001
+                       00952643 00600001  00953643 00600001
+So **the op table is built by our command, not firmware boot state**, and
+gate 149 is fully resolvable: it binds the same 4-step list (0x643 base,
+step in bits 13:12) as 123.  Fender still +0x1000=1 / +0x1014=2, and the
+powevr pokes to +0x1008/+0x1020 all read back 0 (those regs are
+IOP-owned; AP writes are dropped).
+**#137**: send nothing after 149 and watch the table at +0.5 s / +2 s,
+plus a wide window around it and the head of the 0xE400 buffer, to learn
+whether the firmware executes the list on its own and whether it ever
+wrote into the memory we handed it.
