@@ -4789,3 +4789,32 @@ Goal: see exactly which message advances the walk (currently 1 of 4).
 - **#132**: register ONLY 123, then (4,123,0x1643/0x2643/0x3643), op
   table dumped per step.  If the walk advances, the state-set cmd-4 IS
   the op-walk trigger and the Fender should follow.
+
+**#132 RESULTS** (2026-11-16): register 123 -> acked; the three
+(4,123,0x1643/0x2643/0x3643) state-sets -> NO acks, walk stayed 1.
+So it was never the wrong device: the service stops accepting after the
+first message.
+
+**RE BREAKTHROUGH (#133)**: the real D21 client is in the iOS 16.7
+kernelcache (ApplePMP.kext; extracted with kernelcache-re, __text at
+0xfffffff006107000).  ApplePMP::_messageHandler dispatches on bits 55:52
+(type):
+  - type 1 -> cmd = bits 51:48 -> 0 = memory init, 1/3 = ...,
+    2 = reply, 4 = state set
+  - 0x2ee0 (type1/cmd0): asserts _state == kStateWaitingForReady, calls
+    _readyMessageHandler, sets _state = kStateMemoryInit, then sends
+    **0x0010000000000000 | (addr & 0xffffffffffff)** -- i.e. type-1/cmd-0
+    (NOT 0x31, NOT 0x11) carrying the 48-bit device address of a buffer.
+  - 0x390c (_readyMessageHandler): IOMapper::iovmAllocate(0xe400), gets
+    its physical segment, bzero()s all 0xE400 bytes, plus a 0x2000 tail
+    region when a flag is set.
+  - asserts: `_initMemoryAckHandler`, `_pmCommandPending[domain]`,
+    `pm_msg_get_cmd(ack) == command + 1`, `pm_msg_get_domain(ack) ==
+    domain`, `pm_msg_get_device(ack) == device`.
+So "cmd-0" is a ready message from the PMP that the AP must answer with
+memory, and none of #122/#124/#128/#131/#132 answered it correctly (0x31,
+a bogus 0x7b0000, or nothing).  With no memory the PMP could bind op
+entries but never run them -> the stuck walk.
+**#133** (commit 2307062fea8f): allocate a zeroed 0xE400 DMA buffer,
+reply type-1/cmd-0 with its dma address right after STARTEP, log the
+ready message and the ack, then run the register + state sequence.
