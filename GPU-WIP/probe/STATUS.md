@@ -4967,3 +4967,63 @@ including Apple's exact bit layout and an endpoint-tagged frame.  Since
 Apple's own driver only ever sends 0 (memory), 4 and 6, the remaining
 unknown is the precondition inside the firmware's cmd-4 path (or whether
 the device record has to live in PMP-private memory).
+
+**#147: the dispatcher is real, but keys 0x04/0x06 are silent.**
+
+Offline RE (new `recdis` tool, see PMP-RE.md) found the PMP message
+dispatcher: firmware VA `0x01003734`, installed as an ops method at
+object+0x40 by the constructor at `0x010019a8`.  It decodes
+
+    key = (msg[51:48] << 4) | msg[47:44]
+    cmp key, #0x10 ; bhi 0x01003bc6   <- silent drop
+
+and the 17-entry `tbh` table implements only keys
+`00 02 04 06 08 0a 0c 0e 0f 10`.  Apple's `_sendPMCommand` puts the
+command at `msg[51:48]`, so its cmd 4 / cmd 6 land on keys `0x40` / `0x60`
+-- above the range check, dropped before any handler.  This is a
+*structural* explanation of every silent drop in #139-#146, independent of
+payload, PFN, record contents and endpoint tag.
+
+This also re-maps our two working packets:
+* memory-init reply `bit52|32<<56|dma` -> key `0x00` -> case `0x010037f8`
+  (the handler that stores state bytes and sends a reply, i.e. the ack);
+* the old "cmd 1" packet `bit52|1<<48|1<<32|149<<16` -> key `0x10` ->
+  case `0x01003ada` (a vtable call, selector 9, which is what built the
+  6-entry table at sram+0x14330).
+
+Experiment: send exactly two packets, the nibble form that would reach
+cases 4 and 6 if the command is the *low* nibble (`4<<44`, `6<<44`,
+devidx 0, value 0, size 0).  Canary intact, RX logging on, gate read
+before/after, ops dumped at each stage.
+
+Result -- **silent, on both**:
+
+    PMP ep32: key 04 msg 0000400000000000 send 0 ack 0000000000000000 ep 0
+    PMP ops[after key 04] 0 0 0 0 0 0 0 0
+    PMP mem[after key 04] +2000: 95000010 0000007c ... (canary intact)
+    gate 149 GFX-KF 0x804a8 0x00000000 -> 0x00000000 (off)
+    PMP ep32: key 06 msg 0000600000000000 send 0 ack 0000000000000000 ep 0
+    PMP ops[after key 06] 0 0 0 0 0 0 0 0
+    gate 149 unchanged, no RX at all, canary intact at +2 s
+
+Two confounds make this a *conditional* negative, not a refutation:
+
+1. The ops table is now **all zero at baseline** (it was populated in
+   #140-#146).  The only thing removed this boot is the key-`0x10`
+   packet, so the 6-entry table is produced by *that* message, and the
+   device table cases 4/6 index (`[obj+0x1c]`, count `[obj+0x18]`,
+   32-byte records) was never populated.
+2. Both cases gate on `*(u32 *)(sram + 0x1EDC0 + 0x28) != 0` (literal at
+   0x01003b08 = 0x0101edc0, in the image's tail/BSS).  If the PM object
+   is never instantiated, both bail at the same 0x01003bc6 as the range
+   check, indistinguishably from outside.
+
+Also notable: this boot produced **no memory-init ack at all** (the
+reply went out 2 ms after the ready message from the RX workqueue; in
+#133-#146 the ack was seen).  So the firmware was arguably less alive
+here than in previous boots, which weakens the negative further.
+
+Next: dump `sram+0x1EDC0..0x1EE90` to read the PM object header directly,
+send key `0x10` first (device registration, populates the table), then
+`0x04`/`0x06`.  If `[sram+0x1EDE8]` is still 0 after that, the PM
+subsystem genuinely never comes up and cases 4/6 are dead code for us.
