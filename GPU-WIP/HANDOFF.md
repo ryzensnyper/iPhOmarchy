@@ -814,3 +814,33 @@ keep them anyway, they are verified live in SRAM.
 - oracle*.ko sources = .orchard-out/apple-16k/output/gfxprobe/;
   build = the podman toolchain container (see probe/STATUS.md).
 - The phone = root@172.16.42.1, password "alarm"; one boot per "go".
+
+---
+
+## 2026-11-16 addendum — D21 baseline now on v0.3.1; GFX still parked
+
+D21 support was reconciled onto orchard **v0.3.1** (branch `d21-bringup-v031`,
+head `b06c83f`). The reconciled kernel tree is the new stable baseline; the
+old `OrchardLinux/trees/d21-touchgood` tree is retained only as the proven
+reference. Commit `b06c83f` ports the **DT-only** GFX description from the old
+tree: `ps_gfx` @ `0x803e0`, `ps_gfx_sgx` @ `0x804a0`, `ps_gfx_kf` @ `0x804a8`,
+and `gpu@204000000` + mailbox. This is deliberately inert: v0.3.1 has no
+driver matching `apple,t8015-gpu` — powervr binds only `apple,t8010-gpu` /
+`apple,s8003-gpu`, and the old `apple-t8015-gfx` driver was parked behind
+`apple,t8015-gfx-diag`. So the node/domains describe hardware for a future
+deliberate bring-up; no RGX/Fender access occurs, and PMP probe code stays
+out of `pmp_t8015_v1.c`.
+
+**Hardware status this session (RAM boots, no GFX):**
+- D21 touch-only payload on the new v0.3.1 kernel: touch init completes,
+  "iPhone 8 Plus Touchscreen" input device, USB network up, no Wi-Fi,
+  stable >7 min. omarchy-a v0.3.1 release RAM recovery also booted on D21.
+- Two earlier resets to iOS were traced to a payload-init bug (write to a
+  non-existent `/etc/modprobe.d` under `set -e` killed PID 1), NOT a kernel or
+  GFX fault. With that fixed, both the old tree and the new v0.3.1 kernel
+  boot and stay up. No GFX/T8015 gate experiment was run this session.
+
+**Still open (unchanged):** the GFX-KF gate is PMP-owned; AP cannot assert
+gates 124/148/149 on this iBoot/PMP firmware. No device-side gate experiments
+without new PMP firmware, an iBoot hand-off leaving GFX on, or a side-band
+control. See `GPU-WIP/probe/STATUS.md` for the full probe ledger.
