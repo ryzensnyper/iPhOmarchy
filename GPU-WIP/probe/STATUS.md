@@ -5089,3 +5089,27 @@ So: Apple's cmd 4/6 are undeliverable (key 0x40/0x60 > the range check),
 and the nibble-form keys that *are* deliverable exit on an unset word
 that firmware code never writes.  Both routes to "PMP, power gate 149"
 are now closed for this firmware image.
+
+**#149: forcing the gate word open is not enough.**
+
+Boot: wait for post-handshake init (object at `0x0101edc0` populated,
+ack key 0x20 seen), write `1` to `sram+0x1EDE8`, then send keys `0x04`
+and `0x06` (devidx 0, value 0, size 0).
+
+```
+PMP-DIAG: poked sram+0x1EDE8 = 00000001, sram+0x1EDC0 = 01019a18
+PMP ep32: key 04 msg 0000400000000000 send 0 ack 0000000000000000 ep 0 pm+28 00000001
+PMP ops[after key 04] 00950643 00600001 00951643 00600001 00952643 00600001 00953643 00600001
+gate 149 GFX-KF 0x804a8 0x00000000 -> 0x00000000 (off)
+PMP ep32: key 06 msg 0000600000000000 send 0 ack 0000000000000000 ep 0 pm+28 00000001
+... no RX, canary intact, ops unchanged; sram+0x1EDE8 still 00000001 at +2 s
+```
+
+`+0x28` stayed 1 (not cleared), FIFO accepted both, nothing came back
+and nothing moved.  So clearing the first gate alone does not make 04/06
+act: the handlers have further preconditions (e.g. the device table they
+index by `fp` -- count at `[obj+0x18]`, records at `[obj+0x1c]` per the
+dispatch) that are not satisfied in this state.  Combined with #148
+(Apple's cmd 4/6 are off-range at keys 0x40/0x60, and the nibble-form
+handlers never reach this point on an unmodified firmware), this closes
+the PMP command route for gate 149 on this image.
