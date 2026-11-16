@@ -5027,3 +5027,65 @@ Next: dump `sram+0x1EDC0..0x1EE90` to read the PM object header directly,
 send key `0x10` first (device registration, populates the table), then
 `0x04`/`0x06`.  If `[sram+0x1EDE8]` is still 0 after that, the PM
 subsystem genuinely never comes up and cases 4/6 are dead code for us.
+
+**#148: the handshake really does complete -- and the blockers are structural.**
+
+One boot, three messages plus the (mandatory) memory-init reply:
+dump the PM object, send key `0x10`, re-dump, then send `0x04` and `0x06`.
+
+```
+PMP ep32 RX: type 0 cmd 0 key 00 msg 0000000000000000
+PMP ep32: memory init 201000080e080000 immediate -> 0
+PMP ep32 RX: type 0 cmd 2 key 20 msg 0002000000000000      <- ack, 0.7023
+PMP ep32: key 10 msg 0011000100950000 send 0 ack 0002000000000000 ep 32
+PMP sram[before reg] +1ed40: 00000000 00000000 00010101 00000000 00010000 01016ce8
+PMP sram[after  reg] +1ed40: 00000001 00000000 00010101 02040101 00010000 01016ce8
+PMP sram[after  reg] +1ed70: 00000000 00000000 01066000 0101e240 ...
+PMP sram[after  reg] +1edb8: 01019a48 00000000 01019a18 00000000 00000101 00000202
+PMP sram[after  reg] +1ede8: 00000000 00000000 00000000 00000000  (unchanged at +2 s)
+PMP ops[after reg] 00950643 00600001 00951643 00600001 00952643 00600001 00953643 00600001
+PMP ep32: key 04 ... send 0 ack 0000000000000000 ep 0 pm+28 00000000
+PMP ep32: key 06 ... send 0 ack 0000000000000000 ep 0 pm+28 00000000
+```
+
+1. **The memory-init ack is real and reproducible** (`type 0 cmd 2 key 20`,
+   `0002000000000000`), i.e. the PMP does finish the handshake it was
+   built to run.  #147's missing ack was a one-off timing artifact.
+
+2. **The "ack" printed for key `0x10` was not an ack for key `0x10`.**
+   `reply_wait()` returns on `seq != since_seq`, and `since` was sampled
+   at ~0.6985 while the memory-init ack arrived at 0.7023 -- inside the
+   window.  The timestamps show the send and the return are < 1 ms apart.
+   Treat `ack 0002000000000000 ep 32` on the key-10 line as stale.
+
+3. **The firmware keeps working after the handshake, on its own.**  The
+   PM object at `0x0101edc0` (vtable pointer at +0, byte-pair table at
+   +8) and the registry block at `0x1ed70` are *zero* before the reg
+   step and populated after it -- but case 16 bails on the same gate as
+   4/6/8, so our packet cannot be the cause.  The fill is the firmware's
+   own post-handshake init.  (Consequence: the 0x14330 table seen in
+   #140-#146 is very likely the same thing, not an echo of our payload.
+   #146's "our op table" reading is withdrawn.)
+
+4. **Every addressable handler that could act is gated on one word.**
+   Cases `04`, `06`, `08` and `10` all do
+   `ldr rX,=0x0101edc0 ; ldr rX,[rX,#0x28] ; cbz -> 0x01003bc6`.
+   In AP terms the gate is `sram + 0x1EDE8`, and it reads `00000000` at
+   0.688 (before), 0.912 (after) and 4.8 s (end of boot).  So keys 4/6
+   are not "the wrong framing" any more -- they are unreachable by
+   construction while that word is 0.
+
+Offline: no literal in the image addresses `0x0101ede8`, no `str`
+reaches `+0x28` of either global from a literal-loaded base, and there is
+no `add #0xa8` (the same word seen from `0x0101ed40`) anywhere in the
+image.  The sibling object at `0x0101ed40` *is* built by a constructor
+at `0x01012d50`, which fills +0x18..+0x34 from a table of
+`(fourcc, size, default)` records at `0x01017c80` -- and its own +0x28
+default is `1`, keyed `"NOMP"`.  But that is `0x1ed68`, a different
+field of a different object; our gate word is left 0 by whoever builds
+`0x0101edc0`.
+
+So: Apple's cmd 4/6 are undeliverable (key 0x40/0x60 > the range check),
+and the nibble-form keys that *are* deliverable exit on an unset word
+that firmware code never writes.  Both routes to "PMP, power gate 149"
+are now closed for this firmware image.
