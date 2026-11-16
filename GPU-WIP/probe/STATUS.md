@@ -4946,3 +4946,24 @@ firmware state and builds the 6-entry device table) but only ever
 exact format.  Either the drop is a precondition inside the firmware's
 cmd-4 path, or the device record must be in PMP-private memory rather
 than AP DRAM.  Everything else about the protocol is now known.
+
+**#146: the "op table" was never a device sequence.**  Sending cmd 1 in
+Apple's PFN layout (record address at bits 41:16) instead of our guessed
+`id << 16` produced
+
+    00950643 00600001 ...   (id form:   149 at bits 31:16, 0x01 at 39:32)
+    e0820643 00600080 ...   (pfn form: 0xe082 at bits 31:16, 0x80 at 39:32)
+
+i.e. word0 = (msg[31:16] << 16) | (0x0643 + i*0x1000), word1 =
+0x00600000 | msg[39:32], for six entries.  The firmware simply mirrors
+the two payload halfwords into a fixed 6-step template.  So the table we
+have been reading as "a device sequence for gate 149" is our own packet
+echoed back -- the `0x95` was our payload, not a device id.  Also
+confirmed again that only the FIRST cmd 1 after the memory init is
+accepted; the second one changed nothing.
+
+cmd 4 / cmd 6 remain silently dropped in every form tried (#143-#146),
+including Apple's exact bit layout and an endpoint-tagged frame.  Since
+Apple's own driver only ever sends 0 (memory), 4 and 6, the remaining
+unknown is the precondition inside the firmware's cmd-4 path (or whether
+the device record has to live in PMP-private memory).
