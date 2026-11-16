@@ -4856,3 +4856,49 @@ IOP-owned; AP writes are dropped).
 plus a wide window around it and the head of the 0xE400 buffer, to learn
 whether the firmware executes the list on its own and whether it ever
 wrote into the memory we handed it.
+
+**#137 RESULTS**: the wide dump rewrote the picture.  The op table is
+only 8 dwords long by our earlier reading; the region actually extends
+upward (another group with flag word 0x00600008 above it), and the 149
+list is six entries (00950643..00955643), not four.  Nothing advances on
+its own: identical at +0.5 s and +2 s, and the 0xE400 memory buffer stays
+all zero (the firmware never wrote into it).
+
+**#138**: cmd 0 with a *device* payload (instead of an address) gets no
+reply and builds no table -> cmd 0 really is only the memory init; cmd 1
+is the device command.
+
+**#139**: discovered the gate model.  The iOS D21 DeviceTree has a
+SECOND PMGR block: /arm-io/pmgr, compatible "pmgr1,t8015", reg
+<0x3200000 0x100000>, <0x3520000 0x100000>, ...  The "0x235280000 gate
+bank" is just 0x3528000 with the AP prefix, i.e. pmgr1 + 0x28000, and
+Apple's power-gates/clock-gates IDs index that block, NOT the pmgr0
+block at 0x232000000 that mainline models.  (Mainline's t8015-pmgr.dtsi
+only describes pmgr0.)  AP writes to pmgr0 0x804a8/0x804a0/0x803d8 were
+silently dropped.
+
+**#140**: read pmgr1 at 0x235280000 + id*4 and + id*8 for gates
+123/124/148/149 -> every value zero, at every stage.  No observable gate
+state.
+
+**#141 (the useful one)**: /arm-io/pmgr's "devices" table -- the same
+142 x 48-byte blob as pmp_t8015_registry.c -- decodes as
+  dword0 = (gate_id << 24) | flags,  dword1 = PARENT gate.
+    GFX       id 124  parent -
+    GFX-SGX   id 148  parent 124
+    GFX-KF    id 149  parent 124
+    GFX-BUSY  id 123  parent -
+So the Kingfisher IOP's gate 149 is a CHILD of 124, and a child cannot
+acknowledge while its parent is gated -- which is exactly why every write
+to 0x804a8 read back 0.  Gate 124 had never actually been tested (in
+#131 it was always the second command, and only the first is processed).
+Powering 124 -> 148 -> 149 from the AP: all three still read 0 and
+reject the PS_TARGET write, and touching them delayed the PMP's own boot
+by ~18 s.  Conclusion: the AP cannot power these gates at all; they
+belong to the PMP.
+
+**State of play**: the PMP handshake (memory init + cmd 1 device request)
+works and is understood; the gate dependency graph is now known; but the
+command that makes the PMP actually EXECUTE a device sequence is still
+unknown, so the Kingfisher IOP stays unpowered and powevr still reports
+"GFX firmware boot failed: -62" with fender +0x1000=1 / +0x1014=2.
