@@ -1,0 +1,9 @@
+# VERIFY + FIX pass for the gold v0.1.1 p3:
+#  - audits every touch/system file on p3 (pre-change) to /root/d21-audit.log + serial
+#  - idempotently re-applies the known-good stack
+#  - installs touchfix v3 (-t 600 -s 0) for the top-left corner tap issue (v2 kept)
+name = "d21-usb-boot-kg"
+[payload]
+modules = true
+firmware = true
+transport = true

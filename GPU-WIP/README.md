@@ -23,6 +23,7 @@ condensed result set.
 | [`probe/`](probe/README.md) | the draft probe kit: `apple,t8015-gfx-iop.yaml` binding, `gfx_iop_t8015.c` driver skeleton (every unverified offset marked `GUESS`), install/rollback scripts, and the `GUESS` list in `STATUS.md` |
 | [`kb/A11-GPU-G10P-FIELDS.txt`](kb/A11-GPU-G10P-FIELDS.txt) | field/site dump of the extracted G10P firmware image |
 | [`tools/`](tools/) | the analysis scripts used (pure Python, no Apple data) |
+| [`jade/`](jade/README.md) | **JADE Known Good State** — the verified-working D21 Omarchy-A v0.3.1 + reliable-touch boot config (kernel `c2a38a5` idle fix), repeatable steps, hashes, text scripts; no blobs |
 
 ## Executive summary
 
