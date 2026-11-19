@@ -1,0 +1,169 @@
+From c2a38a5db829d9cd83dde69c1e0d22566a1e119d Mon Sep 17 00:00:00 2001
+From: Henrik Klee <henrik@goat-code.com>
+Date: Fri, 6 Nov 2026 00:20:35 +1030
+Subject: [PATCH] Input: apple_z2: Do not treat an idle D21 controller as a
+ dead one
+
+The D21's no-frames watchdog called the controller dead when quiet_ms
+passed without a valid frame and recovered: three off-IRQ resync pulls
+and a full rBK3 rail cycle.  That is only a valid test when the
+controller is expected to stream, but an idle D21 is completely silent
+- no contact, no frame, no interrupt edge (measured 2026-11-05: 0 edges
+in 3 s of idleness).
+
+On the phone that became a recovery every 23 s: 45 recovery cycles and
+44 rail cycles in the boot of the desktop session, which is what froze
+the phone in omarchy-a.
+
+Track the interrupt edges and the contact state, and let the watchdog
+fire only when the controller owes us a frame: it is talking (edges
+inside the window) or a contact is still down, but no valid frame
+arrived for quiet_ms.  An idle controller is left alone, and the
+half-boot and stuck-stream cases still recover.
+
+Assisted-by: LLM
+---
+ drivers/input/touchscreen/apple_z2.c | 63 +++++++++++++++++++++++++---
+ 1 file changed, 58 insertions(+), 5 deletions(-)
+
+diff --git a/drivers/input/touchscreen/apple_z2.c b/drivers/input/touchscreen/apple_z2.c
+index 18c21723607b..bce4e6c701a7 100644
+--- a/drivers/input/touchscreen/apple_z2.c
++++ b/drivers/input/touchscreen/apple_z2.c
+@@ -181,6 +181,10 @@ struct apple_z2 {
+ 	unsigned int d21_boot_fails;
+ 	unsigned int d21_dead_restarts;
+ 	unsigned long d21_last_frame;
++	/* Last interrupt edge: the controller asking for attention. */
++	unsigned long d21_last_irq;
++	/* A contact is currently reported down. */
++	bool d21_contact_down;
+ 	bool d21_recovering;
+ 	bool stopping;
+ 	bool irq_on;
+@@ -588,6 +592,7 @@ static void apple_z2_parse_touches(struct apple_z2 *z2,
+ 	s16 abs_y;
+ 	s16 orientation;
+ 	bool coords_valid;
++	bool any_active = false;
+ 	unsigned int x;
+ 	unsigned int y;
+ 	int i;
+@@ -718,6 +723,8 @@ static void apple_z2_parse_touches(struct apple_z2 *z2,
+ 			slot_valid = fingers[i].state == APPLE_Z2_TOUCH_STARTED ||
+ 				     fingers[i].state == APPLE_Z2_TOUCH_MOVED;
+ 		}
++		if (slot_valid)
++			any_active = true;
+ 		input_mt_slot(z2->input_dev, slot);
+ 		if (!input_mt_report_slot_state(z2->input_dev, MT_TOOL_FINGER, slot_valid))
+ 			continue;
+@@ -801,6 +808,12 @@ static void apple_z2_parse_touches(struct apple_z2 *z2,
+ 				clear_bit(i, z2->d21_palm_latch);
+ 				z2->d21_big_frames[i] = 0;
+ 			}
++		/*
++		 * Remember whether this frame carried a contact: the
++		 * watchdog uses it to tell "the controller owes us a frame"
++		 * from "nobody is touching the screen".
++		 */
++		z2->d21_contact_down = any_active;
+ 	}
+ 	input_mt_sync_frame(z2->input_dev);
+ 	input_sync(z2->input_dev);
+@@ -1794,6 +1807,15 @@ static irqreturn_t apple_z2_irq(int irq, void *data)
+ 	dev_info_ratelimited(&z2->spidev->dev, "D21: touch IRQ edge, booted=%d\n",
+ 			     z2->booted);
+ 
++	/*
++	 * Liveness for the no-frames watchdog: an interrupt edge means the
++	 * controller is asking to be read.  An idle D21 controller does not
++	 * ask (measured 2026-11-05: 0 edges in 3 s with no finger), so this
++	 * timestamp separates "the controller is quiet" from "the controller
++	 * is asking but no frame comes back".
++	 */
++	z2->d21_last_irq = jiffies;
++
+ 	if (!z2->booted) {
+ 		/*
+ 		 * Boot-edge storm guard: a dead controller that holds ATN
+@@ -2000,6 +2022,7 @@ static void apple_z2_d21_release_contacts(struct apple_z2 *z2)
+ {
+ 	unsigned int i;
+ 
++	z2->d21_contact_down = false;
+ 	for (i = 0; i < z2->input_dev->mt->num_slots; i++) {
+ 		input_mt_slot(z2->input_dev, i);
+ 		input_mt_report_slot_inactive(z2->input_dev);
+@@ -2145,8 +2168,18 @@ static void apple_z2_d21_rearm_work(struct work_struct *work)
+ 
+ /*
+  * The no-frames watchdog (the D21-specific trigger).  Runs every 5 s while
+- * booted; quiet_ms without a single valid frame on a roll that streams
+- * 15-25 fps idle is the half-boot/DEAD signature.
++ * booted; quiet_ms without a single valid frame while the controller owes
++ * us one is the half-boot/DEAD signature.
++ *
++ * "Owes us one" is the whole point of this rework: an idle D21 controller
++ * is completely silent - no finger, no frames, no interrupt edges (measured
++ * 2026-11-05: 0 edges in 3 s of idleness) - and that silence is normal.
++ * Treating it as a failure made the driver recover every 15 s: three
++ * off-IRQ resync pulls and a full rBK3 rail cycle, 45 times in one boot
++ * (journal of the 2026-11-05 desktop session), which is what froze the
++ * phone in the desktop.  A controller that IS talking (interrupt edges
++ * inside the window) or that still has a contact down, but delivers no
++ * valid frame for quiet_ms, is the real DEAD signature and still recovers.
+  */
+ static void apple_z2_d21_watch_work(struct work_struct *work)
+ {
+@@ -2164,9 +2197,22 @@ static void apple_z2_d21_watch_work(struct work_struct *work)
+ 	if (z2->d21_recovering)
+ 		return; /* the ladder is active; it re-arms us */
+ 
++	/*
++	 * Nothing is expected: no contact is down and the controller has
++	 * not asked to be read inside the window.  Idle is not dead.
++	 */
++	if (!z2->d21_contact_down &&
++	    time_is_before_jiffies(z2->d21_last_irq +
++				   msecs_to_jiffies(d21_quiet_ms))) {
++		schedule_delayed_work(&z2->d21_watch,
++				      msecs_to_jiffies(APPLE_Z2_D21_WATCH_PERIOD_MS));
++		return;
++	}
++
+ 	/* Stale = now is PAST last_frame + quiet_ms (time_is_BEFORE_jiffies:
+ 	 * the argument lies before jiffies).  A healthy roll refreshes
+-	 * d21_last_frame at 15-25 fps, so this only fires on real silence. */
++	 * d21_last_frame on every frame, so this only fires when the
++	 * controller stopped talking. */
+ 	if (time_is_before_jiffies(z2->d21_last_frame +
+ 				   msecs_to_jiffies(d21_quiet_ms))) {
+ 		apple_z2_d21_start_recovery(z2, -ETIMEDOUT);
+@@ -5044,14 +5090,21 @@ static int apple_z2_boot(struct apple_z2 *z2)
+ 	/*
+ 	 * D21: arm the no-frames watchdog (the Orchard 79f5e69 port).
+ 	 * The D21 half-boot is SILENT - rail up, SPI ACKs, ZERO 0x44
+-	 * frames - so its only detector is the absence of valid frames;
+-	 * a healthy roll streams 15-25 fps idle.  quiet_ms (default 15 s)
++	 * frames - so its only detector is the absence of valid frames
++	 * while the controller owes us one.  quiet_ms (default 15 s)
+ 	 * without one valid frame starts the recovery ladder, which ends
+ 	 * in a full in-driver restart (SMC rBK3 off -> drain -> on +
+ 	 * reset + fw/cal reload) instead of a module reload.
++	 *
++	 * "While the controller owes us one": an idle controller owes us
++	 * nothing (no contact down, no interrupt edges), so both
++	 * timestamps start at the arming point and the watchdog leaves an
++	 * idle controller alone.
+ 	 */
+ 	if (apple_z2_is_d21(z2) && !z2->stopping) {
+ 		z2->d21_last_frame = jiffies;
++		z2->d21_last_irq = jiffies;
++		z2->d21_contact_down = false;
+ 		z2->d21_recovering = false;
+ 		if (d21_recover) {
+ 			dev_info(&z2->spidev->dev,
+-- 
+2.55.0
+

@@ -106,6 +106,13 @@ cd /home/doug/orchard
    `mount /dev/nvme0n1p3 failed`; fixed with `modules = true`.)
 6. Verified: quick taps register, no hold, no storm, desktop stable — user confirmed.
 
+## Build source (`kernel/`)
+- [`kernel/`](kernel/README.md) — the **buildable source** behind this state:
+  the D21 touch driver patch (orchard `0021`, which contains the c2a38a5 idle
+  fix), the isolated `0009-c2a38a5-idle-fix.patch`, `d21-touch.md`, and
+  `RUNBOOK.md`. This is the piece to build from / forward-port into the shared
+  `apple_z2` driver. Text-only.
+
 ## Tools (text, in `jade/`)
 - `d21-touch-decode.py` — decode a raw evdev capture to taps with coordinates.
 - `tap-timing-probe.py` — raw(ev1)+fix(ev2) DOWN/UP with timestamps on one clock
