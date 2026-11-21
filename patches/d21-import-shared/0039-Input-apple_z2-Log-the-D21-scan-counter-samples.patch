@@ -1,0 +1,51 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: dugs <dugahol@protonmail.com>
+Date: Fri, 20 Nov 2026 16:30:00 +0800
+Subject: [PATCH] Input: apple_z2: Log the D21 scan-counter samples
+
+Sample the 0x28 report at the first and last boot probe and again after the
+kick loop.  An advancing counter shows the sensing engine is running; a
+static one identifies a silent/dead roll without needing a touch.
+
+Assisted-by: LLM
+---
+ drivers/input/touchscreen/apple_z2.c | 24 ++++++++++++++++++------
+ 1 file changed, 18 insertions(+), 6 deletions(-)
+
+diff --git a/drivers/input/touchscreen/apple_z2.c b/drivers/input/touchscreen/apple_z2.c
+--- a/drivers/input/touchscreen/apple_z2.c
++++ b/drivers/input/touchscreen/apple_z2.c
+@@ -4066,10 +4066,11 @@
+ 									    0x28,
+ 									    len,
+ 									    "gen2-28-read");
+-				if (!p)
++				if (!p || p == boot->kick_reads - 1)
+ 					dev_info(&z2->spidev->dev,
+-						 "D21 28 probe: err=%d status=%u len=%u\n",
+-						 probe_error, status, len);
++						 "D21 28 probe %u: err=%d status=%u len=%u raw=%*ph\n",
++						 p, probe_error, status, len, 16,
++						 z2->rx_buf);
+ 				msleep(100);
+ 			}
+ 		}
+@@ -4119,6 +4120,18 @@
+ 			return error;
+ 		msleep(100);
+ 	}
++
++	/* An advancing scan counter means the sensing engine is running. */
++	status = 0;
++	len = 0;
++	error = apple_z2_read_report_info_locked(z2, 0x28, &status, &len,
++							 "gen2-28-after");
++	if (!error && len >= 1 && len <= APPLE_Z2_RX_BUF_SIZE - 5)
++		error = apple_z2_read_report_locked(z2, 0x28, len,
++							    "gen2-28-after-read");
++	dev_info(&z2->spidev->dev,
++		 "D21 28 after: err=%d status=%u len=%u raw=%*ph\n",
++		 error, status, len, 16, z2->rx_buf);
+ 
+ 	return 0;
+ }

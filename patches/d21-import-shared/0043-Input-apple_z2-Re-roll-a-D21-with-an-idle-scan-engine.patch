@@ -1,0 +1,135 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: dugs <dugahol@protonmail.com>
+Date: Fri, 20 Nov 2026 17:20:00 +0800
+Subject: [PATCH] Input: apple_z2: Re-roll a D21 whose scan engine is idle at boot
+
+The D21 chooses its delivery mode at core-rail power-on and can come up
+with a stopped scan engine (one boot frame, then no frames and no scan
+counter movement).  Detect a static 0x28 counter after init and power-cycle
+the controller to re-roll, bounded to three attempts so a stuck unit cannot
+loop.  Reset the bound when the counter advances.
+
+Assisted-by: LLM
+---
+ drivers/input/touchscreen/apple_z2.c | 61 +++++++++++++++++++++++++++++++++++++
+ 1 file changed, 61 insertions(+)
+
+diff --git a/drivers/input/touchscreen/apple_z2.c b/drivers/input/touchscreen/apple_z2.c
+--- a/drivers/input/touchscreen/apple_z2.c
++++ b/drivers/input/touchscreen/apple_z2.c
+@@ -66,6 +66,7 @@
+ #define APPLE_Z2_CONTROL_RESTARTS        3
+ #define APPLE_Z2_CONTROL_RETRY_MS        1000
+ #define APPLE_Z2_CONTROL_RECOVERIES      5
++#define APPLE_Z2_D21_REROLLS             3
+ #define APPLE_Z2_FRAMES_WATCH_MS         5000
+ #define APPLE_Z2_CMD_SIZE                16
+ #define APPLE_Z2_RAW_XFER_MAX_SIZE       64
+@@ -335,6 +336,8 @@
+ 	struct pinctrl_state *sync_inactive;
+ 	struct gpio_desc *attn_gpio;
+ 	struct delayed_work rearm_work;
++	struct delayed_work boot_reroll_work;
++	unsigned int boot_rerolls;
+ 	struct delayed_work frames_watch;
+ 	unsigned long last_frame;	/* last valid frame */
+ 	unsigned long last_irq;		/* last runtime interrupt */
+@@ -2427,6 +2430,40 @@
+ }
+ 
+ /*
++ * D21 only: the controller picks its delivery mode at core-rail power-on
++ * and can come up with a stopped scan engine (no frames, no interrupt, a
++ * static scan counter).  A rail cycle re-rolls the mode.  Bounded by
++ * boot_rerolls so a stuck unit cannot loop forever.
++ */
++static void apple_z2_boot_reroll_work(struct work_struct *work)
++{
++	struct apple_z2 *z2 = container_of(to_delayed_work(work),
++					   struct apple_z2, boot_reroll_work);
++	int error;
++
++	mutex_lock(&z2->io_lock);
++	if (z2->stopping || !z2->booted) {
++		mutex_unlock(&z2->io_lock);
++		return;
++	}
++	z2->booted = false;
++	z2->irq_on = false;
++	disable_irq_nosync(z2->spidev->irq);
++	mutex_unlock(&z2->io_lock);
++
++	synchronize_irq(z2->spidev->irq);
++	gpiod_direction_output(z2->reset_gpio, 1);
++	apple_z2_platform_power_off(z2);
++	error = apple_z2_boot(z2);
++	if (error)
++		dev_err(&z2->spidev->dev, "D21 re-roll %u failed: %d\n",
++			z2->boot_rerolls, error);
++	else
++		dev_info(&z2->spidev->dev, "D21 re-roll %u booted\n",
++			z2->boot_rerolls);
++}
++
++/*
+  * A D21 controller can come up or end up silent: supplies on, transfers
+  * answered, no valid frame. An idle controller is silent too, without
+  * interrupts and with no contact down, so restart only when frames are
+@@ -3987,6 +4024,7 @@
+ 	u16 len;
+ 	u8 status;
+ 	bool armed_once = false;
++	u8 scan0[16] = { 0 }, scan1[16] = { 0 };
+ 	int error;
+ 
+ 	error = apple_z2_read_device_info_locked(z2);
+@@ -4086,6 +4124,10 @@
+ 									    0x28,
+ 									    len,
+ 									    "gen2-28-read");
++				if (p == 0)
++					memcpy(scan0, z2->rx_buf, sizeof(scan0));
++				else if (p == boot->kick_reads - 1)
++					memcpy(scan1, z2->rx_buf, sizeof(scan1));
+ 				if (!p || p == boot->kick_reads - 1)
+ 					dev_info(&z2->spidev->dev,
+ 						 "D21 28 probe %u: err=%d status=%u len=%u raw=%*ph\n",
+@@ -4152,6 +4194,22 @@
+ 	dev_info(&z2->spidev->dev,
+ 		 "D21 28 after: err=%d status=%u len=%u raw=%*ph\n",
+ 		 error, status, len, 16, z2->rx_buf);
++
++	if (apple_z2_is_d21(z2) && !error) {
++		if (memcmp(scan0, scan1, sizeof(scan0)))
++			z2->boot_rerolls = 0;
++		else if (z2->boot_rerolls < APPLE_Z2_D21_REROLLS) {
++			z2->boot_rerolls++;
++			dev_info(&z2->spidev->dev,
++				 "D21 scan engine idle after init; re-roll %u/%u\n",
++				 z2->boot_rerolls, APPLE_Z2_D21_REROLLS);
++			schedule_delayed_work(&z2->boot_reroll_work,
++					      msecs_to_jiffies(200));
++		} else
++			dev_warn(&z2->spidev->dev,
++				 "D21 scan engine still idle after %u re-rolls\n",
++				 z2->boot_rerolls);
++	}
+ 
+ 	return 0;
+ }
+@@ -5069,6 +5127,7 @@
+ 	mutex_init(&z2->io_lock);
+ 	INIT_DELAYED_WORK(&z2->rearm_work, info->recover_control_stall ?
+ 			  apple_z2_control_rearm_work : apple_z2_n1_rearm_work);
++	INIT_DELAYED_WORK(&z2->boot_reroll_work, apple_z2_boot_reroll_work);
+ 	INIT_DELAYED_WORK(&z2->frames_watch, apple_z2_frames_watch_work);
+ 	INIT_WORK(&z2->resume_work, apple_z2_resume_work);
+ 	spi_set_drvdata(spi, z2);
+@@ -5270,6 +5329,7 @@
+ 		mutex_unlock(&z2->io_lock);
+ 		cancel_delayed_work_sync(&z2->frames_watch);
+ 		cancel_delayed_work_sync(&z2->rearm_work);
++		cancel_delayed_work_sync(&z2->boot_reroll_work);
+ 	}
+ 
+ 	/* The iPad 5 interrupt thread may mask the interrupt itself. */

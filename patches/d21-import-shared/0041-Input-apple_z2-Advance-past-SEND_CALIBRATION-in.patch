@@ -1,0 +1,31 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: dugs <dugahol@protonmail.com>
+Date: Fri, 20 Nov 2026 16:55:00 +0800
+Subject: [PATCH] Input: apple_z2: Advance past SEND_CALIBRATION in initial config
+
+The initial-config scan skipped the SEND_CALIBRATION payload without
+advancing fw_idx, so the next iteration parsed the payload as a command and
+returned -EINVAL.  The device's real C1F5E,3 firmware was consequently
+unusable and a synthetic C1F5E,4 container was required.  Advance over the
+record like every other command.
+
+Assisted-by: LLM
+---
+ drivers/input/touchscreen/apple_z2.c | 4 +++-
+ 1 file changed, 3 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/input/touchscreen/apple_z2.c b/drivers/input/touchscreen/apple_z2.c
+--- a/drivers/input/touchscreen/apple_z2.c
++++ b/drivers/input/touchscreen/apple_z2.c
+@@ -4498,8 +4498,10 @@
+ 		size = get_unaligned_le32(fw->data + fw_idx);
+ 		fw_idx += sizeof(__le32);
+ 
+-		if (load_cmd == LOAD_COMMAND_SEND_CALIBRATION)
++		if (load_cmd == LOAD_COMMAND_SEND_CALIBRATION) {
++			fw_idx = round_up(fw_idx + size, 4);
+ 			continue;
++		}
+ 		if (size > fw->size - fw_idx)
+ 			return -EINVAL;
+ 		if (load_cmd == LOAD_COMMAND_SEND_CALIBRATION_V2) {

@@ -1,0 +1,123 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: dugs <dugahol@protonmail.com>
+Date: Fri, 20 Nov 2026 15:40:00 +0800
+Subject: [PATCH] Input: apple_z2: Use the working D21 init order
+
+The D21 init was ported from the J71b choreography: an interrupt-data pull
+before the wake, a settle, a late wake, and the IRQ switch before arming.
+The working D21 configuration uses the other order: wake first, no pre-arm
+pull, then the report probes and the touch arm, and only then the level-low
+IRQ and the interrupt-data poll.
+
+A pull issued while the controller is still asleep answers with a
+zero-length header.  That stale header then wedges the queue: the first
+later kick reports it as empty and every following pull returns a zero MISO
+reply, so touch never streams.  Reorder to match the working setup and
+sample the 0x28 scan counter before the 0xc8/0xbf arm, as that setup does.
+
+Assisted-by: LLM
+---
+ drivers/input/touchscreen/apple_z2.c | 84 ++++++++++++++++++++++++----
+ 1 file changed, 73 insertions(+), 11 deletions(-)
+
+diff --git a/drivers/input/touchscreen/apple_z2.c b/drivers/input/touchscreen/apple_z2.c
+--- a/drivers/input/touchscreen/apple_z2.c
++++ b/drivers/input/touchscreen/apple_z2.c
+@@ -3966,15 +3966,25 @@
+ 	unsigned int i;
+ 	u16 len;
+ 	u8 status;
++	bool armed_once = false;
+ 	int error;
+ 
+ 	error = apple_z2_read_device_info_locked(z2);
+ 	if (error)
+ 		dev_warn(&z2->spidev->dev, "device information failed: %d\n",
+ 			 error);
+-	error = apple_z2_read_packet(z2);
++
++	/*
++	 * The working D21 configuration wakes the controller before any
++	 * interrupt-data pull.  A pull issued while the controller is still
++	 * asleep answers with a zero-length header and leaves the queue
++	 * wedged: the first later kick sees that stale header and every one
++	 * after it gets a zero MISO reply.
++	 */
++	error = apple_z2_z2_cmd_locked(z2, APPLE_Z2_CMD_WAKE, 0, "gen2-wake");
+ 	if (error)
+ 		return error;
++	usleep_range(2000, 2100);
+ 
+ 	error = apple_z2_read_report_info_locked(z2, APPLE_Z2_REPORT_SURFACE,
+ 						 &status, &len, "gen2-d9");
+@@ -3990,27 +4000,9 @@
+ 	error = apple_z2_gen2_read_optional(z2, 0xdb, 3, "gen2-db");
+ 	if (!error)
+ 		error = apple_z2_gen2_read_optional(z2, 0x73, 3, "gen2-73");
+-	for (i = 0; !error && i < 4; i++) {
+-		error = apple_z2_read_packet(z2);
+-		if (z2->runtime_queue_empty ||
+-		    (!z2->runtime_frame_valid && !z2->runtime_control_reply))
+-			break;
+-	}
+ 	if (error)
+ 		return error;
+ 
+-	/* Masked until booted: the level line stays asserted meanwhile. */
+-	apple_z2_irq_off(z2);
+-	error = apple_z2_gen1_set_level_irq(z2);
+-	if (error)
+-		return error;
+-	msleep(APPLE_Z2_D21_SETTLE_MS);
+-
+-	error = apple_z2_z2_cmd_locked(z2, APPLE_Z2_CMD_WAKE, 0, "gen2-wake");
+-	if (error)
+-		return error;
+-	usleep_range(2200, 2300);
+-
+ 	status = 0;
+ 	len = 0;
+ 	error = apple_z2_read_report_info_locked(z2, 0x9d, &status, &len,
+@@ -4045,6 +4037,42 @@
+ 
+ 	for (i = 0; i < boot->num_arm; i++) {
+ 		arm = &boot->arm[i];
++		if (!armed_once && arm->report == 0xc8) {
++			unsigned int p;
++
++			armed_once = true;
++			/*
++			 * The working order declares the IRQ level-low and
++			 * samples the scan counter before the touch arm.
++			 */
++			apple_z2_irq_off(z2);
++			error = apple_z2_gen1_set_level_irq(z2);
++			if (error)
++				return error;
++			for (p = 0; p < boot->kick_reads; p++) {
++				int probe_error;
++
++				status = 0;
++				len = 0;
++				probe_error =
++					apple_z2_read_report_info_locked(z2, 0x28,
++									 &status,
++									 &len,
++									 "gen2-28");
++				if (!probe_error && len >= 1 &&
++				    len <= APPLE_Z2_RX_BUF_SIZE - 5)
++					probe_error =
++						apple_z2_read_report_locked(z2,
++									    0x28,
++									    len,
++									    "gen2-28-read");
++				if (!p)
++					dev_info(&z2->spidev->dev,
++						 "D21 28 probe: err=%d status=%u len=%u\n",
++						 probe_error, status, len);
++				msleep(100);
++			}
++		}
+ 		error = apple_z2_write_report_locked(z2, arm->report, arm->data,
+ 						     arm->len, "gen2-arm");
+ 		dev_info(&z2->spidev->dev, "D21 arm %02x: err=%d\n",
