@@ -1,0 +1,83 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Dugs <dugahol@protonmail.com>
+Date: Thu, 26 Nov 2026 00:00:00 +0000
+Subject: [PATCH] LOCAL: soc: apple: aop, arm64: dts: t8015-d21: Start the AOP
+
+LOCAL TEST for the D21 Home button (AOP "button" service).
+
+---
+--- a/arch/arm64/boot/dts/apple/t8015.dtsi	2026-11-26 01:55:48.382392700 +1030
++++ b/arch/arm64/boot/dts/apple/t8015.dtsi	2026-11-26 01:55:48.404510412 +1030
+@@ -676,6 +676,39 @@
+ 				     <AIC_IRQ 205 IRQ_TYPE_LEVEL_HIGH>;
+ 		};
+ 
++		/*
++		 * The Always-On Processor, from the ADT's aop node (iop,t8015,
++		 * rtbuddy-v2): its control registers, the mailbox at the same
++		 * +0x8000 as the SMC's, and its SRAM (the nub's region-base and
++		 * region-size). The ADT lists its interrupts as 151, 150, 153,
++		 * 152, the order it lists the SMC's 210, 209, 212, 211 in.
++		 */
++		aop: aop@234800000 {
++			compatible = "apple,t8015-aop";
++			reg = <0x2 0x34800000 0x0 0x4000>,
++			      <0x2 0x34000200 0x0 0x100>,
++			      <0x2 0x34e00000 0x0 0x160000>;
++			reg-names = "akf", "control", "sram";
++			mboxes = <&aop_mbox>;
++			mbox-names = "mbox";
++			power-domains = <&ps_aop_base>;
++			status = "disabled";
++		};
++
++		aop_mbox: mbox@234808000 {
++			compatible = "apple,t8015-asc-mailbox";
++			reg = <0x2 0x34808000 0x0 0x4000>;
++			interrupt-parent = <&aic>;
++			interrupts = <AIC_IRQ 150 IRQ_TYPE_LEVEL_HIGH>,
++				<AIC_IRQ 151 IRQ_TYPE_LEVEL_HIGH>,
++				<AIC_IRQ 152 IRQ_TYPE_LEVEL_HIGH>,
++				<AIC_IRQ 153 IRQ_TYPE_LEVEL_HIGH>;
++			interrupt-names = "send-empty", "send-not-empty",
++				"recv-empty", "recv-not-empty";
++			#mbox-cells = <0>;
++			status = "disabled";
++		};
++
+ 		smc_mbox: mbox@236808000 {
+ 			compatible = "apple,t8015-asc-mailbox";
+ 			reg = <0x2 0x36808000 0x0 0x4000>;
+--- a/arch/arm64/boot/dts/apple/t8015-d21.dts	2026-11-26 01:55:48.386502440 +1030
++++ b/arch/arm64/boot/dts/apple/t8015-d21.dts	2026-11-26 01:55:48.404562951 +1030
+@@ -74,3 +74,19 @@
+ &wifi0 {
+ 	brcm,board-type = "apple,pegasuse";
+ };
++
++/ {
++	aliases {
++		aop = &aop; /* Used by loader */
++	};
++};
++
++/* The AOP runs the Home button (its "button" service); firmware from the IPSW. */
++&aop {
++	firmware-name = "apple/aop-t8015.bin", "apple/aop-t8015-ext.bin";
++	status = "okay";
++};
++
++&aop_mbox {
++	status = "okay";
++};
+--- a/drivers/soc/apple/aop.c	2026-11-26 01:55:48.390647928 +1030
++++ b/drivers/soc/apple/aop.c	2026-11-26 01:55:48.404654815 +1030
+@@ -1175,6 +1175,8 @@
+ 	{ .compatible = "apple,s8000-aop", .data = &apple_aop_s8000_hw },
+ 	{ .compatible = "apple,t8010-aop", .data = &apple_aop_t8010_hw },
+ 	{ .compatible = "apple,t8011-aop", .data = &apple_aop_t8011_hw },
++	/* A11: starts with the A10's loader; to be confirmed on the iPhone 8 Plus. */
++	{ .compatible = "apple,t8015-aop", .data = &apple_aop_t8010_hw },
+ 	{}
+ };
+ MODULE_DEVICE_TABLE(of, apple_aop_of_match);

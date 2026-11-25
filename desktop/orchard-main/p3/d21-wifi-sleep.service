@@ -1,0 +1,15 @@
+# D21: the BCM4357 does not answer brcmfmac's D3 request, which aborts every
+# suspend. Unload Wi-Fi for the sleep and load it again after.
+[Unit]
+Description=D21: unload Wi-Fi across suspend
+Before=sleep.target
+StopWhenUnneeded=yes
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=-/usr/bin/modprobe -r brcmfmac_wcc brcmfmac
+ExecStop=-/usr/bin/modprobe brcmfmac
+
+[Install]
+WantedBy=sleep.target
