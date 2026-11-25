@@ -37,6 +37,16 @@ modprobe apple_z2; log "apple_z2 modprobe rc=$?"
 i=0; while [ $i -lt 30 ] && [ ! -e /dev/input/event1 ]; do sleep 1; i=$((i+1)); done
 log "event1 present: $([ -e /dev/input/event1 ] && echo yes || echo NO)"
 
+# Optional maintenance hold: a host that creates /run/d21-hold over SSH
+# within 30 s keeps this boot in RAM, with nvme0n1p3 unmounted, until it
+# creates /run/d21-go (used to write a new root image into p3).
+i=0; while [ $i -lt 30 ] && [ ! -e /run/d21-hold ]; do sleep 1; i=$((i+1)); done
+if [ -e /run/d21-hold ]; then
+    log 'hold: waiting for /run/d21-go'
+    while [ ! -e /run/d21-go ]; do sleep 1; done
+    log 'hold released'
+fi
+
 mount -t ext4 -o rw /dev/nvme0n1p3 /newroot || { log 'p3 mount FAILED; staying in RAM'; exec sh; }
 [ -x /newroot/usr/lib/systemd/systemd ] || { log 'p3 has no systemd; staying in RAM'; umount /newroot; exec sh; }
 log 'p3 mounted'
