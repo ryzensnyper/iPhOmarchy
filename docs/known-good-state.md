@@ -6,6 +6,13 @@ the **omarchy-a desktop** running and touch live inside it.
 
 Recorded 2026-11-07.
 
+## Orchard main desktop (2026-11-25)
+
+Touch is in Orchard `main` (`06e093ea`) and the desktop now runs on the stock
+Orchard kernel with no local patches and no userspace touch helpers. Recipe and
+results: [../desktop/orchard-main/](../desktop/orchard-main/). The DIAMOND
+build below is kept as the fallback.
+
 ## What "known good" means
 
 | Piece | State |

@@ -1,0 +1,69 @@
+#!/bin/busybox sh
+# Orchard-main desktop handover for D21: shipped apple_z2 (no params), then
+# switch_root into the installed Omarchy A on nvme0n1p3. The legacy DIAMOND
+# userspace touch helpers should be masked in the installed root's /etc
+# (see README); the /run masks below only cover units that do not exist in /etc.
+set -u
+export PATH=/bin:/sbin:/usr/bin:/usr/sbin
+/bin/busybox --install -s /bin
+mount -t proc -o nosuid,nodev,noexec proc /proc
+mount -t sysfs -o nosuid,nodev,noexec sysfs /sys
+mount -t devtmpfs -o mode=0755,nosuid devtmpfs /dev
+mount -t tmpfs -o mode=0755,nosuid,nodev tmpfs /run
+mkdir -p /dev/pts /newroot
+mount -t devpts -o mode=0620,ptmxmode=0666 devpts /dev/pts
+exec </dev/console >/dev/console 2>&1
+LOG=/run/d21-desktop.log
+log() { echo "d21-desktop: $*" | tee -a "$LOG" > /dev/kmsg 2>/dev/null || true; }
+
+sh /usr/libexec/orchard/usb-session || log 'usb-session failed'
+
+echo /bin/modprobe > /proc/sys/kernel/modprobe
+echo /usr/libexec/module-hotplug > /proc/sys/kernel/hotplug
+coldplug() {
+    for alias in /sys/bus/*/devices/*/modalias; do
+        [ -r "$alias" ] || continue; m=$(cat "$alias")
+        case "$m" in brcm*|*brcmfmac*|*broadcom*|powervr) continue ;; esac
+        modprobe -qb "$m" 2>/dev/null || true
+    done
+}
+coldplug
+modprobe nvme-core 2>/dev/null; modprobe nvme 2>/dev/null; modprobe nvme-apple 2>/dev/null
+i=0; while [ $i -lt 60 ] && [ ! -e /sys/class/block/nvme0n1p3 ]; do sleep 1; i=$((i+1)); done
+coldplug
+
+# Touch: the shipped driver, no module parameters.
+modprobe apple_z2; log "apple_z2 modprobe rc=$?"
+i=0; while [ $i -lt 30 ] && [ ! -e /dev/input/event1 ]; do sleep 1; i=$((i+1)); done
+log "event1 present: $([ -e /dev/input/event1 ] && echo yes || echo NO)"
+
+mount -t ext4 -o rw /dev/nvme0n1p3 /newroot || { log 'p3 mount FAILED; staying in RAM'; exec sh; }
+[ -x /newroot/usr/lib/systemd/systemd ] || { log 'p3 has no systemd; staying in RAM'; umount /newroot; exec sh; }
+log 'p3 mounted'
+
+release=$(uname -r)
+if [ -d "/lib/modules/$release" ]; then
+    mkdir -p "/newroot/usr/lib/modules/$release"
+    cp -a "/lib/modules/$release/." "/newroot/usr/lib/modules/$release/" 2>/dev/null || true
+    log "module tree $release staged"
+fi
+mkdir -p /newroot/lib/firmware/apple
+for f in /lib/firmware/apple/dfrmtfw-d21-*.bin; do
+    [ -f "$f" ] && cp "$f" /newroot/lib/firmware/apple/ 2>/dev/null
+done
+
+# Runtime masks: driver already bound here; old helpers would insmod the
+# DIAMOND module or grab event1. A unit file in /etc wins over /run, so these
+# do not stop helpers installed in /etc; mask those there.
+mkdir -p /run/systemd/system
+for u in d21-touch d21-touch-watchdog d21-touchfix; do
+    ln -sf /dev/null "/run/systemd/system/$u.service"
+done
+log 'legacy touch units masked (runtime)'
+
+sync
+kill -TERM -- -1 2>/dev/null || true
+sleep 1
+kill -KILL -- -1 2>/dev/null || true
+for name in dev proc sys run; do mount --move "/$name" "/newroot/$name"; done
+exec switch_root /newroot /sbin/init

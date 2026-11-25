@@ -1,0 +1,7 @@
+# Orchard main (no local patches): RAM payload that loads this kernel's
+# drivers, then hands over to the installed Omarchy A root on nvme0n1p3.
+name = "d21-desktop-main"
+[payload]
+transport = true
+modules = true
+firmware = true
