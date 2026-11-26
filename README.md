@@ -24,12 +24,12 @@ belong upstream go to Orchard as pull requests.
 | Power button | ✅ | Orchard `main` |
 | Wi-Fi (BCM4357 over PCIe) | ✅ local patches | [patches/d21-wifi-suspend-aop](patches/d21-wifi-suspend-aop/), Orchard PRs [#251](https://github.com/OrchardLinux/orchard/pull/251), [#252](https://github.com/OrchardLinux/orchard/pull/252) |
 | Suspend/resume (s2idle, wake on the side button) | ✅ screen back in 0.3 s, touch about 8 s later | [patches/d21-wifi-suspend-aop](patches/d21-wifi-suspend-aop/), Orchard PR [#253](https://github.com/OrchardLinux/orchard/pull/253) |
-| Always-On Processor (AOP) | ✅ firmware boots and announces its services | [patches/d21-wifi-suspend-aop](patches/d21-wifi-suspend-aop/), Orchard PR [#254](https://github.com/OrchardLinux/orchard/pull/254) |
+| Always-On Processor (AOP) | ✅ firmware (from the IPSW) boots and serves the motion sensors | Orchard PRs [#260](https://github.com/OrchardLinux/orchard/pull/260) (start it), [#254](https://github.com/OrchardLinux/orchard/pull/254) (GPIO interrupts) |
 | Touch ID sensor | ⚠️ identified and switched off at boot; not usable | Orchard PR [#257](https://github.com/OrchardLinux/orchard/pull/257) |
 | Home button | ❌ parked: needs the Secure Enclave (see below) | [patches/d21-wifi-suspend-aop](patches/d21-wifi-suspend-aop/) |
 | Battery and charger (level, status, voltage, temperature, health, cycle count) | ✅ in Orchard `main` (`macsmc-power`); the charge-now and energy-now readings came out byte-swapped on this SMC, fixed in Orchard PR [#259](https://github.com/OrchardLinux/orchard/pull/259) | Orchard `main` |
 | Volume buttons and ring/silent switch | ✅ `KEY_VOLUMEUP`/`KEY_VOLUMEDOWN`; the ring switch reports `KEY_MUTE` | Orchard `main` |
-| Motion sensors (accelerometer, gyro, barometer) | ❌ the AOP offers them; not bound on D21 | queued |
+| Motion sensors (accelerometer, gyro, barometer) | ✅ factory calibration and mount matrices; the desktop rotates with the phone. Compass not yet | Orchard PR [#260](https://github.com/OrchardLinux/orchard/pull/260) |
 | Bluetooth (BCM4357, UART) | ❌ | queued |
 | Audio (codec, speaker amps, AOP microphone) | ❌ | queued |
 | GPU (G10P) | ⚠️ research only | [GPU-WIP/](GPU-WIP/), [docs/gpu-wip.md](docs/gpu-wip.md) |
