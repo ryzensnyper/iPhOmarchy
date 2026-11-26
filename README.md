@@ -29,8 +29,8 @@ belong upstream go to Orchard as pull requests.
 | Home button | ❌ parked: needs the Secure Enclave (see below) | [patches/d21-wifi-suspend-aop](patches/d21-wifi-suspend-aop/) |
 | Battery and charger (level, status, voltage, temperature, health, cycle count) | ✅ in Orchard `main` (`macsmc-power`); the charge-now and energy-now readings came out byte-swapped on this SMC, fixed in Orchard PR [#259](https://github.com/OrchardLinux/orchard/pull/259) | Orchard `main` |
 | Volume buttons and ring/silent switch | ✅ `KEY_VOLUMEUP`/`KEY_VOLUMEDOWN`; the ring switch reports `KEY_MUTE` | Orchard `main` |
-| Motion sensors (accelerometer, gyro, barometer) | ✅ factory calibration and mount matrices; the desktop rotates with the phone. Compass not yet | Orchard PR [#260](https://github.com/OrchardLinux/orchard/pull/260) |
-| Compass (magnetometer) | ⚠️ reads the field in µT with its mount matrix; no factory calibration yet | local patches |
+| Motion sensors (accelerometer, gyro, barometer) | ✅ factory calibration and mount matrices; the desktop rotates with the phone | Orchard PR [#260](https://github.com/OrchardLinux/orchard/pull/260) |
+| Compass (magnetometer) | ✅ reads the field in µT on the device's axes, with the factory calibration from the ADT; no heading on the desktop yet (iio-sensor-proxy only takes HID compasses) | Orchard PR [#261](https://github.com/OrchardLinux/orchard/pull/261) |
 | Bluetooth (BCM4357, UART) | ❌ | queued |
 | Audio (codec, speaker amps, AOP microphone) | ❌ | queued |
 | GPU (G10P) | ⚠️ research only | [GPU-WIP/](GPU-WIP/), [docs/gpu-wip.md](docs/gpu-wip.md) |
