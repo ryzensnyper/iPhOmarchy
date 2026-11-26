@@ -51,6 +51,15 @@ firmware. The installed system loads brcmfmac normally.
 
 ## AOP and the Home button (work in progress)
 
+> **Update, 2026-11-26: the Home button is parked.** The lock-ups in the later
+> Touch ID handover tests were Linux claiming the AOP's GPIO interrupts (fixed in
+> Orchard PR #254); the earlier `turtle` freeze was not re-tested. The AOP only reports
+> clicks once the Touch ID sensor reports a finished reset, and that most likely needs
+> the sensor's firmware patch from the Secure Enclave. The sensor itself works over SPI
+> mode 2 and is now switched off at boot (Orchard PR #257). See the
+> [front page](../../README.md#touch-id-and-the-home-button). The notes below are the
+> state before that.
+
 With patch 0025 and the AOP firmware from the IPSW (`aopfw-iphone10aop.im4p`,
 not in this repo), the A11 AOP:
 
