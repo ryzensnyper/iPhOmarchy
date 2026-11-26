@@ -27,8 +27,8 @@ belong upstream go to Orchard as pull requests.
 | Always-On Processor (AOP) | ✅ firmware boots and announces its services | [patches/d21-wifi-suspend-aop](patches/d21-wifi-suspend-aop/), Orchard PR [#254](https://github.com/OrchardLinux/orchard/pull/254) |
 | Touch ID sensor | ⚠️ identified and switched off at boot; not usable | Orchard PR [#257](https://github.com/OrchardLinux/orchard/pull/257) |
 | Home button | ❌ parked: needs the Secure Enclave (see below) | [patches/d21-wifi-suspend-aop](patches/d21-wifi-suspend-aop/) |
-| Battery level and charging status | ❌ not reported to Linux yet | next |
-| Volume buttons and ring/silent switch | ❌ the SMC sends their events, but no keys yet | next |
+| Battery and charger (level, status, voltage, temperature, health, cycle count) | ✅ in Orchard `main` (`macsmc-power`); the charge-now and energy-now readings are byte-swapped on this SMC, fix in progress | Orchard `main` |
+| Volume buttons and ring/silent switch | ✅ `KEY_VOLUMEUP`/`KEY_VOLUMEDOWN`; the ring switch reports `KEY_MUTE` | Orchard `main` |
 | Motion sensors (accelerometer, gyro, barometer) | ❌ the AOP offers them; not bound on D21 | queued |
 | Bluetooth (BCM4357, UART) | ❌ | queued |
 | Audio (codec, speaker amps, AOP microphone) | ❌ | queued |
