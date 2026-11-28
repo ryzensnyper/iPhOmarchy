@@ -1,5 +1,11 @@
 # Session handoff — A11 (G10P) GPU bring-up
 
+> **2026-11-29: superseded.** The first null compute job now completes. The
+> current state and next steps are in [STATUS.md](STATUS.md), and the test
+> procedure is in [RUNBOOK.md](RUNBOOK.md). Below is the 2026-11-12 handoff,
+> kept for history (mailbox/PMP era).
+
+
 *Rewritten 2026-11-12 after boot #58, immediately before a session compaction.
 Everything below is committed and pushed; nothing important lives only in the
 conversation.  The kernel tree is committed too.*

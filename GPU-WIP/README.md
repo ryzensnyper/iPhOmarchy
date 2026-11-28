@@ -1,19 +1,24 @@
 # GPU-WIP — Apple A11 / T8015 (**G10P**) GPU research
 
-> **Status: OFFLINE RESEARCH ONLY.**
-> Nothing in this area has booted a GPU, submitted a job, or drawn a frame on the
-> D21. There is no working driver. Every statement below is tagged
-> **confirmed** (verified from data on disk), **candidate** (consistent with the
-> evidence but not proven), **negative** (a hypothesis that was tested and
-> failed), or **unknown**. The one live interaction with the device so far was a
-> **read-only survey** (sysfs / procfs / device-tree / dmesg reads and copy-out
-> of boot artefacts) — no writes, no driver loads, no GPU enablement.
+> **Status (2026-11-29): the first null compute job completes on the D21.**
+> The G10P firmware boots from RAM, takes a compute job from the host, powers
+> the GPU, runs the microsequence and writes the completion stamp, with no
+> fault or crash. No shader has run yet and nothing is drawn.
+> **Start here:** [STATUS.md](STATUS.md) for the current state and next steps,
+> [RUNBOOK.md](RUNBOOK.md) for how to build, boot and run the tests safely, and
+> [`device/`](device/) for the phone-side scripts.
+>
+> The sections below are the earlier offline-research record (2026-11-09 to
+> -12). Their "nothing has booted" statements are out of date.
 
 The full research record lives in [`kb/`](kb/); this file is the index and the
 condensed result set.
 
 | file | content |
 |---|---|
+| [`STATUS.md`](STATUS.md) | **current state, kernel series, open questions, next steps** |
+| [`RUNBOOK.md`](RUNBOOK.md) | **build, boot and a safe test run, step by step** |
+| [`device/`](device/) | phone-side test scripts: watchdog, temperature, module load, null job, heap dump |
 | [`kb/A11-GPU-FINDINGS.md`](kb/A11-GPU-FINDINGS.md) | broad findings: hardware map, firmware provenance, device survey, driver landscape |
 | [`kb/A11-GPU-G10P-LAYOUT.md`](kb/A11-GPU-G10P-LAYOUT.md) | driver/firmware layout: Fender, windows, init data, runtime constants |
 | [`kb/A11-GPU-G10P-ISA.md`](kb/A11-GPU-G10P-ISA.md) | the AGX/A11 instruction-set work: corpus, framing, opcode deltas, length table |
