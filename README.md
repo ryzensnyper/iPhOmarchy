@@ -33,7 +33,7 @@ tooling behind them. Fixes go to Orchard as pull requests (kernel work to
 | Volume buttons and ring/silent switch | ✅ `KEY_VOLUMEUP`/`KEY_VOLUMEDOWN`; the ring switch reports `KEY_MUTE` | Orchard `main` |
 | Motion sensors (accelerometer, gyro, barometer) | ✅ factory calibration and mount matrices; the desktop rotates with the phone | Orchard `main` ([#260](https://github.com/OrchardLinux/orchard/pull/260)) |
 | Compass (magnetometer) | ✅ reads the field in µT on the device's axes, with the factory calibration from the ADT; no heading on the desktop yet (iio-sensor-proxy only takes HID compasses) | Orchard `main` ([#261](https://github.com/OrchardLinux/orchard/pull/261)) |
-| Bluetooth (BCM4357, UART) | ❌ | queued |
+| Bluetooth (BCM4357, UART) | ✅ an Xbox controller pairs over Bluetooth and every button, stick and trigger works; audio not tested yet | in review: kernel [OrchardLinux/linux#14](https://github.com/OrchardLinux/linux/pull/14), recipe [#301](https://github.com/OrchardLinux/orchard/pull/301) |
 | Audio (codec, speaker amps, AOP microphone) | ❌ | queued |
 | GPU (G10P) | ⚠️ research only | [GPU-WIP/](GPU-WIP/), [docs/gpu-wip.md](docs/gpu-wip.md) |
 | Cameras, cellular, NFC | ❌ not started | |
