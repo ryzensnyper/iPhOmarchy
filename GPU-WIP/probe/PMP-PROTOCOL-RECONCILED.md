@@ -336,3 +336,162 @@ the core, but it stalls in early init (no HELLO, only IRQs 69/71 unmasked). `FEN
 2. In the kernel: an `apple,t8015-gpu` variant of `pvr_apple_t8010` with `reg-names` rgx `0x204000000`,
    fender `0x204d00000`, iop `0x204d20000`; a `t8015-asc-mailbox` at `0x204d28000` (IRQs 260, 259, 262, 261);
    `ps_gfx` plus a reset before the boot.
+
+## Init message prep (offline, 11-28)
+
+The G10P layout re-author from 11-06 (`~/linux`, commit `bbdbdb19353e` on `gpu/phase2.1`/`gpu/phase2.2`:
+`pvr_apple_layout.c/.h`, compile-validated only) builds unchanged as a host program
+(`build.c` with a 3-header shim). It writes the init page at window `0x98000` and the descriptor at
+`0x9c000`, clear of the image/BSS (`<0x8f000`) and the RTKit crashlog buffer (`0x8f000`).
+
+**Bug in that commit:** `FENDER_PA 0x04d00000` / `RGX_PA 0x04000000` are the ADT's arm-io-relative
+values. The IO table needs full PAs (`0x204d00000`, `0x204000000`): the A10 file uses `0x201d00000`,
+and the G10P firmware's own page table maps the full PA `0x232108000`. Fixed in the userspace copy;
+the kernel commit still needs it.
+
+Test plan (needs a go, same boot):
+1. `gfxinit.py alloc`: a 4 MiB heap in one 32 MiB huge page, and a zeroed GPU-root page at
+   window-page + 1 MiB.
+2. Run `build WIN_PA HEAP_PA ROOT` on the host and copy the two images over.
+3. `gfxinit.py init`:
+   * check the window region is empty, load it, then Fender power 1;
+   * send `0x81 << 48 | (win_pa + 0x98000)` on ep 0x20;
+   * serve RTKit (crashlog included), poll `T+0xb188` (heap `0x14188`), then list every heap word
+     the firmware changed.
+
+### Init test result (same boot #152, 11-28)
+
+Heap PA `0x850000000` (one 32 MiB huge page), GPU root `0x844700000` (zeroed), images from the host builder
+(with the full Fender/RGX PAs). Fender power 1, then `TX ep0x20 0081000844698000`.
+* The mailbox took it (A2I drained), and there was no crash and no crashlog.
+* **But the init page was never copied**: the firmware's init global `0x8e158` is still zero, `[0x8e420]` /
+  `[0x8e424]` are 0, and no heap word changed; `T+0xb188` stayed 0.
+* Why: in `main` (`0x1cb42`) the order is: platform init, `cpsie i`, `0x1cd42`, `0x29190`, `0x1cd94`, then
+  **create task `agx_background`** (`0x27654`, name `0x30c1f`, priority 0xf; the handle goes to `INIT+0xa0`),
+  then `0x19318` (the init handler: `rtk_recv(0x20, …, -1)`, check type 0x81, memcpy 0x98).
+  * `INIT+0xa0` was never written.
+  * No stack frame returns into `0x1cb75`/`0x1cb85`/`0x19341`.
+  * The only live reference to `"agx_background"` is an argument frame (`0x33f14`) deep inside the task create.
+  * The create allocates `alloc(4, 0x5c)`, then `alloc(1, 0x150)` (`0x26e8c` → pool `0x26a10` → `0x27d20`).
+  * So **`main` is stuck creating `agx_background`**, before it ever waits for the init message. The init
+    layout isn't tested yet.
+* `0x2f40c` is the firmware's panic (it starts with `cpsid i`). `0x37000` is the firmware's VA region table
+  (`{class, start, end}`: 0 `0x200000–0x2000000`, 3 `0x80000000–0x89000000`, 2 `0x89200000–0x8b200000`,
+  4 `0x8b400000–0x8c400000`, 5 `0x90000000–0xb0000000`, 1 `0xc0000000–0xe0000000`), followed by the AIC page
+  mapping `0x232108000`. VA `0x1f0000` is the page-table self-map (L3 `0x38000` maps itself), not a window
+  overrun.
+
+Next (offline): why `alloc(1, 0x150)` / the pool lock at `0x26a10`/`0x27d20` blocks. Candidates: the class
+backing for type 1, a lock held by the IRQ path, or a host-provided buffer that never arrived.
+
+### Correction, and the likely cause (offline, 11-28)
+
+**Firmware-RAM dumps are not live state.** The firmware maps its own RAM write-back cacheable (PTE `0x483`,
+AttrIndx 0; MAIR0 `0x4ff404ff` gives attr 0 = `0xff`), so a DRAM read shows only what the IOP has evicted.
+The "main is stuck creating `agx_background`" reading came from such stale frames and is withdrawn; the
+allocator mutex (`0x8e798`) reads free. Trust only host memory the firmware maps uncached (the heap), plus
+mailbox traffic.
+
+**IO table at `P+0x640` (kext `0xfffffff006b70c40`):** 24 entries of 0x18 bytes,
+`{u64 pa, u32 fw_va (firmware-written), u32 size, u32 size, u32 flag}`, filled from a provider array
+(stride 0x98: flag `+0x5a0`, PA `+0x5a8`, size `+0x628`).
+* The firmware's mapper `0x1b634` (the code at `0x1bb40..` is part of it) maps each entry with attr
+  **`0x21b` when flag ≠ 0** (device) and **`0x209` when flag = 0** (normal memory). It stores the VA at `+0x8`.
+* **Entry 0 is host RAM:** fw `0x15cf2` maps `entry0.pa + 0x110000` and does
+  `memcpy(that page, fw 0x32000, 0xd58)`. That's the firmware publishing its config, the opposite direction
+  to what §4d.5 says. So entry 0 must be RAM larger than 0x111000.
+* The 11-06 builder put **Fender in entry 0**, so the firmware wrote its config to **`0x204e10000`** (unknown
+  MMIO) right after the init copy. That fits "init consumed, then silence". It also wrote `+0x10 = 0`, where the
+  kext writes the size.
+
+Retry (needs a go): entry 0 = `{window PA, 0x200000, flag 0}` (the 2 MiB page; `+0x110000` is free),
+`+0x10 = size` in every entry. Do a clean restart first (`fullinit.sh`: PMGR reset, `FENDER_RUN`, handshake,
+STARTEP, init). After it, check the heap, `T+0xb188`, and the window page `+0x110000` (the firmware writes
+that one cached, so it may lag).
+
+### Retry with the fixed IO table (same boot #152)
+
+Clean restart (PMGR reset, `FENDER_RUN`, handshake, STARTEP 0x20/0x21, all as before), Fender power 1,
+`TX ep0x20 0081000844698000`. The outcome was the same as the first try:
+* the message was consumed;
+* no reply, no crashlog;
+* no heap change, `T+0xb188` = 0;
+* the window page `+0x110000` is empty.
+
+The heap is mapped uncached by the firmware (attr index 6, Device in the boot MAIR). The IO mapper `0x1b634`,
+which `main` runs right after init, would store each VA into `P+0x648…`, and it didn't. So **`main` never
+reached `0x1b634`**.
+
+### Offline: where the message goes, cache flush, panic trigger
+
+1. **Routing.** `rtk_recv(handle, &msg, timeout)`: handle = `{table : 16, ep : 16}`, table at `[0x371a4]`.
+   `0x28df4(t, ep)` accepts ep `0..0xc` and `0x20..[t+0x10]`, with slot = ep − 0x13 for ep ≥ 0xd, and returns
+   `[t+0x18][slot]`. A missing or unready endpoint makes `rtk_recv` return an error, and the init handler
+   (`0x19318`) then panics ("Unable to grab init data from host"). There was no panic, so ep 0x20 is
+   registered and the message was delivered. Most likely the handler copied the init page (cached, so we
+   can't see it) and stalled before `0x1b634`. Its work in that span:
+   * map the descriptor page and the heap;
+   * map RGX `P+0x688` (attr `0x21b`);
+   * `0x15cf2` (entry0 + 0x110000 config copy);
+   * then `main`'s `0x1b442`, `0x1c984`, `0x1c0ae`.
+
+   Any RGX/Fender register access with the core in power state 1 is a candidate for the stall.
+2. **Cache flush:** the firmware has **no set/way cache maintenance at all**, only 74 by-address cleans (shared
+   buffers). A sleep request won't expose its RAM.
+3. **Panic trigger:** the management handler (`0x2bd54`, `tbb` on the type) handles type 0xb
+   (`SET_AP_PWR_STATE`). If the requested state equals the current one, it **panics with
+   `"Invalid AP power: %d"`** (`0x2be1e`). Re-sending the standard `SET_AP_PWR_STATE(ON)` while already ON is a
+   deterministic, planned panic. The crashlog format of this RTKit (2062.142.1) isn't decoded yet: no `C…` tags
+   were found by constant scan.
+
+### Fender state 2 retry and the planned panic (same boot #152)
+
+* The ADT `sgx` has `gpu-num-perf-states = 2`. A clean restart with **Fender power 2** before init (reached at the
+  first poll) then the 0x81 init gave the same result: consumed, then silence, no heap change.
+* Then the planned panic, `TX ep0 00b0000000000020` (AP power ON while already ON). There was **no panic and no
+  reply**, and A2I stayed `00109a01` (not empty) for good.
+* So the **coprocessor stops servicing its mailbox after the 0x81 init**. Before init every management message was
+  consumed (STARTEP drained A2I). The IOP is hung or spinning with interrupts off inside the init path,
+  before the IO mapper (`0x1b634`).
+* What runs in that span: the init copy, `map(desc page win+0x9c000)`, `map(heap 0x850000000, 4 MiB, 0x41b)`,
+  `map(RGX P+0x688, 0x21b)`, `0x15cf2` (`map(entry0 + 0x110000)` and the 0xd58 copy), `main`'s
+  `0x1b442`/`0x1c984`/`0x1c0ae`. A bus stall from an access the fabric doesn't complete fits best.
+* Candidates, next offline:
+  * an **RGX register access** (the ID/config reads) while the core isn't really up (the AP itself hangs
+    reading Fender with the domain off, PROBE §8);
+  * an IOP access to **DRAM outside its reachable range** (heap at `0x850000000`, while the window
+    `0x844600000` is known to work);
+  * an IOP-side MMU fault with no handler.
+
+### Root cause and the first successful init (same boot #152)
+
+**The cause was the heap descriptor's firmware VA.** `FW_VA_HEAP 0x100000` came over from the A10 layout (the KB
+marked it "firmware-build specific, must be re-derived"). On G10P a 4 MiB mapping there covers the page-table
+self-map at `0x1f0000` and the start of the firmware's own class-0 allocation range (`0x200000–0x2000000`). The
+L3 page writer (`0x25f64`, granule 12) overwrites a PTE **without an already-mapped check**, so the init handler's
+descriptor loop (`0x1943a`, IRQs off) replaced live firmware mappings and the IOP hung for good: no panic, no
+crashlog, mailbox no longer serviced.
+
+Supporting facts:
+* The panic path (`0x2f40c` → `0x2db1c`) does report: it writes an `EHLC` record into the ep1 crashlog buffer,
+  mapped uncached (attr `0x202` → `0x401b`), and sends the AP `ep1 0x001010000008f000`. It returns silently only
+  without a crashlog buffer or nested five deep. So the earlier silence was a real hang.
+* The mapper's legal VAs: TTBR0 `0 .. 0x2000000` (class 0 owns `0x200000+`) and TTBR1 `0x80000000+`.
+  Moving the heap to `0x10000000` gave a clean, logged panic:
+  `Unable to map VA_10000000 to PA_850000000 num_pages:1024 $:0, status:0x8000000B`.
+  * Call stack `0x19964 ← 0x1cb80 ← 0x2575e`.
+  * Crashlog sections, tags byte-reversed in memory: `Cstr Cver Ctim CrgA Ccst Cmbx Cktr`.
+* Free TTBR1 gaps between the classes:
+  * `0x89000000` (2 MiB), `0x8b200000` (2 MiB);
+  * `0x8c400000–0x90000000`;
+  * `0xb0000000–0xc0000000`.
+
+**With `FW_VA_HEAP 0xb0000000`** (otherwise the run2 images: fixed IO table, Fender power 2): `TX ep0x20
+0081000844698000` → **`T+0xb188 == 1` within 2 ms**, no panic, A2I drains.
+* The IO mapper wrote the VAs: `P+0x648 = 0xc2200000`, `P+0x678 = 0xc2041000`, `P+0x6c0 = 0xc2001000`,
+  `P+0x6d8 = 0xc2000000` (low bits `0xc2` = flags).
+* Also changed: heap `0x2f010 = 4`, `0x35000 = 1`.
+* `0x15cf2` copied its config to window+0x110000 (62 non-zero bytes).
+
+Kernel commit `bbdbdb19353e` needs, besides the earlier PA, entry 0 and `+0x10` fixes, **`FW_VA_HEAP` in a TTBR1 gap**
+(`0xb0000000` tested) and the same for `FW_VA_HEAP2` if used.
