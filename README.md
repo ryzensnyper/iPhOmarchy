@@ -3,9 +3,11 @@
 **Linux on the iPhone 8 Plus** (`iPhone10,2`, D21AP, Apple A11 / T8015), built on
 [OrchardLinux](https://github.com/OrchardLinux). The phone runs the
 [Omarchy-A](https://github.com/OrchardLinux/omarchy-a) desktop from its own storage, next
-to an intact iOS. This repository holds the D21 bring-up: kernel patches in Orchard's
-layout, the boot recipe, decoded hardware notes and the tooling behind them. Fixes that
-belong upstream go to Orchard as pull requests.
+to an intact iOS. Every working kernel and m1n1 change is in Orchard `main`; this repository holds
+the D21 bring-up: the boot recipe, decoded hardware notes, the earlier patches and the
+tooling behind them. Fixes go to Orchard as pull requests (kernel work to
+[OrchardLinux/linux](https://github.com/OrchardLinux/linux), m1n1 work to
+[OrchardLinux/m1n1](https://github.com/OrchardLinux/m1n1)).
 
 > Device: iPhone 8 Plus (Global), `iPhone10,2`, iOS 16.7.16 (identifiers redacted).
 > Boot (tethered): checkm8 → PongoOS → Orchard payload (RAM) → Omarchy-A on `nvme0n1p3`.
@@ -22,15 +24,15 @@ belong upstream go to Orchard as pull requests.
 | Display (boot framebuffer 1080×1920) and brightness | ✅ no GPU acceleration | Orchard `main` |
 | Touch: multitouch with pressure and palm rejection, shared `apple_z2` driver | ✅ in Orchard `main` | [docs/touch-bringup.md](docs/touch-bringup.md) |
 | Power button | ✅ | Orchard `main` |
-| Wi-Fi (BCM4357 over PCIe) | ✅ local patches | [patches/d21-wifi-suspend-aop](patches/d21-wifi-suspend-aop/), Orchard PRs [#251](https://github.com/OrchardLinux/orchard/pull/251), [#252](https://github.com/OrchardLinux/orchard/pull/252) |
-| Suspend/resume (s2idle, wake on the side button) | ✅ screen back in 0.3 s, touch about 8 s later | [patches/d21-wifi-suspend-aop](patches/d21-wifi-suspend-aop/), Orchard PR [#253](https://github.com/OrchardLinux/orchard/pull/253) |
-| Always-On Processor (AOP) | ✅ firmware (from the IPSW) boots and serves the motion sensors | Orchard PRs [#260](https://github.com/OrchardLinux/orchard/pull/260) (start it), [#254](https://github.com/OrchardLinux/orchard/pull/254) (GPIO interrupts) |
-| Touch ID sensor | ⚠️ identified and switched off at boot; not usable | Orchard PR [#257](https://github.com/OrchardLinux/orchard/pull/257) |
-| Home button | ❌ parked: needs the Secure Enclave (see below) | [patches/d21-wifi-suspend-aop](patches/d21-wifi-suspend-aop/) |
-| Battery and charger (level, status, voltage, temperature, health, cycle count) | ✅ in Orchard `main` (`macsmc-power`); the charge-now and energy-now readings came out byte-swapped on this SMC, fixed in Orchard PR [#259](https://github.com/OrchardLinux/orchard/pull/259) | Orchard `main` |
+| Wi-Fi (BCM4357 over PCIe) | ✅ | Orchard `main` ([#251](https://github.com/OrchardLinux/orchard/pull/251), [#252](https://github.com/OrchardLinux/orchard/pull/252)) |
+| Suspend/resume (s2idle, wake on the side button) | ✅ screen back in 0.3 s, touch about 8 s later | Orchard `main` ([#253](https://github.com/OrchardLinux/orchard/pull/253)); side-button wake on the installed system: [desktop/orchard-main](desktop/orchard-main/) |
+| Always-On Processor (AOP) | ✅ firmware (from the IPSW, through the recipe) boots and serves the motion sensors and compass | Orchard `main` ([#260](https://github.com/OrchardLinux/orchard/pull/260), [#254](https://github.com/OrchardLinux/orchard/pull/254)) |
+| Touch ID sensor | ⚠️ identified and switched off at boot; not usable | Orchard `main` ([#257](https://github.com/OrchardLinux/orchard/pull/257)) |
+| Home button | ❌ parked: needs the Secure Enclave (see below) | notes: [patches/d21-wifi-suspend-aop](patches/d21-wifi-suspend-aop/) |
+| Battery and charger (level, status, voltage, temperature, health, cycle count) | ✅ `macsmc-power`; the charge-now and energy-now readings came out byte-swapped on this SMC, fixed in [#259](https://github.com/OrchardLinux/orchard/pull/259) | Orchard `main` |
 | Volume buttons and ring/silent switch | ✅ `KEY_VOLUMEUP`/`KEY_VOLUMEDOWN`; the ring switch reports `KEY_MUTE` | Orchard `main` |
-| Motion sensors (accelerometer, gyro, barometer) | ✅ factory calibration and mount matrices; the desktop rotates with the phone | Orchard PR [#260](https://github.com/OrchardLinux/orchard/pull/260) |
-| Compass (magnetometer) | ✅ reads the field in µT on the device's axes, with the factory calibration from the ADT; no heading on the desktop yet (iio-sensor-proxy only takes HID compasses) | Orchard PR [#261](https://github.com/OrchardLinux/orchard/pull/261) |
+| Motion sensors (accelerometer, gyro, barometer) | ✅ factory calibration and mount matrices; the desktop rotates with the phone | Orchard `main` ([#260](https://github.com/OrchardLinux/orchard/pull/260)) |
+| Compass (magnetometer) | ✅ reads the field in µT on the device's axes, with the factory calibration from the ADT; no heading on the desktop yet (iio-sensor-proxy only takes HID compasses) | Orchard `main` ([#261](https://github.com/OrchardLinux/orchard/pull/261)) |
 | Bluetooth (BCM4357, UART) | ❌ | queued |
 | Audio (codec, speaker amps, AOP microphone) | ❌ | queued |
 | GPU (G10P) | ⚠️ research only | [GPU-WIP/](GPU-WIP/), [docs/gpu-wip.md](docs/gpu-wip.md) |
@@ -59,8 +61,9 @@ runs.
   Omarchy-A release into `p3`, and the suspend/resume changes for the installed system
   (`p3/`).
 - [`patches/`](patches/): kernel patches.
-  - [`d21-wifi-suspend-aop/`](patches/d21-wifi-suspend-aop/): the current local patches
-    (DART, Wi-Fi, background touch resume, AOP), in Orchard's `kernel/patches/` layout.
+  - [`d21-wifi-suspend-aop/`](patches/d21-wifi-suspend-aop/): the bring-up notes and
+    patches for DART, Wi-Fi, background touch resume and the AOP. All of it is in Orchard
+    `main` now; kept for reference.
   - [`d21-touch-fixes/`](patches/d21-touch-fixes/), [`d21-import-shared/`](patches/d21-import-shared/):
     the touch work that went into Orchard's shared driver.
   - `0001`–`0045`, [`orchard-ref/`](patches/orchard-ref/), `REBUILD-VERMAGIC.md`: the
@@ -78,9 +81,8 @@ runs.
 1. Boot the phone into PongoOS with checkm8. `palera1n -p` pwns reliably here; see
    [docs/dual-boot.md](docs/dual-boot.md). Those are older notes from when Linux lived on
    `nvme0n1p2`; the pwn steps still apply.
-2. Build the payload from an Orchard checkout with the local patches from
-   [`patches/d21-wifi-suspend-aop/`](patches/d21-wifi-suspend-aop/), and boot it:
-   [desktop/orchard-main/README.md](desktop/orchard-main/README.md).
+2. Build the payload from a plain checkout of Orchard `main` (no local patches are needed
+   any more) and boot it: [desktop/orchard-main/README.md](desktop/orchard-main/README.md).
 3. Firmware comes from your own device and IPSW and is never in this repository:
    - the touch container, built from the device's own `mtprops` and ADT calibration with
      [`tools/`](tools/);

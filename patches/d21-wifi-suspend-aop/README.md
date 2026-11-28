@@ -1,7 +1,11 @@
 # D21: Wi-Fi, suspend/resume and the AOP (2026-11-26)
 
-These are local patches for the iPhone 8 Plus (D21, T8015). They are in Orchard's
-`kernel/patches/devices/t8015/` layout and are not upstream yet. Each one was
+> **Merged:** all of this is in Orchard `main` now (PRs #251–#254, #257, #259–#261), and
+> Orchard's kernel source moved to [OrchardLinux/linux](https://github.com/OrchardLinux/linux).
+> These files are kept for reference only; build from a plain Orchard checkout.
+
+These were the local patches for the iPhone 8 Plus (D21, T8015), in Orchard's old
+`kernel/patches/devices/t8015/` layout. Each one was
 validated on the device, built from Orchard v0.3.8 (`116004fb`).
 
 | Patch | What it does | Result |
